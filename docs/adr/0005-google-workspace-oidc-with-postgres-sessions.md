@@ -81,12 +81,12 @@ SPEC §Usuarios calls for UNSAM SSO with role derived from the directory and `In
     ```
 
     Every router endpoint declares exactly one of the three. A fourth tier ("only the document's owner") is not introduced here — ownership checks happen inside the handler against `current_user.user_id`.
-11. **Visibility predicate integration.** The `UserCtx` produced by `current_user` is what the search chokepoint (ADR-0001 §9, ADR-0003 §3) consumes. For a guest, `is_unsam=False, user_id=None` collapses the predicate to `WHERE visibility = 'publico' AND NOT soft_deleted`. No new SQL, no new branch, no `if guest:` in feature code — the predicate written for ADR-0001 already handles this case.
+11. **Visibility predicate integration.** The `UserCtx` produced by `current_user` is what the search chokepoint (ADR-0001 §9, ADR-0003 §3) consumes. For a guest, `is_unsam=False, user_id=None` collapses the predicate to `WHERE visibility = 'publico' AND soft_deleted_at IS NULL` (the `interno` branch evaluates false, and the `document_authors EXISTS` subquery returns no rows for a `NULL` user id). No new SQL, no new branch, no `if guest:` in feature code — the predicate written for ADR-0001 already handles this case.
 12. **`/api/me`.** Returns `{ user_id, role, name, picture_url, hd }` (200) or `401` if the request is anonymous. The frontend's `useUser()` hook fetches it on mount; the SSR `/docs/[id]` Server Component does *not* call it — it just forwards the cookie per ADR-0004 §4 and trusts the backend.
 13. **Logout.** `POST /api/auth/logout`, guarded by `require_authenticated`. Deletes the `sessions` row by `sid` and emits `Set-Cookie: sid=; Max-Age=0`. Per-device: logging out on one browser does not log out other devices (one user can have many session rows).
 14. **Invalid/expired session on read paths.** Treated as Guest, not 401. The cookie is silently ignored and `current_user` returns `GUEST`. A user mid-read of a `público` page keeps reading; their next write attempt 401s, the frontend re-authenticates, and they resume.
 15. **CSRF posture.** Reliance on `SameSite=Lax` + the same-origin reverse proxy (ADR-0004 §2). No CSRF tokens at MVP. Documented assumption: every mutating endpoint is reachable only from `buscasam.unsam.edu.ar`. Any future cross-origin client (mobile app, partner integration) requires re-opening this ADR.
-16. **Rate limiting.** Out of scope. Deferred to ADR-9 (deploy topology owns the reverse proxy, which is the right place for guest and auth-endpoint throttling).
+16. **Rate limiting.** Out of scope. Deferred to ADR-0009 (deploy topology owns the reverse proxy, which is the right place for guest and auth-endpoint throttling).
 
 ## Consequences
 
@@ -98,6 +98,6 @@ SPEC §Usuarios calls for UNSAM SSO with role derived from the directory and `In
 - **Three dependencies are exhaustive.** Every endpoint declares exactly one of `current_user` / `require_authenticated` / `require_docente`. Ownership checks happen inside handlers against `current_user.user_id`. If a fourth tier becomes common (e.g., "co-author only"), re-open this ADR rather than introducing a fourth dependency ad-hoc.
 - **Session-state lives in Postgres.** Adds one indexed `SELECT` + one `UPDATE` per authenticated request. Sub-millisecond at MVP scale. Flagged if it ever shows up in profiling; mitigation would be batching `last_seen_at` writes or moving sessions to Redis, neither needed at MVP.
 - **No password recovery, no MFA toggle, no email confirmation.** Google owns identity end-to-end. If a user can't sign in, the recovery path is Google's. Explicit non-feature.
-- **Guests can crawl `público` content.** SPEC accepts this (público = SEO target, ADR-0004 §3). Rate limiting at the reverse proxy (ADR-9) is the right knob if abuse appears.
+- **Guests can crawl `público` content.** SPEC accepts this (público = SEO target, ADR-0004 §3). Rate limiting at the reverse proxy (ADR-0009) is the right knob if abuse appears.
 - **CSRF posture is "SameSite + same origin", not tokens.** A future API consumer on a different origin breaks this assumption; §15 must be revisited before any such consumer ships.
 - **One CI grep, three chokepoints.** Auth (this ADR §3), search (ADR-0003 §3), embed (ADR-0002 §3). The pattern is established: load-bearing-for-correctness logic lives in one named module, and CI keeps the rest of the codebase from reaching around it.
