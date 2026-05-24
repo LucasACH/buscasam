@@ -1,0 +1,120 @@
+# Async job runner: procrastinate, two queues, jobs chokepoint
+
+## Status
+
+Accepted
+
+## Decision
+
+BUSCASAM runs durable async work on **procrastinate**, a Postgres-backed task queue that piggybacks on the same database ADR-0001 commits to as the primary store. Two queues partition the load by resource profile: `default` for fast I/O-bound work (born-digital `index_document`, fan-out shims, per-recipient SMTP sends, in-app notification inserts) and `ocr` for CPU-bound work (scan-heavy `index_document`). Each queue is consumed by its own worker process — `worker_default` (concurrency ~8, mostly awaiting TEI and SMTP) and `worker_ocr` (concurrency 1, Tesseract pins a core) — both built from the same image as the API and the `core/` package per ADR-0003 §5. All async entry points are typed `enqueue_*` helpers in a single `core/jobs.py` chokepoint that wraps procrastinate's task primitives; CI grep bans `procrastinate` imports elsewhere (excluding the worker entrypoint and tests), same shape as the chokepoints in ADR-0001 §9, ADR-0002 §3, ADR-0003 §3, ADR-0005 §3, ADR-0006 §3, and ADR-0007 §1. The chokepoint computes a uniform `queueing_lock` per task from its args so duplicate enqueues are silent no-ops, and routes `index_document` jobs to `default` or `ocr` via a cheap heuristic (PDF size + MIME) evaluated at enqueue time. Worker code distinguishes retryable infra failures from terminal data failures via a two-bucket exception convention (`procrastinate.JobAborted` = mark failed immediately; any other unhandled exception = retry per the task's policy). Failed `index_document` jobs write ADR-0007 §9's `index_status='failed'` with an `index_error` value that distinguishes `corrupted: …` (terminal) from `exhausted retries: …` (infra), so one column serves both the author-facing notification and the operator's diagnostic. Procrastinate owns its own schema (`procrastinate schema --apply` runs at deploy alongside `alembic upgrade head`) inside the same database, which makes the row insert and its dependent enqueue transactional. The runner exposes no scheduler at MVP — reindex sweeps (triggered by `extract_pipeline_version` or `embedding_model_revision` bumps per ADR-0002 §6 and ADR-0007 §12) are operator-driven via a CLI that loops over stale `document_versions` rows and reuses `enqueue_index_document` per row; procrastinate's `@app.periodic` stays unused so a future periodic need is a deliberate decision, not a quiet adoption of capability.
+
+## Context
+
+ADR-0003 §4 commits to an always-enqueue rule for every external-service call (TEI, SMTP, OCR worker) and every fan-out (notification to N co-authors), with FastAPI `BackgroundTasks` banned by CI grep; the queue is the only seam between API and worker processes. ADR-0007 §10 commits to a single atomic `index_document(version_id)` job whose body does read-blob → try-pdfminer → maybe-ocrmypdf → re-extract → derive-metadata → chunk → embed → transactional chunk-write, and ADR-0007 §11 surfaces two non-negotiable constraints for this ADR: per-job duration may reach ~30 minutes on scanned-thesis OCR, and the runner must either tolerate jobs of that length without timing out **or** provide priority/separation so OCR-heavy jobs do not head-of-line-block fast born-digital jobs (~5 s extract + embed). ADR-0001 puts Postgres on the request critical path and makes it the only primary store. ADR-0002 §1 commits the 2 GB TEI model as the only ML model on the 16 GB VM, leaving little RAM headroom for additional resident services. ADR-0003 §5 deploys API and worker from one image, sharing `core/`. The slow paths the runner has to cover are: OCR (worst case), embedding generation (TEI roundtrip per chunk inside `index_document`), reindexing (per-row sweep), and email notifications (SMTP fan-out + per-recipient send). The team is small and Python-only, and the production VM does not currently host a broker process.
+
+## Considered options
+
+- **Synchronous / FastAPI `BackgroundTasks`.** Rejected: ADR-0003 §4 already bans this and ADR-0007 §11's 30-min OCR ceiling makes it physically untenable — no HTTP client waits 30 min, and a Uvicorn worker pinned that long is gone for the duration. Re-opening §4 would also break ADR-0007 §10's contract for the single atomic indexer.
+- **Celery.** Rejected: the most battle-tested Python queue, but requires Redis or RabbitMQ as a new resident process on a 16 GB VM where Postgres + TEI already dominate. Its feature surface (broker abstractions, result backends, Beat scheduler, exotic transports) targets throughput regimes BUSCASAM will not reach; the ops cost (a second persistent service with its own backup/HA story) is real today.
+- **RQ.** Rejected for the same root reason as Celery — Redis dependency on a single-VM topology — and without Celery's depth as a counter-argument. Simpler than Celery but still adds a service.
+- **arq.** Rejected for the Redis reason. Its async-native API would compose nicely with FastAPI but the broker choice dominates the trade.
+- **Procrastinate with a separate Postgres database (or schema) for jobs.** Rejected: defeats the transactional-enqueue advantage — a job insert must be in the same transaction as the row it depends on (e.g., `document_versions` insert + `index_document` enqueue together). Same-DB, single connection at the enqueue site, is mandatory.
+- **Single queue, single worker, accept HOL.** Rejected: ADR-0007 §11's separation requirement is explicit, and a library-digitization burst (50 scanned theses overnight) would tie up the queue for ~25 hours behind born-digital jobs. Worst-case publication-to-searchable latency would dominate the user experience even though the median is fine.
+- **Single queue with procrastinate priorities.** Rejected: priorities within a queue order job pickup, but they do not isolate resources. With concurrency=N, all N slots can still be running low-priority OCR; a freshly-enqueued high-priority born-digital job still waits.
+- **One worker process consuming both queues.** Rejected: procrastinate's worker has a single concurrency parameter applied across all queues it consumes; either the concurrency is high enough to thrash CPU when OCR jobs land, or low enough to waste I/O parallelism on the default queue. The whole point of partitioning was resource isolation — collapsing it back into one process undoes the work.
+- **Worker-side re-route after pdfminer triage** (start on `default`, re-enqueue to `ocr` if low-yield). Rejected: amounts to splitting the indexer into a fast-then-slow tree, which ADR-0007 §10 explicitly rejected as "fast-path extract work wasted whenever OCR is needed." Reopening that decision via the runner would be bad faith.
+- **Stringly-typed `enqueue(job_name: str, **kwargs)` chokepoint.** Rejected: matches ADR-0003 §4's wording most literally, but loses type safety at every call site — every caller becomes a place where args can silently drift from the worker's signature.
+- **Native procrastinate idiom from feature code** (`from core.jobs import index_document; await index_document.defer_async(...)`). Rejected: leaks the runner choice into feature code's imports, making any future runner swap costlier than necessary. The chokepoint should be the only place that imports `procrastinate`.
+- **Vendor procrastinate's schema into Alembic.** Rejected: every procrastinate upgrade becomes a manual port of upstream DDL into our Alembic history; runtime errors from a stale port look like missing columns or functions. Procrastinate's own `procrastinate schema --apply` is what upstream tests against.
+- **Procrastinate `@app.periodic` for reindex sweeps.** Rejected: reindex windows are deliberate maintenance actions (per ADR-0002 §6 and ADR-0007 §12), not nightly background drift. Cron-style scheduling would obscure the deliberate-bump posture and turn "we did a reindex pass" into a question instead of an action.
+- **One job per fan-out event with an internal loop over recipients.** Rejected: one bad SMTP recipient fails the whole job; on retry the previously-sent N-1 emails resend (duplicates), or the job tracks per-recipient state internally (reinventing per-recipient jobs poorly). Per-recipient retry isolation is the only correct shape under flaky SMTP.
+- **Endpoint enqueues N per-recipient send jobs directly, no fan-out shim.** Rejected as the uniform pattern: works for co-author invites (recipients known in-request from the form), worse for comment notifications (thread participants resolved by SQL). Two patterns for fan-out is more cost than one shim that handles both.
+- **Per-task locking only where collisions are likely.** Rejected: a `queueing_lock` costs one `UNIQUE` index row in `procrastinate_jobs`; a duplicate SMTP send costs a confused user. Uniform application is cheaper than per-task reasoning about which tasks need dedup.
+- **App-level `job_events` mirror table for operator observability.** Rejected at MVP: duplicates state procrastinate's own tables (`procrastinate_jobs`, `procrastinate_events`) already track, and SPEC has no moderation-style UI for jobs. ADR-#9 picks the operator observability stack; ADR-#8 stays out of it beyond the `index_error` taxonomy (§9 below).
+
+## Architecture decisions locked by this ADR
+
+1. **Runner: procrastinate, same database as the application.** Procrastinate's tables live in the Postgres database from ADR-0001. No Redis, no RabbitMQ, no second resident service. Job enqueue inside a request runs through the application's SQLAlchemy connection so the job INSERT and the row INSERT it depends on commit or roll back together; this is the load-bearing reason for "same DB," not just operational simplicity. Procrastinate's own asyncpg pool is used by the worker processes for job pickup and execution-time DB access; the API's SQLAlchemy pool and procrastinate's worker pool are separate at runtime and only intersect inside the enqueue helpers (§3).
+
+2. **Topology: two queues, two worker processes.**
+
+   - `default` — fast I/O-bound jobs. Consumed by `worker_default`, concurrency ~8. Hosts: born-digital `index_document`, `fan_out_*` shims, `send_*` per-recipient SMTP, in-app notification inserts, operator-triggered reindex enqueues for born-digital versions.
+   - `ocr` — CPU-bound jobs. Consumed by `worker_ocr`, concurrency 1. Hosts: `index_document` for likely-scans. Concurrency is 1 because a CPU Tesseract pass saturates a core and a second concurrent OCR pass on the same VM thrashes the CPU shared with Postgres and TEI.
+
+   Both worker processes are built from the same image as the API (ADR-0003 §5 unchanged) and started as separate systemd units (or equivalent — supervisor choice is ADR-#9). Independent restart and independent resource ceilings are the point; failure of `worker_ocr` does not stop `worker_default` from processing fast jobs.
+
+3. **Chokepoint: typed `enqueue_*` helpers in `core/jobs.py`.** All procrastinate task definitions live in `core/jobs.py`. For each task, the module exports a typed helper:
+
+   ```python
+   async def enqueue_index_document(version_id: int) -> None: ...
+   async def enqueue_fan_out_coauthor_invites(document_id: int) -> None: ...
+   async def enqueue_send_coauthor_invite(document_id: int, recipient_user_id: int) -> None: ...
+   async def enqueue_fan_out_comment_notifications(comment_id: int) -> None: ...
+   async def enqueue_send_comment_notification(comment_id: int, recipient_user_id: int) -> None: ...
+   ```
+
+   Feature code only ever imports these helpers; it never imports `procrastinate`, never holds a task object, never calls `.defer_async(...)` directly. CI grep bans `procrastinate` imports anywhere except `core/jobs.py`, the worker entrypoint, and tests — same shape as the six other chokepoints in this codebase. Helpers compute the `queueing_lock` and route to the right queue internally (§4, §7). The enqueue itself uses procrastinate's `defer_*` variant that accepts an external connection, so the application's SQLAlchemy transaction owns the INSERT into `procrastinate_jobs`.
+
+4. **Classification heuristic at enqueue time.** `enqueue_index_document(version_id)` reads the version's MIME and stored byte size (already on `document_versions` from ADR-0006 §5) and picks a queue:
+
+   - MIME ∈ {`application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `application/vnd.oasis.opendocument.text`} → `default`. ADR-0007 §5 forbids OCR on DOCX/ODT, so these are always fast.
+   - MIME = `application/pdf`, size ≤ threshold (start at **2 MB**) → `default`.
+   - MIME = `application/pdf`, size > threshold → `ocr`.
+
+   The threshold is a tunable inside `core/jobs.py`. A misclassification has bounded cost: a born-digital large PDF on `ocr` indexes ~slowly (no correctness impact); a small scan on `default` occupies a fast worker slot for up to 30 minutes (HOL-blocks other fast jobs until it finishes — capped by `worker_default` concurrency of 8, so it degrades parallelism rather than blocking the queue entirely). A metric `ocr_queue_misclassification_rate` is the operational handle for retuning. The heuristic is conservative on purpose: when in doubt, route to `ocr`.
+
+5. **Retry: two-bucket exception convention + per-task policy.** Worker code signals intent via the exception it raises:
+
+   - `procrastinate.JobAborted(reason)` → job is marked `failed` immediately, no retry. Use for permanent data failures the indexer can detect (`PDFSyntaxError`, `zipfile.BadZipFile`, etc.).
+   - Any other unhandled exception → procrastinate retries per the task's policy.
+
+   Per-task policy (all tunables, starting values shown):
+
+   | Task | Queue | Max attempts | Backoff | Terminal action |
+   |---|---|---|---|---|
+   | `index_document` | `default` or `ocr` | 3 | exponential, base 60 s | `index_status='failed'` + in-app notif (per ADR-0007 §9), `index_error` per §9 below |
+   | `fan_out_coauthor_invites` | `default` | 3 | exponential, base 60 s | log; in-app notif on inviter ("we couldn't reach your co-authors automatically") |
+   | `fan_out_comment_notifications` | `default` | 3 | exponential, base 60 s | log + drop |
+   | `send_coauthor_invite` | `default` | 5 | exponential, base 30 s, cap 1 h | log; the inviter's in-app fallback already covered by the fan-out terminal action above |
+   | `send_comment_notification` | `default` | 5 | exponential, base 30 s, cap 1 h | log + drop (in-app campanita is the SPEC-primary channel) |
+
+   Email failures are mostly silent on purpose: SPEC §Notificaciones makes in-app the primary channel and email opt-in/critical-only. The co-author invite is the email-tier critical event, so the fan-out shim's terminal action surfaces it back to the inviter via in-app — the safety net for the only fan-out where email matters.
+
+6. **Reindex: operator CLI reusing `index_document`.** A CLI command (`python -m buscasam reindex --reason=embedding` / `--reason=extract`) selects `document_versions` rows where the relevant version axis is stale (`embedding_model_revision != EMBEDDING_MODEL_REVISION` or `extract_pipeline_version != EXTRACT_PIPELINE_VERSION`) and loops `enqueue_index_document(version_id)` for each. There is no separate `reindex_version` task — the work is identical to the first-time index. The classification heuristic (§4) routes each enqueued job to the right queue. The CLI is idempotent because the `queueing_lock` from §7 silently dedupes: re-running mid-sweep skips rows already in flight. Sweeps are observable as queue depth on `procrastinate_jobs`; aborting a sweep is `DELETE FROM procrastinate_jobs WHERE task_name = 'index_document' AND status = 'todo' AND args ->> 'version_id' IN (...)` or equivalent. No periodic-task wrapper around this CLI — reindex is a deliberate operator action, matching ADR-0002 §6's "planned maintenance window" posture.
+
+7. **Idempotency: uniform `queueing_lock`.** Each `enqueue_*` helper computes a deterministic lock value from its args:
+
+   - `enqueue_index_document(version_id)` → `f"index_document:v{version_id}"`
+   - `enqueue_fan_out_coauthor_invites(document_id)` → `f"fan_out_coauthor_invites:d{document_id}"`
+   - `enqueue_send_coauthor_invite(document_id, recipient_user_id)` → `f"send_coauthor_invite:d{document_id}:u{recipient_user_id}"`
+   - `enqueue_fan_out_comment_notifications(comment_id)` → `f"fan_out_comment_notifications:c{comment_id}"`
+   - `enqueue_send_comment_notification(comment_id, recipient_user_id)` → `f"send_comment_notification:c{comment_id}:u{recipient_user_id}"`
+
+   Procrastinate enforces at most one job with a given lock value across the `todo` + `doing` states; a duplicate enqueue is a silent no-op. Feature code never tests for "is this already enqueued?" — the helper hides it. The lock entry is part of the `procrastinate_jobs` row, so it lives and dies with the job; a worker crash mid-job leaves a `doing` row that procrastinate's own restart logic cleans up (the lock unblocks the next enqueue once the job is requeued or terminated).
+
+8. **Fan-out: uniform shim.** Every fan-out event has the same shape: the endpoint enqueues one cheap `fan_out_*(event_id)` job; that job resolves recipients via a single SELECT and enqueues one `send_*` per recipient. The shim job is fast (DB-only) and lives on `default`; the per-recipient sends also live on `default` and inherit the per-recipient retry isolation needed for flaky SMTP. The shim pattern is uniform across event types — co-author invites (recipients from `document_authors`), comment notifications (recipients from thread participants + document author) — so there is one mental model: "fan-out means a shim job and N per-recipient jobs." In-app campanita notifications are inserted by the per-recipient send job, not by the fan-out shim, so the in-app and email channels share the same retry/idempotency primitives.
+
+9. **Failure surface and `index_error` taxonomy.** ADR-0007 §9's `document_versions.index_status` / `index_error` / `indexed_at` columns are the user-facing failure surface; this ADR extends `index_error` with a coarse taxonomy:
+
+   - `corrupted: <short reason>` — set when `index_document` raises `JobAborted` (§5). The author notification reads "no pudimos procesar el archivo (parece estar dañado)" and offers re-upload.
+   - `exhausted retries: <last exception class>` — set when the retry policy runs out. The author notification reads "no pudimos procesar el archivo (problema temporal del sistema)" and offers retry-from-UI.
+
+   Operator-side observability beyond this column — queue depth dashboards, failure-rate alerts, log aggregation — is deferred to ADR-#9. ADR-#8 commits only to procrastinate's own tables (`procrastinate_jobs`, `procrastinate_events`) being the source of truth and to structured stdout logs from each worker process (format unspecified here). No `job_events` application-side mirror.
+
+10. **Schema management.** Procrastinate owns its tables (`procrastinate_jobs`, `procrastinate_events`, `procrastinate_periodic_defers`, plus stored procedures and triggers). The deploy script runs `alembic upgrade head && procrastinate schema --apply` — both idempotent, both fast, both targeting the same DSN. Procrastinate upgrades flow through `pip install procrastinate==X` plus a re-run of the CLI; the application's Alembic history never contains procrastinate DDL. The `procrastinate_*` table prefix is sufficient namespace separation; no separate Postgres schema is created.
+
+11. **ADR-0003 §4 clarification.** ADR-0003 §4's wording is "All work that touches an external service ... is handed off to the durable queue (ADR #8) via a uniform `enqueue(job)` call." This ADR refines that into "via the typed `enqueue_*` helpers in `core/jobs.py`" — same chokepoint spirit (one place to look, one CI grep to enforce, one place a runner swap would touch), sharper letter. The `BackgroundTasks` ban from ADR-0003 §4 stands unchanged.
+
+## Consequences
+
+- **Operational simplicity: no new resident service.** The 16 GB VM keeps its current process inventory plus two worker processes from the same image as the API. No Redis to deploy, monitor, back up, secure, or version. The single failure-domain story (Postgres up ⇒ queue up) is the same as ADR-0001's single-store posture.
+- **Transactional enqueue eliminates a real bug class.** "Row created but job never enqueued (broker was unreachable for 200 ms)" and its mirror ("job enqueued but row rollback") cannot happen. The publication endpoint inserts `document_versions` and enqueues `index_document` in one SQLAlchemy transaction; either both commit or neither does.
+- **The two-process worker topology constrains ADR-#9.** Whatever supervisor ADR-#9 picks (systemd, supervisord, container orchestrator) must accommodate at least two long-running worker processes with independent restart policies. Naming them `worker_default` and `worker_ocr` is fixed here.
+- **Classification heuristic is observable and fallible.** `ocr_queue_misclassification_rate` will be non-zero. The 2 MB starting threshold is a guess against a corpus we have not yet measured; the metric is the recalibration signal. A library-digitization batch that uploads as 1.8 MB scans is the canonical breakage; the rate spikes, the threshold drops, the next batch routes correctly. No code change required to retune — the threshold is config.
+- **Procrastinate is younger and smaller-community than Celery.** The bug-and-feature surface we depend on is narrow (typed tasks, queues, locks, retries) and well-trodden upstream. A regression in procrastinate's release stream would land us on a pinned version while we patch or wait — the same risk profile as any narrowly-used dependency, and acceptable given the inventory savings.
+- **Reindex is deliberately not scheduled.** A bump to `embedding_model_revision` or `extract_pipeline_version` requires an operator to run the CLI; there is no nightly "catch up to current versions" sweep. The benefit is that "have we reindexed yet?" has a clear answer (yes if the operator did it; no otherwise) rather than degrading into "the cron has been running for a week and is N rows behind."
+- **The fan-out shim adds one extra job hop per event.** For N typically ≤ 5 (co-author lists, comment threads on a small platform), the latency cost is irrelevant — the shim is a single DB query plus N enqueues — and the per-recipient retry isolation is worth substantially more than the hop.
+- **The uniform `queueing_lock` convention means feature code never thinks about dedup**, but a worker crash mid-job leaves a `doing` row whose lock blocks new enqueues until procrastinate's own crash-recovery promotes or terminates it. Operators should expect "I retried the publish and nothing happened" during a worker outage; the symptom resolves when the worker comes back and the stale row is reaped.
+- **A future runner swap is contained to `core/jobs.py` plus the deploy script.** Feature code imports only typed `enqueue_*` helpers; the chokepoint hides procrastinate's import surface, the lock-value computation, and the queue routing. Swapping to (say) arq or a hosted queue would rewrite `core/jobs.py` and the worker entrypoint, leaving feature code untouched.
+- **`index_error` is single-column, two-shape.** Author-facing copy and operator diagnostic share the same column; the discriminator is the prefix (`corrupted:` vs. `exhausted retries:`). A future operator dashboard (ADR-#9 territory) can group by prefix without a schema change.
+- **Seven chokepoints, one pattern.** Search (ADR-0001 §9, ADR-0003 §3), embed (ADR-0002 §3), auth (ADR-0005 §3), blob IO (ADR-0006 §3), extraction (ADR-0007 §1), and now async dispatch (this ADR §3). The cost is one extra CI rule per chokepoint; the benefit is that "where does the system enqueue async work?" — and equally "where does the system never enqueue async work?" — always has exactly one answer.
