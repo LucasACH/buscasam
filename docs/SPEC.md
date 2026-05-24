@@ -116,22 +116,25 @@ Implícita: "consulta y descarga para uso académico". No hay selector de licenc
 
 ### Tipos
 - **Estudiantes**: publican, buscan, comentan, marcan favoritos
-- **Docentes**: mismas capacidades + moderación post-publicación (ver Moderación)
+- **Docentes** (incluye personal UNSAM con cuenta institucional, no solo docentes de cátedra): mismas capacidades + moderación post-publicación (ver Moderación)
 - **Invitados (externos a UNSAM)**: buscan, leen, descargan archivos públicos. No comentan, no favean, no publican
 
 ### Autenticación
-- SSO institucional UNSAM para estudiantes y docentes
-- El rol se deriva del directorio institucional (no es auto-declarado)
+- Ingreso con Google. Solo cuentas UNSAM Workspace:
+  - `@estudiantes.unsam.edu.ar` → rol Estudiante
+  - `@unsam.edu.ar` → rol Docente
+- El rol se deriva del dominio del email (no es auto-declarado)
+- Cuentas no UNSAM (incluido `@gmail.com` personal) no pueden ingresar
 - Invitados navegan sin login
 
 ### Perfil
-- Datos del SSO: rol, Escuela, carrera (si aplica)
-- Cursos cursados/dictados: importados del sistema académico si está disponible
-- Intereses declarados: el usuario marca áreas/temas opcionalmente
+- Datos del SSO (Google): nombre, email, foto, rol (derivado del dominio)
+- Escuela, carrera y cursos: no disponibles vía Google. La integración con el sistema académico institucional queda fuera del MVP
+- Intereses declarados: el usuario marca áreas/temas opcionalmente — alimentan recomendaciones hasta que exista la integración académica
 
 ### Primer ingreso
 - Sin onboarding: entrada directa a la home
-- Recomendaciones funcionan desde el primer día con datos del SSO; mejoran cuando el usuario enriquece su perfil
+- Las recomendaciones del primer día son genéricas (no hay Escuela/carrera vía SSO). Mejoran a medida que el usuario realiza búsquedas y marca intereses
 
 ### Historial de búsquedas
 - El sistema lo guarda para alimentar recomendaciones
