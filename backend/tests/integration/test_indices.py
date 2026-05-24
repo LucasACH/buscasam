@@ -1,26 +1,17 @@
+from datetime import date
+
+import numpy as np
 from sqlalchemy import text
 
-from buscasam.core.document_access import invitado_fragment
+from buscasam.core.document_access import invitado_where
+from tests.factories import make_chunk, make_document
 
 
 async def test_hnsw_index_chosen_for_cosine_topk(session):
-    await session.execute(
-        text(
-            "INSERT INTO documents (id, visibility, publication_status, "
-            "titulo, fecha, area_path, tipo) VALUES "
-            "(40, 'publico', 'published', 'd40', '2024-01-01', "
-            "'escuela_ciencia', 'paper')"
-        )
-    )
+    doc_id = await make_document(session)
     for i in range(8):
-        emb = "[" + ",".join([f"{(0.01 * (i + 1)):.6f}"] * 1024) + "]"
-        await session.execute(
-            text(
-                "INSERT INTO chunks (doc_id, chunk_seq, is_headline, body_text, "
-                "embedding, embedding_model_version) VALUES "
-                f"(40, {i}, false, 'body {i}', '{emb}'::halfvec(1024), 'e5')"
-            )
-        )
+        vec = np.full(1024, 0.01 * (i + 1), dtype=np.float16)
+        await make_chunk(session, doc_id, chunk_seq=i, embedding=vec)
     await session.commit()
 
     await session.execute(text("SET LOCAL enable_seqscan = off"))
@@ -39,23 +30,10 @@ async def test_hnsw_index_chosen_for_cosine_topk(session):
 
 
 async def test_gin_index_chosen_for_body_tsv_match(session):
-    await session.execute(
-        text(
-            "INSERT INTO documents (id, visibility, publication_status, "
-            "titulo, fecha, area_path, tipo) VALUES "
-            "(50, 'publico', 'published', 'd50', '2024-01-01', "
-            "'escuela_ciencia', 'paper')"
-        )
-    )
-    emb = "[" + ",".join(["0.1"] * 1024) + "]"
+    doc_id = await make_document(session)
     for i in range(8):
-        await session.execute(
-            text(
-                "INSERT INTO chunks (doc_id, chunk_seq, is_headline, body_text, "
-                "embedding, embedding_model_version) VALUES "
-                f"(50, {i}, false, 'redes neuronales ejemplo {i}', "
-                f"'{emb}'::halfvec(1024), 'e5')"
-            )
+        await make_chunk(
+            session, doc_id, chunk_seq=i, body_text=f"redes neuronales ejemplo {i}"
         )
     await session.commit()
 
@@ -74,28 +52,17 @@ async def test_gin_index_chosen_for_body_tsv_match(session):
 
 
 async def test_partial_btree_chosen_for_invitado_recientes(session):
-    inserts = []
     for i in range(20):
-        inserts.append(
-            f"({200 + i}, 'publico', 'published', "
-            f"'d{200 + i}', '2024-01-{(i % 28) + 1:02d}', "
-            f"'escuela_ciencia', 'paper')"
-        )
-    await session.execute(
-        text(
-            "INSERT INTO documents (id, visibility, publication_status, "
-            "titulo, fecha, area_path, tipo) VALUES " + ",".join(inserts)
-        )
-    )
+        await make_document(session, fecha=date(2024, 1, (i % 28) + 1))
     await session.commit()
 
     await session.execute(text("SET LOCAL enable_seqscan = off"))
-    sql, _ = invitado_fragment()
+    where = invitado_where("d")
     plan_lines = (
         await session.execute(
             text(
-                f"EXPLAIN SELECT id FROM documents WHERE {sql} "
-                "ORDER BY fecha DESC LIMIT 10"
+                f"EXPLAIN SELECT d.id FROM documents d WHERE {where} "
+                "ORDER BY d.fecha DESC LIMIT 10"
             )
         )
     ).scalars().all()

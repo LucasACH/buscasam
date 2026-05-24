@@ -1,4 +1,4 @@
-"""Regenerate `embeddings.npy` for the fixture corpus.
+"""Regenerate `embeddings.npz` for the fixture corpus.
 
 Requires TEI running with the e5 model:
 
@@ -21,9 +21,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from buscasam.fixtures.corpus import CHUNKS  # noqa: E402
+from buscasam.fixtures.embeddings import EMBEDDINGS_FILE, chunk_key  # noqa: E402
 
 TEI_URL = "http://localhost:8080"
-OUTPUT = ROOT / "src/buscasam/fixtures/embeddings.npy"
 
 
 def _wait_for_tei(timeout_s: int = 600) -> None:
@@ -53,8 +53,9 @@ def main() -> None:
     if embeddings.shape != (len(CHUNKS), 1024):
         raise RuntimeError(f"unexpected TEI shape {embeddings.shape}")
 
-    np.save(OUTPUT, embeddings)
-    print(f"wrote {OUTPUT} shape={embeddings.shape}")
+    keys = np.array([chunk_key(c.body_text) for c in CHUNKS], dtype="S32")
+    np.savez(EMBEDDINGS_FILE, keys=keys, embeddings=embeddings)
+    print(f"wrote {EMBEDDINGS_FILE} shape={embeddings.shape}")
 
 
 if __name__ == "__main__":
