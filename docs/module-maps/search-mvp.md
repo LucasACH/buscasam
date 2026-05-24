@@ -1,0 +1,180 @@
+# Module Map: Search MVP (público corpus for invitado users)
+
+## Source
+
+PRD: [Issue #1 — Search MVP: público corpus for invitado users](https://github.com/LucasACH/buscasam/issues/1).
+
+Implements the `/buscar` slice end-to-end: URL-driven hybrid search over the público corpus, área/tipo/fecha filters, relevance vs. más-recientes ordering, lexical fallback when TEI is down.
+
+## Modules
+
+### `core/search_query`
+
+**Interface:** `search.run(filters, access_fragment, embedding: halfvec | None) -> Results`. Inputs: validated filters (q, area_path or None, tipo[], desde, hasta, orden, pagina), a role-agnostic SQL `access_fragment` + bind params, and an optional query embedding. Returns `Results { rows: list[ResultRow], total: int }` where each row carries `doc_id, titulo, autores, fecha, area_path, tipo, abstract, snippet`. Invariants: 10 rows per page; `pagina` capped at 20 under `orden=relevancia`; uncapped under `orden=recientes`; `embedding=None` ⇒ lexical-only (RRF tolerates empty semantic side); below-`MIN_SEMANTIC_SIMILARITY` rows excluded unless they have a lexical hit; `total` is `200+` when the fused set saturates under relevance, exact under recientes. Errors: SQLAlchemy/asyncpg errors propagate; no business exceptions.
+
+**Responsibilities:** Hybrid SQL — lexical CTE (`es_unaccent`, `ts_rank_cd`, `ts_headline` for snippet), semantic CTE (pgvector cosine, HNSW iterative scan), RRF fusion, chunk→doc aggregation via `MAX(score)`, top-200 cap, área (`ltree <@`), tipo (`IN`), fecha (year range), `orden=recientes` partial-btree path. Owns snippet generation: `ts_headline` on lexical rows, `LEFT(abstract, 200)` for pure-semantic rows. Truncation of abstract to ~280 chars happens here.
+
+**Seams:** None in PRD-1 scope. The access fragment is a parameter, not an adapter (no second implementation exists yet — only `document_access.invitado_fragment()`). Score normalization is locked at RRF only.
+
+**Depth note:** Owns every SQL detail of ranked retrieval. Without it, RRF, the iterative-scan setting, the chunk-aggregation rule, the headline-vs-body snippet fallback, and the access fragment would scatter across endpoints. Deletion test: callers would each rewrite ~150 lines of SQL with subtly different semantics. ADR-0001 + ADR-0003 §3 lock this depth.
+
+---
+
+### `core/document_access`
+
+**Interface:** `invitado_fragment() -> (sql: str, params: dict)`. Returns the readable predicate restricted to the invitado branch: `visibility='publico' AND publication_status='published' AND soft_deleted_at IS NULL AND moderation_hidden_at IS NULL`. No user context required at MVP since PRD-1 only ships the invitado branch. (PRD-2 will add `readable_fragment(user_ctx)` covering interno/privado/co-author paths.)
+
+**Responsibilities:** Sole owner of "what counts as a readable document." Visibility, publication state, soft-delete, moderation-hidden are joined into one fragment so search, recientes ordering, future detail, related, and sitemap reuse identical semantics.
+
+**Seams:** Conceptual seam on visibility role (invitado / autenticated UNSAM / owner-or-coauthor) but only one adapter exists at PRD-1 — no real seam yet. PRD-2 makes it real.
+
+**Depth note:** A central security predicate. The deletion test is hard: every leak in the MVP would trace back to this module. ADR-0010 §6 locks it as the chokepoint for every document-derived read.
+
+---
+
+### `core/embed`
+
+**Interface:** `embed(text: str, kind: Literal["query", "passage"]) -> halfvec(1024)`. PRD-1 calls with `kind="query"`. Owns the `query:` prefix, tokenizer truncation, L2 normalization, the app-scoped `httpx.AsyncClient` against TEI, and a 500 ms timeout. Raises `EmbedUnavailable` on TEI 5xx or timeout — the search route catches and substitutes `embedding=None`.
+
+**Responsibilities:** Single seam to the TEI sidecar. Owns prefix discipline, revision-pinned tokenizer, normalization, and the timeout policy.
+
+**Seams:** None. Switching embedding backends is out of MVP scope.
+
+**Depth note:** ADR-0002 §3 locks this as the only place feature code talks to TEI. Without it, retrieval prefixes and normalization drift between indexer and search.
+
+---
+
+### `api/search` (FastAPI router)
+
+**Interface:** `GET /api/search?q=&area=&tipo=&tipo=&desde=&hasta=&orden=&pagina=`. Returns `{results: ResultDTO[], total: int, unfiltered_total: int | null}`. `unfiltered_total` populated only when ≥1 filter is active; same access predicate applied. Validates `q` empty ↔ `orden=recientes` (rejects `orden=relevancia` with empty q). Validates `pagina ≤ 20` under relevance.
+
+**Responsibilities:** URL-param → Pydantic request DTO; calls `embed(q, "query")`, catching `EmbedUnavailable` and continuing with `embedding=None` while logging `lexical_fallback_rate`; obtains `invitado_fragment()` from `document_access`; calls `search_query.run()` once with active filters; if any filter active, calls again with filters dropped (same access fragment, same embedding) for `unfiltered_total`; shapes ORM-free `ResultDTO`s.
+
+**Seams:** None. The "two calls for unfiltered_total" is implementation, not architecture.
+
+**Depth note:** The orchestrator. Centralizes the lexical-fallback decision, the unfiltered-count rule, and the empty-q validation so the frontend never replays them. Deletion test: those three policies would otherwise leak into either `search_query` (wrong layer — would couple SQL to URL contract) or the frontend (wrong process — would re-bake fallback).
+
+---
+
+### `api/areas` (FastAPI router)
+
+**Interface:** `GET /api/areas`. Returns the full áreas tree as nested `{escuela, carrera[], materia[]}` records or a flat list with `area_path` slugs. Cacheable client-side (no auth, no per-user data).
+
+**Responsibilities:** One SELECT over the áreas reference table, shaped for the cascader.
+
+**Seams:** None.
+
+**Depth note:** Thin by design — earns its own router file because the áreas table is a domain noun and a future detail page may consume it too. If a second non-search caller never materializes by PRD-4, fold it into `api/search`. ADR-0001 §7 locks the áreas table shape.
+
+---
+
+### `app/buscar/page.tsx` (Next.js client page)
+
+**Interface:** Renders at `/buscar`. Reads URL state via `useSearchParams` (q, area, tipo[], desde, hasta, orden, pagina). Composes `SearchFilters`, the result list (inline mapping over `ResultCard`), pagination + sort toggle + page-20 nudge, and `EmptyState`. No SSR (ADR-0004 §3).
+
+**Responsibilities:** Sole owner of URL ↔ component-tree binding. Routes URL updates through `router.replace` so back/forward preserves history. Decides when to render `EmptyState` (results empty) vs. result list.
+
+**Seams:** None.
+
+**Depth note:** The single concentration point for URL contract on the frontend. Deletion test: URL parsing would scatter into every child component.
+
+---
+
+### `app/buscar/useSearch.ts` (hook)
+
+**Interface:** `useSearch(params: SearchParams) -> { data, isLoading, isError, isLexicalFallback }`. Owns the query key (stable across param permutations), the URL-params → `/api/search` request mapping, and exposes whether the backend served a lexical-only response (for telemetry — no UI banner per PRD §"Lexical-fallback UX: silent").
+
+**Responsibilities:** TanStack Query wrapper. Cache key derivation. Request DTO assembly.
+
+**Seams:** None.
+
+**Depth note:** Keeps `page.tsx` a layout. Without it, the page would inline request shaping + query-key construction, making the page hard to test. Deletion test passes once: one caller, but the page's testability hinges on this isolation.
+
+---
+
+### `app/buscar/SearchFilters.tsx`
+
+**Interface:** Controlled by RHF + Zod (ADR-0004 §8). Props: `{ value, onChange }`. Emits a validated filter object on debounced commit. Owns the form schema for área (single `area_path` or null), tipo (multi-select from the 8 closed enum values), desde/hasta (year, 4 digits, optional).
+
+**Responsibilities:** Form binding. Composes `AreasCascader` and the tipo multi-select. Per-filter clear (PRD §21).
+
+**Seams:** None.
+
+**Depth note:** Concentrates form validation. Tipo and orden enums are domain-locked (PRD "Further Notes"), so the validator catches any drift at compile/runtime.
+
+---
+
+### `app/buscar/AreasCascader.tsx`
+
+**Interface:** Props: `{ value: area_path | null, onChange }`. Loads the full áreas tree once via TanStack Query against `/api/areas` (PRD §28: single request). 3-level picker Escuela → Carrera → Materia.
+
+**Responsibilities:** Tree state (selected level + value), reset on parent change, mobile-friendly layout.
+
+**Seams:** None.
+
+**Depth note:** Reusable widget. Deep test: keyboard navigation, partial selection (only Escuela), reset on parent.
+
+---
+
+### `app/buscar/ResultCard.tsx`
+
+**Interface:** Props: `{ result: ResultDTO }`. Pure component. Renders título, autores (joined), fecha (año), área (display name via the áreas tree), tipo (display label), abstract (truncated ~280 chars), snippet (~200 chars). Highlights matched terms in the snippet when the row came from a lexical hit (server already injected `<mark>` via `ts_headline`).
+
+**Responsibilities:** Card layout and responsive scaling for mobile (PRD §24). Truncation discipline.
+
+**Seams:** None.
+
+**Depth note:** Shallow but earns isolation as the single visual contract for a search result; reused unchanged when PRD-4 lands related-document cards.
+
+---
+
+### `app/buscar/EmptyState.tsx`
+
+**Interface:** Props: `{ activeFilters: FilterChip[], onClearOne, onClearAll }`. Renders chips per active filter with one-click clear (PRD §16, §21).
+
+**Responsibilities:** Recovery UX surface — empty-result and clear flow. Owns the chip-from-filter projection (e.g., `area=ingenieria_informatica` → "Ingeniería Informática").
+
+**Seams:** None.
+
+**Depth note:** Borderline split from page. Earns its own file because the chip-projection logic is non-trivial (slug → display name via áreas tree) and the surface needs Playwright coverage independent of the result list.
+
+---
+
+## Dependency graph
+
+```
+                       app/buscar/page.tsx
+                      /        |         \
+              useSearch   SearchFilters   EmptyState
+                |              |               |
+              fetch        AreasCascader   (display)
+                |              |
+                |          GET /api/areas
+                |              |
+                |          api/areas
+                |              |
+                |          (Postgres: áreas table)
+                |
+              GET /api/search
+                |
+              api/search ─── core/embed ─── TEI sidecar
+                |       \
+                |        \─ core/document_access (invitado_fragment)
+                |
+              core/search_query (consumes embedding + access fragment)
+                |
+              (Postgres: chunks + documents + áreas)
+```
+
+No cycles. The frontend talks to FastAPI only through the typed OpenAPI client (ADR-0004 §6); no Server Components in this slice.
+
+## Out of scope
+
+- **`/docs/[id]` detail page and `ResultCard` click target** — PRD #4 owns navigation destination.
+- **`interno` / `privado` visibility branches and login UI** — PRD #2; `document_access` will grow `readable_fragment(user_ctx)` then.
+- **Indexing pipeline (extraction, embedding-passage, headline lifecycle)** — PRD #3.
+- **`core/snippet.py`** — rejected. `ts_headline` and abstract-prefix are SQL inside `search_query`; no second caller justifies extraction.
+- **`SearchResults` list component** — rejected. The page-20 nudge + result count line are one conditional; a wrapper would be a pass-through (deletion test fails).
+- **Lexical-fallback UI banner** — rejected by PRD ("silent. No banner."); `isLexicalFallback` from `useSearch` is for telemetry only.
+- **`MIN_SEMANTIC_SIMILARITY` calibration tooling** — committed fixture + offline notebook per ADR-0001 §12; not a runtime module.
+- **`core/areas.py` domain module** — premature; the áreas tree has no behaviour beyond "fetch all," which lives in the router.
