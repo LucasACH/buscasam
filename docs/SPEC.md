@@ -1,221 +1,146 @@
-# BUSCASAM — Sistema de Búsqueda Académica
+# BUSCASAM - Sistema de Búsqueda Académica
 
-## Descripción general
-BUSCASAM es un sistema de búsqueda de proyectos de investigación, trabajos prácticos y contenido académico relevante para la comunidad universitaria de UNSAM. Inspirado en Google Scholar Labs, permite ingresar consultas y obtener resultados pertinentes mediante búsqueda semántica.
+## Alcance MVP
 
-## Objetivos
-- Facilitar el acceso a producción académica de la facultad
-- Superar la búsqueda trivial por palabras clave mediante comprensión semántica
-- Centralizar publicaciones de estudiantes y docentes en una plataforma única
+BUSCASAM permite publicar y encontrar trabajos académicos subidos por la comunidad UNSAM.
 
-## Plataforma
-Aplicación web accesible para estudiantes, docentes e invitados externos.
+Incluye:
+- autenticación institucional;
+- borradores, procesamiento, publicación y reemplazo versionado;
+- coautoría con aceptación y notificaciones de invitación;
+- búsqueda híbrida, filtros, detalle, descarga y trabajos relacionados;
+- reporte y ocultamiento moderado de documentos.
+
+Queda fuera del MVP:
+- recomendaciones personalizadas e intereses;
+- historial de búsquedas y autocompletado;
+- favoritos y comentarios;
+- emails opcionales y preferencias, excepto la invitación de coautor;
+- páginas de navegación por autor/área/tipo separadas de la búsqueda;
+- apelaciones dentro de la plataforma.
 
 ---
 
-## Motor de búsqueda
+## Búsqueda
 
-### Input
-- Caja de texto libre única (lenguaje natural)
-- Filtros opcionales aplicados aparte. Cuando se aplican, son exclusivos (excluyen todo lo que cae fuera)
-- Filtros disponibles: fecha, área de estudio, tipo de documento
+### Entrada
+- Caja de texto libre única.
+- Filtros opcionales: fecha, área de estudio y tipo de documento.
+- URL reproducible: `/buscar?q=...&area=...&tipo=...&desde=...&pagina=...`.
 
-### Output
-- Lista paginada: 10 resultados por página, navegación con números de página al pie
-- URL de búsqueda estable y reproducible (`/buscar?q=...&area=...&tipo=...&desde=...&pagina=...`)
-- Cada resultado expone: título, autores, fecha, área, tipo de documento, abstract truncado (~2-3 líneas) y snippet del contenido donde matchea la consulta
+### Salida
+- Lista de 10 resultados por página; relevancia limitada a las primeras 20 páginas.
+- Cada resultado: título, autores, fecha, área, tipo, abstract truncado y snippet.
+- Orden alternativo "más recientes", sin límite de relevancia.
 
 ### Ranking
-- Híbrido: similitud semántica (embeddings) + match léxico (BM25)
-- Sin boost por popularidad/recencia en el ranking principal
-- Ordenamiento alternativo disponible: "más recientes" (ignora relevancia, ordena por fecha desc)
+- Híbrido: embeddings multilingües + ranking full-text de PostgreSQL en español.
+- Fusión por Reciprocal Rank Fusion; sin boost por popularidad o recencia.
+- Se muestra un resultado si hay match léxico o si supera el piso semántico calibrado antes del lanzamiento.
+- Si no hay resultados sobre el piso, se informa claramente y se sugieren cambios de consulta/filtros.
+- Con filtros activos, se puede consultar el conteo sin filtros aplicando la misma visibilidad.
 
 ### Idioma
-- Motor en español: modelo y pipeline optimizados para español
-- Documentos en otros idiomas se aceptan e indexan con el mismo modelo. La calidad de búsqueda sobre ese contenido puede ser degradada — limitación explícita y documentada
-- Los metadatos en español (título, abstract cargados por el autor) cubren el match principal en estos casos
-
-### Búsqueda sin resultados
-- Mensaje claro + sugerencias estáticas (probar otros términos, ajustar filtros)
-- Si hay filtros aplicados: ofrecer "ver N resultados sin filtros"
-- Mostrar documentos cercanos por debajo del threshold como "resultados relacionados"
-- No hacer query expansion automática (preserva intención del usuario)
-
-### Autocompletado
-Mientras el usuario escribe en la caja de búsqueda, un dropdown muestra:
-- Sugerencias de queries (historial del usuario + queries populares globales)
-- Hits directos de documentos cuando el match es muy fuerte ("¿estás buscando *este trabajo*?")
+- Pipeline de texto en español; documentos en otros idiomas se aceptan con calidad potencialmente menor.
+- Título y abstract ingresados/revisados por el autor también se indexan.
 
 ---
 
-## Corpus y documentos
+## Documentos
 
-### Origen
-Solo contenido subido por usuarios de la plataforma (estudiantes y docentes). Sin importación de repositorios externos ni scraping.
+### Contenido
+- Metadatos: título, autores, abstract, área, tipo, fecha y palabras clave.
+- Archivo principal indexado: PDF, DOCX u ODT.
+- Hasta cinco adjuntos no indexados: CSV, código, imágenes y formatos permitidos.
+- Tipos cerrados: tesis, paper, trabajo práctico, proyecto de investigación, monografía, ponencia/poster, apunte/resumen, informe de cátedra.
+- Áreas jerárquicas: Escuela -> Carrera -> Materia/Disciplina.
 
-### Modelo de documento
-Cada documento combina:
-- Metadatos estructurados: título, autores, abstract, área, tipo, fecha, palabras clave
-- Texto completo extraído del archivo (vía OCR/parser) para indexación
+### Visibilidad
+- `publico`: visible y descargable por cualquier visitante.
+- `interno`: visible y descargable por usuarios UNSAM autenticados.
+- `privado`: visible y descargable solo por autor propietario y coautores aceptados.
+- Un borrador aún no publicado, un documento eliminado u ocultado y el contenido de una versión candidata fallida no aparecen en lecturas normales.
 
-### Formatos aceptados
-- **Indexados**: PDF, DOCX, ODT
-- **Adjuntos complementarios** (almacenados pero no indexados): CSV, código, imágenes
-
-### Tipos de documento (enum cerrado)
-Tesis, paper, trabajo práctico, proyecto de investigación, monografía, ponencia/poster, apunte/resumen, informe de cátedra.
-
-### Áreas de estudio (jerarquía)
-Estructura jerárquica institucional: Escuela → Carrera → Materia/Disciplina. El filtro permite seleccionar a cualquier nivel.
-
-### Palabras clave
-- Extraídas automáticamente del texto del documento
-- Visibles en la página de detalle como tags clickeables (cada click ejecuta una búsqueda con esa keyword)
-- No hay filtro dedicado a keywords (evita ruido por variantes léxicas)
+### Versiones
+- Reemplazar archivo crea una versión candidata nueva.
+- La versión publicada anterior continúa disponible mientras la nueva se procesa y revisa.
+- Solo una versión procesada y confirmada por el autor pasa a ser la versión pública actual.
+- El historial de versiones es descargable solo por autores aceptados/propietario.
 
 ---
 
 ## Publicación
 
 ### Flujo
-- Formulario guiado para el estudiante/docente
-- Carga del archivo principal y, opcionalmente, adjuntos complementarios
-- Metadatos manuales mínimos: título, autores, área, tipo de documento
-- Metadatos auto-extraídos: abstract, palabras clave, fecha
+1. Usuario autenticado crea borrador con título, autores, área, tipo y visibilidad.
+2. Sube archivo principal; la API responde `202` y procesa fuera del request.
+3. El sistema extrae texto y sugiere abstract, palabras clave y fecha del trabajo.
+4. El autor revisa o edita sugerencias. Si cambia título/abstract, el índice de encabezado se regenera antes de habilitar publicación.
+5. El autor publica; recién entonces el documento aparece en búsqueda, detalle y descarga según visibilidad.
 
-### Disponibilidad
-- Publicación inmediata: tras procesar (OCR + indexar) el trabajo aparece en búsqueda sin revisión humana previa
-- Moderación post-hoc reactiva (ver sección Moderación)
+### Estados
+- El documento es `draft` hasta su primera publicación y luego permanece `published` mientras exista una versión pública.
+- La versión candidata puede estar `processing`, `processing_failed` o `ready_to_publish`.
+- Al reemplazar un archivo publicado, la versión pública anterior sigue accesible mientras la candidata se procesa o falla.
 
 ### Autores
-- Pueden ser usuarios registrados (sugeridos desde la base) o externos (texto libre)
-- Caso TP/trabajo grupal: el primer uploader crea la entrada y agrega a los co-autores, que reciben notificación y confirman. Evita duplicados.
-
-### Visibilidad por trabajo
-El autor elige al publicar:
-- **Público**: visible para todos (incluidos invitados)
-- **Interno UNSAM**: solo usuarios autenticados de la institución
-- **Privado**: solo el autor y co-autores (drafts, material confidencial)
-
-### Licencia
-Implícita: "consulta y descarga para uso académico". No hay selector de licencia formal por trabajo.
-
-### Edición
-- Metadatos editables en cualquier momento por el autor
-- Reemplazo de archivo crea una nueva versión (versionado informativo, historial visible)
-- La búsqueda siempre usa la última versión
+- El uploader es propietario.
+- Un coautor registrado invitado recibe notificación in-app/email y queda pendiente hasta aceptar; antes de aceptar no obtiene acceso privado ni permisos de edición.
+- Un autor externo se muestra como atribución de texto y no obtiene permisos.
 
 ### Eliminación
-- Soft delete: el trabajo deja de aparecer en búsqueda y de ser accesible públicamente
-- Datos persisten en BD por un período (auditoría / recuperación)
-- Comentarios y favoritos quedan asociados pero no visibles
+- El autor puede eliminar lógicamente un documento; deja de ser accesible inmediatamente.
+- Puede restaurarlo durante 180 días; después se purga.
+- Ocultamiento por moderación es un estado separado y no inicia purga.
 
 ---
 
-## Usuarios
+## Usuarios Y Autenticación
 
-### Tipos
-- **Estudiantes**: publican, buscan, comentan, marcan favoritos
-- **Docentes** (incluye personal UNSAM con cuenta institucional, no solo docentes de cátedra): mismas capacidades + moderación post-publicación (ver Moderación)
-- **Invitados (externos a UNSAM)**: buscan, leen, descargan archivos públicos. No comentan, no favean, no publican
+### Invitado
+- Busca, ve y descarga documentos `publico`.
+- No publica ni reporta.
 
-### Autenticación
-- Ingreso con Google. Solo cuentas UNSAM Workspace:
-  - `@estudiantes.unsam.edu.ar` → rol Estudiante
-  - `@unsam.edu.ar` → rol Docente
-- El rol se deriva del dominio del email (no es auto-declarado)
-- Cuentas no UNSAM (incluido `@gmail.com` personal) no pueden ingresar
-- Invitados navegan sin login
+### Estudiante
+- Cuenta Google Workspace con `hd = estudiantes.unsam.edu.ar`.
+- Publica, busca, acepta coautoría y reporta documentos accesibles.
 
-### Perfil
-- Datos del SSO (Google): nombre, email, foto, rol (derivado del dominio)
-- Escuela, carrera y cursos: no disponibles vía Google. La integración con el sistema académico institucional queda fuera del MVP
-- Intereses declarados: el usuario marca áreas/temas opcionalmente — alimentan recomendaciones hasta que exista la integración académica
+### Docente
+- Cuenta Google Workspace con `hd = unsam.edu.ar`.
+- Mismas capacidades que Estudiante más moderación.
+- Representa personal UNSAM confiable para este producto, no necesariamente cargo docente literal.
 
-### Primer ingreso
-- Sin onboarding: entrada directa a la home
-- Las recomendaciones del primer día son genéricas (no hay Escuela/carrera vía SSO). Mejoran a medida que el usuario realiza búsquedas y marca intereses
-
-### Historial de búsquedas
-- El sistema lo guarda para alimentar recomendaciones
-- El usuario tiene una vista de "mis búsquedas" con borrado individual y "borrar todo"
-- Pausable
+### Sesión
+- Login solo con Google UNSAM.
+- Sesión expira tras 30 días sin actividad o 90 días desde login, lo que ocurra primero.
+- La bandeja in-app contiene invitaciones de coautoría y avisos de procesamiento/moderación; el usuario puede marcarlos como leídos.
 
 ---
 
-## Recomendaciones
+## Detalle Y Relacionados
 
-### Home — "Recomendados para vos"
-- Lista basada en historial de búsquedas + perfil académico (Escuela, carrera, intereses declarados)
-- Actualización periódica
-
-### Página de detalle — "Trabajos relacionados"
-- Documentos similares al que se está viendo
-- Calculado por similitud entre embeddings de documentos
-
-### No personalización del ranking de búsqueda
-Las recomendaciones nunca reordenan los resultados de búsqueda. La búsqueda es reproducible entre usuarios (modulo documentos nuevos indexados).
+- URL permanente `/docs/{id}`, independiente de versiones.
+- Muestra metadatos, abstract, palabras clave y descarga del archivo actual/adjuntos.
+- "Trabajos relacionados" compara encabezados indexados y aplica exactamente la misma política de acceso que el detalle.
+- Ninguna respuesta, sitemap o conteo revela documentos no autorizados.
 
 ---
 
-## Interacción social
+## Moderación MVP
 
-### Favoritos
-- Contador agregado público en cada documento ("guardado por N usuarios")
-- Lista de favoritos privada (solo el dueño la ve)
-
-### Comentarios
-- Solo usuarios registrados (estudiantes y docentes)
-- Threading de un nivel: comentarios pueden tener respuestas, pero sin anidamiento adicional
-- Sin reacciones ni marcas especiales
-
-### Notificaciones
-- **In-app** (campanita) para todos los eventos relevantes
-- **Email** para eventos críticos (invitación de co-autor) y opcional para comentarios, configurable por usuario
+- Un usuario autenticado puede reportar un documento publicado que puede leer: spam, contenido inadecuado, plagio o error.
+- Cualquier Docente puede revisar reportes y ocultar o volver a mostrar un documento.
+- Cada acción registra docente, razón y fecha; el autor recibe notificación in-app.
+- Un Docente solo inspecciona contenido no visible mediante endpoints de moderación asociados al reporte.
+- La apelación en producto queda fuera del MVP.
 
 ---
 
-## Navegación y URLs
+## Criterios De Aceptación
 
-### URLs estables
-- Búsquedas: URL reproducible incluyendo query, filtros y página
-- Trabajos: URL permanente por ID, independiente de versiones
-
-### Click en un resultado
-Lleva a una página de detalle interna que muestra:
-- Metadatos completos
-- Abstract
-- Comentarios y favoritos
-- Botón para descargar/visualizar el archivo
-
-### Browse sin búsqueda
-Páginas navegables paginadas:
-- Por Escuela/carrera (jerarquía de áreas)
-- Por tipo de documento
-- Por autor
-
-### Click en un autor
-- Autor registrado: lleva a una página "trabajos de este autor" — listado simple, sin bio ni perfil social
-- Autor externo (texto libre): lleva a una búsqueda por ese nombre como string
-
----
-
-## Moderación
-
-### Reportes
-- Cualquier usuario registrado puede reportar un trabajo o comentario
-- Razones predefinidas: spam, contenido inadecuado, plagio, error
-
-### Resolución
-- Cualquier docente accede a la cola de reportes y decide ocultar o dejar
-- Sin descentralización por Escuela (cualquier docente puede actuar sobre cualquier reporte)
-
-### Auditoría y transparencia
-- Cada acción de moderación queda registrada
-- El autor del contenido afectado es notificado con la razón ("ocultado por [docente] — razón: ...")
-- Posibilidad de apelar la decisión
-
----
-
-## Resumen
-BUSCASAM combina búsqueda semántica híbrida (embeddings + BM25), filtros estructurados, recomendaciones personalizadas, publicación guiada con co-autoría, e interacción social acotada (comentarios y favoritos) para que la comunidad de UNSAM encuentre y comparta producción académica de manera eficiente.
+- Invitado no observa documentos internos, privados, borradores no publicados, ocultos ni eliminados por búsqueda, detalle, relacionados, descarga, conteos o sitemap.
+- Una versión candidata fallida no oculta la versión publicada anterior.
+- Coautor pendiente no accede a un documento privado; coautor aceptado sí.
+- Publicar o reemplazar nunca expone una versión sin indexar.
+- Si el servicio semántico no responde, la búsqueda léxico-only sigue disponible.
+- Backup restaurable y benchmark de búsqueda/OCR sobre la VM se validan antes del lanzamiento.

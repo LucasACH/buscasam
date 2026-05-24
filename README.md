@@ -6,12 +6,10 @@ Sistema de búsqueda académica para la comunidad universitaria de UNSAM. Inspir
 
 ## Qué hace
 
-- **Búsqueda híbrida** en español: similitud semántica (embeddings) + match léxico (BM25)
+- **Búsqueda híbrida** en español: similitud semántica (embeddings) + ranking full-text de PostgreSQL
 - **Corpus propio**: solo contenido subido por estudiantes y docentes de UNSAM
-- **Publicación guiada** con co-autoría, versionado y visibilidad configurable (público / interno / privado)
-- **Recomendaciones personalizadas** basadas en historial y perfil académico
-- **Interacción social acotada**: favoritos y comentarios de un nivel
-- **Moderación post-hoc** reactiva por parte del cuerpo docente
+- **Publicación por etapas** con co-autoría, revisión, versionado y visibilidad configurable
+- **Moderación post-hoc** de documentos por parte del cuerpo docente
 
 Detalle completo de comportamiento en [docs/SPEC.md](docs/SPEC.md).
 

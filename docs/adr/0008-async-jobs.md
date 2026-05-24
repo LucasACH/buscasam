@@ -1,4 +1,4 @@
-# Async job runner: procrastinate, two queues, jobs chokepoint
+# Async job runner: procrastinate, two queues, locked tasks
 
 ## Status
 
@@ -6,73 +6,64 @@ Accepted
 
 ## Decision
 
-Durable async work runs on **procrastinate**, a Postgres-backed task queue using the same database as the primary store. Two queues partition load: `default` (concurrency ~8, I/O-bound) and `ocr` (concurrency 1, CPU-bound). Each queue has its own worker process. All async entry points are typed `enqueue_*` helpers in `core/jobs.py`, CI-grep-enforced. The chokepoint computes a uniform `queueing_lock` per task (silent dedup) and routes `index_document` jobs to `default` or `ocr` via a cheap heuristic (PDF size + MIME) at enqueue time. Procrastinate owns its schema (`procrastinate schema --apply`) inside the same database. No scheduler at MVP — reindex is an operator CLI.
+Durable asynchronous work runs on **procrastinate**, backed by the application Postgres database. Two queues partition load: `default` for bounded processing/I/O and `ocr` for CPU-heavy OCR. All async entry points are typed helpers in `core/jobs.py`. Enqueue admission locks reduce duplicate waiting jobs; execution locks and idempotent database transitions provide correctness. Procrastinate periodic defers schedule daily retention/orphan cleanup.
 
 ## Locked
 
-1. Runner: procrastinate, same Postgres database as the application. No Redis, no RabbitMQ. Job enqueue inside a request runs through the application's SQLAlchemy connection so the job INSERT and the row INSERT it depends on commit or roll back together. Workers use procrastinate's own asyncpg pool.
+1. Runner and transaction integration. Procrastinate uses the same Postgres database as SQLAlchemy; no Redis or RabbitMQ. The backend pins SQLAlchemy async `postgresql+psycopg` and Procrastinate's `PsycopgConnector`. Request-created jobs use `task.configure(connection=<underlying psycopg AsyncConnection>).defer_async(...)` from the active SQLAlchemy transaction, so domain-row creation and job creation commit or roll back together. An integration test proves rollback leaves neither row nor job.
 
-2. Topology: two queues, two worker processes.
+2. Topology: two queues, two worker services in ADR-0009.
+   - `default`, concurrency 8 initially: `index_document`, `refresh_headline`, co-author fan-out/send, in-app moderation notification, retention purge, orphan sweep, operator reindex.
+   - `ocr`, concurrency 1: `ocr_index_document` only.
+   - Initial indexing of every PDF runs the cheap extraction gate on `default`; only a PDF proven to need OCR is delegated to `ocr` under ADR-0007.
 
-   - `default` — fast I/O. `worker_default`, concurrency ~8. Hosts: born-digital `index_document`, `fan_out_*` shims, per-recipient SMTP sends, in-app notification inserts, operator-triggered reindex enqueues for born-digital versions.
-   - `ocr` — CPU-bound. `worker_ocr`, concurrency 1. Hosts: `index_document` for likely-scans.
-
-   Both built from the same image as the API. Started as separate systemd units (or equivalent — ADR-0009).
-
-3. Chokepoint: typed `enqueue_*` helpers in `core/jobs.py`. All procrastinate task definitions live there. For each task, the module exports a typed helper:
+3. Chokepoint: task definitions and typed enqueue helpers live in `core/jobs.py`. Feature code imports helpers, not Procrastinate:
 
    ```python
    async def enqueue_index_document(version_id: int) -> None: ...
+   async def enqueue_ocr_index_document(version_id: int) -> None: ...
+   async def enqueue_refresh_headline(version_id: int) -> None: ...
    async def enqueue_fan_out_coauthor_invites(document_id: int) -> None: ...
    async def enqueue_send_coauthor_invite(document_id: int, recipient_user_id: int) -> None: ...
-   async def enqueue_fan_out_comment_notifications(comment_id: int) -> None: ...
-   async def enqueue_send_comment_notification(comment_id: int, recipient_user_id: int) -> None: ...
+   async def enqueue_author_notification(action_id: int) -> None: ...
+   async def enqueue_purge_deleted() -> None: ...
+   async def enqueue_sweep_orphan_blobs() -> None: ...
    ```
 
-   Feature code only ever imports these helpers; never imports `procrastinate`, never calls `.defer_async(...)` directly. CI grep bans `procrastinate` imports anywhere except `core/jobs.py`, the worker entrypoint, and tests. Helpers use procrastinate's `defer_*` variant accepting an external connection so the application's SQLAlchemy transaction owns the INSERT into `procrastinate_jobs`.
+   Architecture tests keep direct task deferral inside `core/jobs.py`/worker wiring. Comment/favourite/history jobs do not exist at MVP.
 
-4. Classification heuristic at enqueue time. `enqueue_index_document(version_id)` reads the version's MIME and stored byte size and picks a queue:
+4. Index pipeline routing:
+   - DOCX/ODT: `index_document` completes in `default`.
+   - PDF: `index_document` runs `pdfminer` gate in `default`; sufficient-text PDFs complete there.
+   - PDF requiring OCR: `index_document` transactionally marks the handoff and enqueues `ocr_index_document`; only `ocr` invokes `ocrmypdf`.
+   - Metadata headline edits enqueue `refresh_headline`, which is short and never extracts/OCRs a file.
 
-   - MIME ∈ {DOCX, ODT MIMEs} → `default`.
-   - MIME = `application/pdf`, size ≤ threshold (start at **2 MB**) → `default`.
-   - MIME = `application/pdf`, size > threshold → `ocr`.
-
-   Threshold is a tunable in `core/jobs.py`. Metric `ocr_queue_misclassification_rate`. Conservative: when in doubt, route to `ocr`.
-
-5. Retry: two-bucket exception convention + per-task policy.
-
-   - `procrastinate.JobAborted(reason)` → job marked `failed` immediately, no retry. Use for permanent data failures (`PDFSyntaxError`, `zipfile.BadZipFile`, etc.).
-   - Any other unhandled exception → procrastinate retries per the task's policy.
+5. Retry policy:
 
    | Task | Queue | Max attempts | Backoff | Terminal action |
-   |---|---|---|---|---|
-   | `index_document` | `default` / `ocr` | 3 | exponential, base 60 s | `index_status='failed'` + in-app notif (ADR-0007 §9), `index_error` per §9 below |
-   | `fan_out_coauthor_invites` | `default` | 3 | exponential, base 60 s | log; in-app notif on inviter |
-   | `fan_out_comment_notifications` | `default` | 3 | exponential, base 60 s | log + drop |
-   | `send_coauthor_invite` | `default` | 5 | exponential, base 30 s, cap 1 h | log |
-   | `send_comment_notification` | `default` | 5 | exponential, base 30 s, cap 1 h | log + drop |
+   |---|---|---:|---|---|
+   | `index_document` | `default` | 3 | exponential, base 60 s | candidate `failed` + author notification; current reindex retains old index + operator log |
+   | `ocr_index_document` | `ocr` | 3 | exponential, base 60 s | candidate `failed` + author notification; current reindex retains old index + operator log |
+   | `refresh_headline` | `default` | 3 | exponential, base 30 s | retain old published headline or block draft publish; notify author |
+   | `fan_out_coauthor_invites` | `default` | 3 | exponential, base 60 s | log + notify inviter in-app |
+   | `send_coauthor_invite` | `default` | 5 | exponential, base 30 s, cap 1 h | log; invitation remains visible in-app |
+   | `author_notification` | `default` | 3 | exponential, base 30 s | log |
+   | `purge_deleted`, `sweep_orphan_blobs` | `default` | 3 | exponential, base 5 min | alert in structured logs |
 
-6. Reindex: operator CLI reusing `index_document`. `python -m buscasam reindex --reason=embedding | --reason=extract` selects `document_versions` rows where the relevant version axis is stale and loops `enqueue_index_document(version_id)`. No separate task. Classification (§4) routes per row. Idempotent via §7 lock. No periodic wrapper.
+   For candidates, permanent parsing failures abort without retry and set `index_error='corrupted: <short reason>'`; exhausted transient failures set `index_error='exhausted retries: <exception class>'`. Current-version reindex failures keep existing public index rows/status and emit structured operator failure instead of mutating reader-visible state.
 
-7. Idempotency: uniform `queueing_lock` per helper:
+6. Reindex. Operator CLI `python -m buscasam reindex --reason=embedding|extract` selects published current versions and active unpublished candidates, not historical inactive versions, and enqueues `index_document`. Reindex preserves author-approved published metadata. Published replacements remain current until newly indexed output is explicitly published; administrative full reindex of an unchanged current version swaps index rows only after success.
 
-   - `enqueue_index_document(version_id)` → `f"index_document:v{version_id}"`
-   - `enqueue_fan_out_coauthor_invites(document_id)` → `f"fan_out_coauthor_invites:d{document_id}"`
-   - `enqueue_send_coauthor_invite(document_id, recipient_user_id)` → `f"send_coauthor_invite:d{document_id}:u{recipient_user_id}"`
-   - `enqueue_fan_out_comment_notifications(comment_id)` → `f"fan_out_comment_notifications:c{comment_id}"`
-   - `enqueue_send_comment_notification(comment_id, recipient_user_id)` → `f"send_comment_notification:c{comment_id}:u{recipient_user_id}"`
+7. Locks and idempotency:
+   - Each helper passes `queueing_lock=<key>` to suppress duplicate waiting jobs, treats `AlreadyEnqueued` as a no-op, and passes `lock=<key>` to prevent simultaneous execution for that logical operation.
+   - `queueing_lock` is not treated as an execution guarantee: a job already `doing` does not by itself block a newly queued job.
+   - Keys: both initial/OCR indexing use `index:v{id}`; other keys are `headline:v{id}`, `coauthors:d{id}`, `invite:d{id}:u{id}`, `notice:a{id}`, `maintenance:purge`, `maintenance:orphan`.
+   - Tasks re-check state under row lock before side effects. Invitation/notification inserts use unique event-recipient keys; indexing writes staged chunks transactionally and fingerprint-checks headline output.
 
-   Procrastinate enforces at most one job per lock value across `todo` + `doing`. A duplicate enqueue is a silent no-op.
+8. Fan-out. A publish action enqueues one `fan_out_coauthor_invites(document_id)` task. It selects pending registered co-authors once and enqueues one `send_coauthor_invite` per recipient. Each send creates the durable in-app invitation and attempts email; duplicate retries cannot create duplicate notification rows.
 
-8. Fan-out: uniform shim. Every fan-out event: the endpoint enqueues one cheap `fan_out_*(event_id)` job; that job resolves recipients via a single SELECT and enqueues one `send_*` per recipient. Shim and per-recipient sends both on `default`. In-app campanita notifications inserted by the per-recipient send job, sharing retry/idempotency primitives with email.
+9. Periodic work. `core/jobs.py` registers daily `purge_deleted` and `sweep_orphan_blobs` periodic tasks on the `default` queue. Any live worker may defer them; Procrastinate records only one defer per period. Reindex remains operator-triggered. Maintenance tasks coordinate with ADR-0009 backups using one Postgres advisory lock namespace so blob deletion cannot race a backup recovery point.
 
-9. Failure surface and `index_error` taxonomy. ADR-0007 §9's `index_status` / `index_error` / `indexed_at` columns are the user-facing surface; `index_error` carries a coarse taxonomy:
+10. Schema management. Procrastinate owns its tables and procedures. Deploy runs `alembic upgrade head && procrastinate schema --apply`, targeting the same DSN. Application migrations do not duplicate Procrastinate DDL.
 
-   - `corrupted: <short reason>` — set on `JobAborted`. Author notification: "no pudimos procesar el archivo (parece estar dañado)". Offers re-upload.
-   - `exhausted retries: <last exception class>` — set when retry policy runs out. Author notification: "no pudimos procesar el archivo (problema temporal del sistema)". Offers retry-from-UI.
-
-   Operator-side observability (queue depth, failure alerts, log aggregation) deferred to ADR-0010. Procrastinate's own tables (`procrastinate_jobs`, `procrastinate_events`) are the source of truth; structured stdout logs from each worker.
-
-10. Schema management. Procrastinate owns its tables (`procrastinate_jobs`, `procrastinate_events`, `procrastinate_periodic_defers`, plus stored procedures and triggers). Deploy runs `alembic upgrade head && procrastinate schema --apply` — both idempotent, both targeting the same DSN. Procrastinate upgrades flow through `pip install procrastinate==X` plus a re-run of the CLI. The application's Alembic history never contains procrastinate DDL.
-
-11. ADR-0003 §4 clarification. The wording "uniform `enqueue(job)` call" is refined to "via the typed `enqueue_*` helpers in `core/jobs.py`." `BackgroundTasks` ban stands unchanged.
+11. Operator surface. Queue depth, failures, task duration, OCR handoffs, and maintenance failures emit structured stdout logs. Centralized observability/alert delivery is post-MVP.
