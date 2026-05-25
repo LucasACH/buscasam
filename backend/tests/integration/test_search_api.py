@@ -405,6 +405,89 @@ async def test_search_endpoint_falls_back_to_lexical_on_tei_5xx(client, session)
     assert any(getattr(rec, "fallback", False) is True for rec in fallback_records)
 
 
+async def test_search_endpoint_recientes_orders_by_fecha_desc(client, session):
+    """orden=recientes returns matching docs sorted fecha desc with exact total."""
+    old_id = await make_document(
+        session,
+        titulo="Estudio antiguo sobre redes",
+        abstract="Documento antiguo.",
+        fecha=date(2019, 1, 1),
+    )
+    await make_chunk(
+        session, old_id, is_headline=True, body_text="Estudio antiguo sobre redes."
+    )
+
+    new_id = await make_document(
+        session,
+        titulo="Estudio reciente sobre redes",
+        abstract="Documento reciente.",
+        fecha=date(2024, 1, 1),
+    )
+    await make_chunk(
+        session, new_id, is_headline=True, body_text="Estudio reciente sobre redes."
+    )
+    await session.commit()
+
+    r = await client.get("/api/search", params={"q": "redes", "orden": "recientes"})
+    assert r.status_code == 200
+    data = r.json()
+    assert [row["doc_id"] for row in data["results"]] == [new_id, old_id]
+    assert data["total"] == 2
+    assert data["saturated"] is False
+
+
+async def test_search_endpoint_recientes_allows_empty_q_browse(client, session):
+    """orden=recientes with empty q returns the público corpus sorted fecha desc."""
+    a_id = await make_document(
+        session,
+        titulo="Doc A",
+        abstract="A",
+        fecha=date(2020, 1, 1),
+    )
+    await make_chunk(session, a_id, is_headline=True, body_text="Doc A cuerpo.")
+    b_id = await make_document(
+        session,
+        titulo="Doc B",
+        abstract="B",
+        fecha=date(2023, 1, 1),
+    )
+    await make_chunk(session, b_id, is_headline=True, body_text="Doc B cuerpo.")
+    await session.commit()
+
+    r = await client.get("/api/search", params={"orden": "recientes"})
+    assert r.status_code == 200
+    data = r.json()
+    assert [row["doc_id"] for row in data["results"]] == [b_id, a_id]
+    assert data["total"] == 2
+
+
+async def test_search_endpoint_rejects_empty_q_under_relevancia(client):
+    """Empty q with orden=relevancia (or default) is rejected with 422."""
+    r_default = await client.get("/api/search")
+    assert r_default.status_code == 422
+
+    r_explicit = await client.get("/api/search", params={"orden": "relevancia"})
+    assert r_explicit.status_code == 422
+
+
+async def test_search_endpoint_recientes_accepts_pagina_over_20(client, session):
+    """Under orden=recientes, pagina>20 is accepted (no 422)."""
+    doc_id = await make_document(session, titulo="Doc", abstract="Doc")
+    await make_chunk(session, doc_id, is_headline=True, body_text="Doc cuerpo.")
+    await session.commit()
+
+    r = await client.get(
+        "/api/search", params={"orden": "recientes", "pagina": 21}
+    )
+    assert r.status_code == 200
+    assert r.json()["results"] == []
+
+
+async def test_search_endpoint_rejects_unknown_orden(client):
+    r = await client.get("/api/search", params={"q": "anything", "orden": "popular"})
+    assert r.status_code == 422
+
+
 async def test_search_endpoint_unfiltered_total_when_paginated_past_end(client, session):
     """unfiltered_total reports the true count even when pagina is past the result set."""
     publico_paper = await make_document(
