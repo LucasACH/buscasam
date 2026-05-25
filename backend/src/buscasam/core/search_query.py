@@ -116,7 +116,8 @@ async def _run_recientes(session: AsyncSession, filters: Filters) -> Results:
         params["headline_opts"] = TS_HEADLINE_OPTS
         # Best matching chunk per doc supplies body_text for ts_headline so the
         # snippet shows match context (PRD #1 US-6).
-        cte = f"""
+        sql = text(
+            f"""
             WITH scored AS (
                 SELECT
                     c.doc_id,
@@ -136,68 +137,43 @@ async def _run_recientes(session: AsyncSession, filters: Filters) -> Results:
                 FROM scored
                 ORDER BY doc_id, score DESC
             )
-        """
-        total = (
-            await session.execute(
-                text(f"{cte} SELECT count(*) AS total FROM best_per_doc"),
-                params,
-            )
-        ).scalar_one()
-        rows = (
-            await session.execute(
-                text(
-                    f"""
-                    {cte}
-                    SELECT
-                        d.id, d.titulo, d.fecha, d.area_path::text AS area_path,
-                        d.tipo, d.abstract,
-                        ts_headline(
-                            'es_unaccent',
-                            b.body_text,
-                            plainto_tsquery('es_unaccent', :q),
-                            :headline_opts
-                        ) AS snippet
-                    FROM best_per_doc b
-                    JOIN documents d ON d.id = b.doc_id
-                    ORDER BY d.fecha DESC, d.id DESC
-                    LIMIT :limit OFFSET :offset
-                    """
-                ),
-                params,
-            )
-        ).all()
+            SELECT
+                d.id, d.titulo, d.fecha, d.area_path::text AS area_path,
+                d.tipo, d.abstract,
+                ts_headline(
+                    'es_unaccent',
+                    b.body_text,
+                    plainto_tsquery('es_unaccent', :q),
+                    :headline_opts
+                ) AS snippet,
+                (SELECT count(*) FROM best_per_doc) AS total
+            FROM best_per_doc b
+            JOIN documents d ON d.id = b.doc_id
+            ORDER BY d.fecha DESC, d.id DESC
+            LIMIT :limit OFFSET :offset
+            """
+        )
     else:
-        where_block = f"""
+        sql = text(
+            f"""
+            SELECT
+                d.id, d.titulo, d.fecha, d.area_path::text AS area_path,
+                d.tipo, d.abstract,
+                LEFT(COALESCE(d.abstract, ''), 200) AS snippet,
+                count(*) OVER () AS total
+            FROM documents d
             WHERE {where}
               {area_clause}
               {tipo_clause}
               {desde_clause}
               {hasta_clause}
-        """
-        total = (
-            await session.execute(
-                text(f"SELECT count(*) AS total FROM documents d {where_block}"),
-                params,
-            )
-        ).scalar_one()
-        rows = (
-            await session.execute(
-                text(
-                    f"""
-                    SELECT
-                        d.id, d.titulo, d.fecha, d.area_path::text AS area_path,
-                        d.tipo, d.abstract,
-                        LEFT(COALESCE(d.abstract, ''), 200) AS snippet
-                    FROM documents d
-                    {where_block}
-                    ORDER BY d.fecha DESC, d.id DESC
-                    LIMIT :limit OFFSET :offset
-                    """
-                ),
-                params,
-            )
-        ).all()
+            ORDER BY d.fecha DESC, d.id DESC
+            LIMIT :limit OFFSET :offset
+            """
+        )
 
+    rows = (await session.execute(sql, params)).all()
+    total = rows[0].total if rows else 0
     return Results(
         rows=[
             ResultRow(

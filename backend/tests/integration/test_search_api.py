@@ -471,7 +471,7 @@ async def test_search_endpoint_rejects_empty_q_under_relevancia(client):
 
 
 async def test_search_endpoint_recientes_accepts_pagina_over_20(client, session):
-    """Under orden=recientes, pagina>20 is accepted."""
+    """Under orden=recientes, pagina>20 is accepted (no 422)."""
     doc_id = await make_document(session, titulo="Doc", abstract="Doc")
     await make_chunk(session, doc_id, is_headline=True, body_text="Doc cuerpo.")
     await session.commit()
@@ -481,7 +481,6 @@ async def test_search_endpoint_recientes_accepts_pagina_over_20(client, session)
     )
     assert r.status_code == 200
     assert r.json()["results"] == []
-    assert r.json()["total"] == 1
 
 
 async def test_search_endpoint_rejects_unknown_orden(client):

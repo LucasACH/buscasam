@@ -81,7 +81,8 @@ async def search(
         )
     if orden == "relevancia" and pagina > RELEVANCE_PAGE_CAP:
         raise HTTPException(
-            status_code=422, detail="pagina must be <= 20 under orden=relevancia"
+            status_code=422,
+            detail=f"pagina must be <= {RELEVANCE_PAGE_CAP} under orden=relevancia",
         )
     if desde is not None and hasta is not None and desde > hasta:
         raise HTTPException(status_code=422, detail="desde must be <= hasta")

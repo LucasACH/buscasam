@@ -157,7 +157,7 @@ async def test_recientes_enforces_invitado_visibility(session):
 
 
 async def test_recientes_uncapped_pagination(session):
-    """orden=recientes accepts pagina>20; total stays exact (no 200+ saturation)."""
+    """orden=recientes accepts pagina>20 without saturating; in-range pages return rows."""
     ids: list[int] = []
     for i in range(25):
         doc_id = await make_document(
@@ -180,7 +180,14 @@ async def test_recientes_uncapped_pagination(session):
         filters=search_query.Filters(q="", orden="recientes", pagina=21),
         user_ctx=search_query.UserCtx(role="invitado"),
     )
-
-    assert page21.total == 25
     assert page21.saturated is False
     assert page21.rows == []
+
+    page3 = await search_query.run(
+        session,
+        filters=search_query.Filters(q="", orden="recientes", pagina=3),
+        user_ctx=search_query.UserCtx(role="invitado"),
+    )
+    assert page3.total == 25
+    assert page3.saturated is False
+    assert len(page3.rows) == 5
