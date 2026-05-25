@@ -34,6 +34,7 @@ class Filters:
     tipos: tuple[str, ...] = ()
     desde: int | None = None
     hasta: int | None = None
+    orden: str = "relevancia"
 
 
 @dataclass(frozen=True)
@@ -93,9 +94,76 @@ async def run(
     embedding: np.ndarray | None = None,
     min_semantic_similarity: float = 0.78,
 ) -> Results:
+    if filters.orden == "recientes":
+        return await _run_recientes(session, filters)
     if embedding is None:
         return await _run_lexical(session, filters)
     return await _run_hybrid(session, filters, embedding, min_semantic_similarity)
+
+
+async def _run_recientes(session: AsyncSession, filters: Filters) -> Results:
+    where = invitado_where("d")
+    area_clause, tipo_clause, desde_clause, hasta_clause = _filter_clauses(filters)
+    q_clause = (
+        "AND EXISTS ("
+        "  SELECT 1 FROM chunks c"
+        "  WHERE c.doc_id = d.id"
+        "    AND c.body_tsv @@ plainto_tsquery('es_unaccent', :q)"
+        ")"
+        if filters.q
+        else ""
+    )
+    where_block = f"""
+        WHERE {where}
+          {q_clause}
+          {area_clause}
+          {tipo_clause}
+          {desde_clause}
+          {hasta_clause}
+    """
+    params: dict[str, object] = _filter_params(filters)
+    if filters.q:
+        params["q"] = filters.q
+
+    total = (
+        await session.execute(
+            text(f"SELECT count(*) AS total FROM documents d {where_block}"),
+            params,
+        )
+    ).scalar_one()
+
+    rows = (
+        await session.execute(
+            text(
+                f"""
+                SELECT d.id, d.titulo, d.fecha, d.area_path::text AS area_path,
+                       d.tipo, d.abstract
+                FROM documents d
+                {where_block}
+                ORDER BY d.fecha DESC, d.id DESC
+                LIMIT :limit OFFSET :offset
+                """
+            ),
+            {**params, "limit": PAGE_SIZE, "offset": (filters.pagina - 1) * PAGE_SIZE},
+        )
+    ).all()
+
+    return Results(
+        rows=[
+            ResultRow(
+                doc_id=r.id,
+                titulo=r.titulo,
+                fecha=r.fecha,
+                area_path=r.area_path,
+                tipo=r.tipo,
+                abstract=r.abstract,
+                snippet=(r.abstract or "")[:200],
+            )
+            for r in rows
+        ],
+        total=total,
+        saturated=False,
+    )
 
 
 async def _run_lexical(session: AsyncSession, filters: Filters) -> Results:
