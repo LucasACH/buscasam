@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from buscasam.api.areas import router as areas_router
 from buscasam.api.search import router as search_router
 from buscasam.settings import settings
 
@@ -24,4 +25,5 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     app = FastAPI(lifespan=lifespan)
     app.include_router(search_router)
+    app.include_router(areas_router)
     return app
