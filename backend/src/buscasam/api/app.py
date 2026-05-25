@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -16,9 +17,11 @@ async def lifespan(app: FastAPI):
     engine = create_async_engine(settings.database_url)
     app.state.engine = engine
     app.state.sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
+    app.state.tei = httpx.AsyncClient(base_url=settings.tei_url)
     try:
         yield
     finally:
+        await app.state.tei.aclose()
         await engine.dispose()
 
 

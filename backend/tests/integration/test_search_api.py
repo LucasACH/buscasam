@@ -1,24 +1,62 @@
 from datetime import date
 
+import httpx
+import numpy as np
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from buscasam.api.app import create_app
-from buscasam.api.deps import get_session
+from buscasam.api.deps import get_session, get_tei_client
 from tests.factories import make_chunk, make_document
+
+
+def _tei_5xx_transport() -> httpx.MockTransport:
+    return httpx.MockTransport(lambda req: httpx.Response(503, text="tei down"))
+
+
+def _tei_healthy_transport(vec: np.ndarray) -> httpx.MockTransport:
+    return httpx.MockTransport(
+        lambda req: httpx.Response(200, json=[vec.tolist()])
+    )
+
+
+def _unit(dim: int) -> np.ndarray:
+    v = np.zeros(1024, dtype=np.float16)
+    v[dim] = 1.0
+    return v
+
+
+def _build_client(session, transport: httpx.MockTransport):
+    tei = httpx.AsyncClient(transport=transport, base_url="http://tei")
+
+    async def _session_override():
+        yield session
+
+    async def _tei_override():
+        return tei
+
+    app = create_app()
+    app.dependency_overrides[get_session] = _session_override
+    app.dependency_overrides[get_tei_client] = _tei_override
+    asgi = ASGITransport(app=app)
+    return AsyncClient(transport=asgi, base_url="http://test"), tei
 
 
 @pytest_asyncio.fixture
 async def client(session):
-    async def _override():
-        yield session
-
-    app = create_app()
-    app.dependency_overrides[get_session] = _override
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
+    c, tei = _build_client(session, _tei_5xx_transport())
+    async with c:
         yield c
+    await tei.aclose()
+
+
+@pytest_asyncio.fixture
+async def hybrid_client(session):
+    c, tei = _build_client(session, _tei_healthy_transport(_unit(0)))
+    async with c:
+        yield c
+    await tei.aclose()
 
 
 async def test_search_endpoint_returns_publico_only(client, session):
@@ -296,6 +334,75 @@ async def test_search_endpoint_unfiltered_total_respects_visibility(client, sess
     assert data["total"] == 1
     assert data["unfiltered_total"] == 2
     assert data["unfiltered_total"] >= data["total"]
+
+
+async def test_search_endpoint_hybrid_surfaces_pure_semantic_hit(hybrid_client, session):
+    """TEI healthy → query with no lexical overlap surfaces a semantically-similar doc."""
+    sem_id = await make_document(
+        session,
+        titulo="Documento sobre física cuántica",
+        abstract="Estudio sobre partículas subatómicas y su comportamiento.",
+    )
+    await make_chunk(
+        session,
+        sem_id,
+        is_headline=True,
+        body_text="Sin coincidencia textual con la consulta.",
+        embedding=_unit(0),
+    )
+    await session.commit()
+
+    r = await hybrid_client.get("/api/search", params={"q": "zorgblat"})
+
+    assert r.status_code == 200
+    data = r.json()
+    assert data["lexical_fallback"] is False
+    assert [row["doc_id"] for row in data["results"]] == [sem_id]
+    assert data["results"][0]["snippet"] == (
+        "Estudio sobre partículas subatómicas y su comportamiento."
+    )
+
+
+async def test_search_endpoint_falls_back_to_lexical_on_tei_5xx(client, session):
+    """TEI 5xx → results still return (lexical-only) + lexical_fallback_rate log."""
+    import logging
+
+    publico_id = await make_document(
+        session,
+        titulo="Redes neuronales en producción",
+        abstract="Estudio sobre redes neuronales en producción.",
+    )
+    await make_chunk(
+        session,
+        publico_id,
+        is_headline=True,
+        body_text="Redes neuronales en producción.",
+    )
+    await session.commit()
+
+    records: list[logging.LogRecord] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record)
+
+    handler = _Capture(level=logging.INFO)
+    search_logger = logging.getLogger("buscasam.search")
+    search_logger.addHandler(handler)
+    search_logger.setLevel(logging.INFO)
+    try:
+        r = await client.get("/api/search", params={"q": "redes neuronales"})
+    finally:
+        search_logger.removeHandler(handler)
+
+    assert r.status_code == 200
+    data = r.json()
+    assert [row["doc_id"] for row in data["results"]] == [publico_id]
+    assert data["total"] == 1
+
+    fallback_records = [rec for rec in records if rec.message == "lexical_fallback_rate"]
+    assert fallback_records, "expected at least one lexical_fallback_rate log line"
+    assert any(getattr(rec, "fallback", False) is True for rec in fallback_records)
 
 
 async def test_search_endpoint_unfiltered_total_when_paginated_past_end(client, session):
