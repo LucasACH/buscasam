@@ -1,6 +1,7 @@
 from datetime import date
 
 import httpx
+import numpy as np
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -14,12 +15,23 @@ def _tei_5xx_transport() -> httpx.MockTransport:
     return httpx.MockTransport(lambda req: httpx.Response(503, text="tei down"))
 
 
-@pytest_asyncio.fixture
-async def client(session):
+def _tei_healthy_transport(vec: np.ndarray) -> httpx.MockTransport:
+    return httpx.MockTransport(
+        lambda req: httpx.Response(200, json=[vec.tolist()])
+    )
+
+
+def _unit(dim: int) -> np.ndarray:
+    v = np.zeros(1024, dtype=np.float16)
+    v[dim] = 1.0
+    return v
+
+
+def _build_client(session, transport: httpx.MockTransport):
+    tei = httpx.AsyncClient(transport=transport, base_url="http://tei")
+
     async def _session_override():
         yield session
-
-    tei = httpx.AsyncClient(transport=_tei_5xx_transport(), base_url="http://tei")
 
     async def _tei_override():
         return tei
@@ -27,8 +39,22 @@ async def client(session):
     app = create_app()
     app.dependency_overrides[get_session] = _session_override
     app.dependency_overrides[get_tei_client] = _tei_override
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
+    asgi = ASGITransport(app=app)
+    return AsyncClient(transport=asgi, base_url="http://test"), tei
+
+
+@pytest_asyncio.fixture
+async def client(session):
+    c, tei = _build_client(session, _tei_5xx_transport())
+    async with c:
+        yield c
+    await tei.aclose()
+
+
+@pytest_asyncio.fixture
+async def hybrid_client(session):
+    c, tei = _build_client(session, _tei_healthy_transport(_unit(0)))
+    async with c:
         yield c
     await tei.aclose()
 
@@ -308,6 +334,33 @@ async def test_search_endpoint_unfiltered_total_respects_visibility(client, sess
     assert data["total"] == 1
     assert data["unfiltered_total"] == 2
     assert data["unfiltered_total"] >= data["total"]
+
+
+async def test_search_endpoint_hybrid_surfaces_pure_semantic_hit(hybrid_client, session):
+    """TEI healthy → query with no lexical overlap surfaces a semantically-similar doc."""
+    sem_id = await make_document(
+        session,
+        titulo="Documento sobre física cuántica",
+        abstract="Estudio sobre partículas subatómicas y su comportamiento.",
+    )
+    await make_chunk(
+        session,
+        sem_id,
+        is_headline=True,
+        body_text="Sin coincidencia textual con la consulta.",
+        embedding=_unit(0),
+    )
+    await session.commit()
+
+    r = await hybrid_client.get("/api/search", params={"q": "zorgblat"})
+
+    assert r.status_code == 200
+    data = r.json()
+    assert data["lexical_fallback"] is False
+    assert [row["doc_id"] for row in data["results"]] == [sem_id]
+    assert data["results"][0]["snippet"] == (
+        "Estudio sobre partículas subatómicas y su comportamiento."
+    )
 
 
 async def test_search_endpoint_falls_back_to_lexical_on_tei_5xx(client, session):

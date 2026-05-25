@@ -20,6 +20,9 @@ PAGE_SIZE = 10
 RELEVANCE_CAP = 200
 RRF_K = 60
 HNSW_EF_SEARCH = 40
+# Chunks per doc are bounded but >1; over-fetch the semantic CTE so the
+# MAX-per-doc dedup still surfaces ~RELEVANCE_CAP distinct docs before fusion.
+SEMANTIC_CHUNK_OVERFETCH = 5
 TS_HEADLINE_OPTS = "StartSel=<mark>, StopSel=</mark>, MaxFragments=1, MaxWords=20, MinWords=5"
 
 
@@ -234,7 +237,7 @@ async def _run_hybrid(
               {desde_clause}
               {hasta_clause}
             ORDER BY c.embedding <=> CAST(:embedding AS halfvec(1024))
-            LIMIT :cap
+            LIMIT :sem_chunk_cap
         ),
         sem_best AS (
             SELECT doc_id, MAX(similarity) AS similarity
@@ -245,6 +248,7 @@ async def _run_hybrid(
             SELECT doc_id, similarity,
                    ROW_NUMBER() OVER (ORDER BY similarity DESC) AS rank
             FROM sem_best
+            LIMIT :cap
         ),
         fused AS (
             SELECT
@@ -299,6 +303,7 @@ async def _run_hybrid(
         "min_sim": min_semantic_similarity,
         "rrf_k": RRF_K,
         "cap": RELEVANCE_CAP,
+        "sem_chunk_cap": RELEVANCE_CAP * SEMANTIC_CHUNK_OVERFETCH,
         "headline_opts": TS_HEADLINE_OPTS,
         "limit": PAGE_SIZE,
         "offset": offset,
