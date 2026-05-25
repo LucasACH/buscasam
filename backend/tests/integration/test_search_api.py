@@ -296,3 +296,30 @@ async def test_search_endpoint_unfiltered_total_respects_visibility(client, sess
     assert data["total"] == 1
     assert data["unfiltered_total"] == 2
     assert data["unfiltered_total"] >= data["total"]
+
+
+async def test_search_endpoint_unfiltered_total_when_paginated_past_end(client, session):
+    """unfiltered_total reports the true count even when pagina is past the result set."""
+    publico_paper = await make_document(
+        session,
+        titulo="Paper público sobre redes",
+        abstract="Paper público sobre redes neuronales.",
+        tipo="paper",
+    )
+    await make_chunk(
+        session,
+        publico_paper,
+        is_headline=True,
+        body_text="Paper público sobre redes neuronales.",
+    )
+    await session.commit()
+
+    r = await client.get(
+        "/api/search",
+        params=[("q", "redes neuronales"), ("tipo", "tesis"), ("pagina", "2")],
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["results"] == []
+    assert data["total"] == 0
+    assert data["unfiltered_total"] == 1

@@ -73,7 +73,7 @@ async def search(
     if has_filter:
         unfiltered = await search_query.run(
             session,
-            filters=search_query.Filters(q=q, pagina=pagina),
+            filters=search_query.Filters(q=q, pagina=1),
             user_ctx=user_ctx,
         )
         unfiltered_total = unfiltered.total
