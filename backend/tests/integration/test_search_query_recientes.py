@@ -57,6 +57,58 @@ async def test_recientes_orders_by_fecha_desc_with_q_filter(session):
     assert result.saturated is False
 
 
+async def test_recientes_snippet_has_mark_highlights_when_q_set(session):
+    """orden=recientes + q: ts_headline injects <mark> around matched terms (PRD US-6)."""
+    doc_id = await make_document(
+        session,
+        titulo="Documento sobre redes neuronales",
+        abstract="Estudio detallado de las redes neuronales profundas en español.",
+        fecha=date(2024, 6, 1),
+    )
+    await make_chunk(
+        session,
+        doc_id,
+        is_headline=True,
+        body_text=(
+            "Documento sobre redes neuronales. Estudio detallado de las redes "
+            "neuronales profundas en español."
+        ),
+    )
+    await session.commit()
+
+    result = await search_query.run(
+        session,
+        filters=search_query.Filters(q="redes neuronales", orden="recientes"),
+        user_ctx=search_query.UserCtx(role="invitado"),
+    )
+
+    assert len(result.rows) == 1
+    snippet = result.rows[0].snippet
+    assert "<mark>redes</mark>" in snippet
+    assert "<mark>neuronales</mark>" in snippet
+
+
+async def test_recientes_snippet_is_abstract_prefix_when_q_empty(session):
+    """orden=recientes browse mode: snippet is abstract prefix (no chunks join)."""
+    doc_id = await make_document(
+        session,
+        titulo="Doc",
+        abstract="A" * 250,
+        fecha=date(2024, 6, 1),
+    )
+    await make_chunk(session, doc_id, is_headline=True, body_text="Doc cuerpo.")
+    await session.commit()
+
+    result = await search_query.run(
+        session,
+        filters=search_query.Filters(q="", orden="recientes"),
+        user_ctx=search_query.UserCtx(role="invitado"),
+    )
+
+    assert len(result.rows) == 1
+    assert result.rows[0].snippet == "A" * 200
+
+
 async def test_recientes_enforces_invitado_visibility(session):
     """orden=recientes respects the invitado predicate (hidden docs excluded)."""
     publico_id = await make_document(

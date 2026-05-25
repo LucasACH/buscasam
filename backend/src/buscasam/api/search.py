@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from buscasam.api.deps import get_session, get_tei_client
 from buscasam.core import search_query
 from buscasam.core.embed import EmbedUnavailable, embed
+from buscasam.core.search_query import Orden
 from buscasam.settings import settings
 
 logger = logging.getLogger("buscasam.search")
@@ -32,7 +33,6 @@ Tipo = Literal[
     "informe_catedra",
 ]
 
-Orden = Literal["relevancia", "recientes"]
 RELEVANCE_PAGE_CAP = 20
 
 

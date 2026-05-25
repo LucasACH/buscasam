@@ -9,12 +9,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from typing import Literal
 
 import numpy as np
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from buscasam.core.document_access import invitado_where
+
+Orden = Literal["relevancia", "recientes"]
 
 PAGE_SIZE = 10
 RELEVANCE_CAP = 200
@@ -34,7 +37,7 @@ class Filters:
     tipos: tuple[str, ...] = ()
     desde: int | None = None
     hasta: int | None = None
-    orden: str = "relevancia"
+    orden: Orden = "relevancia"
 
 
 @dataclass(frozen=True)
@@ -104,49 +107,96 @@ async def run(
 async def _run_recientes(session: AsyncSession, filters: Filters) -> Results:
     where = invitado_where("d")
     area_clause, tipo_clause, desde_clause, hasta_clause = _filter_clauses(filters)
-    q_clause = (
-        "AND EXISTS ("
-        "  SELECT 1 FROM chunks c"
-        "  WHERE c.doc_id = d.id"
-        "    AND c.body_tsv @@ plainto_tsquery('es_unaccent', :q)"
-        ")"
-        if filters.q
-        else ""
-    )
-    where_block = f"""
-        WHERE {where}
-          {q_clause}
-          {area_clause}
-          {tipo_clause}
-          {desde_clause}
-          {hasta_clause}
-    """
     params: dict[str, object] = _filter_params(filters)
+    params["limit"] = PAGE_SIZE
+    params["offset"] = (filters.pagina - 1) * PAGE_SIZE
+
     if filters.q:
         params["q"] = filters.q
-
-    total = (
-        await session.execute(
-            text(f"SELECT count(*) AS total FROM documents d {where_block}"),
-            params,
-        )
-    ).scalar_one()
-
-    rows = (
-        await session.execute(
-            text(
-                f"""
-                SELECT d.id, d.titulo, d.fecha, d.area_path::text AS area_path,
-                       d.tipo, d.abstract
-                FROM documents d
-                {where_block}
-                ORDER BY d.fecha DESC, d.id DESC
-                LIMIT :limit OFFSET :offset
-                """
+        params["headline_opts"] = TS_HEADLINE_OPTS
+        # Best matching chunk per doc supplies body_text for ts_headline so the
+        # snippet shows match context (PRD #1 US-6).
+        cte = f"""
+            WITH scored AS (
+                SELECT
+                    c.doc_id,
+                    c.body_text,
+                    ts_rank_cd(c.body_tsv, plainto_tsquery('es_unaccent', :q)) AS score
+                FROM chunks c
+                JOIN documents d ON d.id = c.doc_id
+                WHERE c.body_tsv @@ plainto_tsquery('es_unaccent', :q)
+                  AND {where}
+                  {area_clause}
+                  {tipo_clause}
+                  {desde_clause}
+                  {hasta_clause}
             ),
-            {**params, "limit": PAGE_SIZE, "offset": (filters.pagina - 1) * PAGE_SIZE},
-        )
-    ).all()
+            best_per_doc AS (
+                SELECT DISTINCT ON (doc_id) doc_id, body_text
+                FROM scored
+                ORDER BY doc_id, score DESC
+            )
+        """
+        total = (
+            await session.execute(
+                text(f"{cte} SELECT count(*) AS total FROM best_per_doc"),
+                params,
+            )
+        ).scalar_one()
+        rows = (
+            await session.execute(
+                text(
+                    f"""
+                    {cte}
+                    SELECT
+                        d.id, d.titulo, d.fecha, d.area_path::text AS area_path,
+                        d.tipo, d.abstract,
+                        ts_headline(
+                            'es_unaccent',
+                            b.body_text,
+                            plainto_tsquery('es_unaccent', :q),
+                            :headline_opts
+                        ) AS snippet
+                    FROM best_per_doc b
+                    JOIN documents d ON d.id = b.doc_id
+                    ORDER BY d.fecha DESC, d.id DESC
+                    LIMIT :limit OFFSET :offset
+                    """
+                ),
+                params,
+            )
+        ).all()
+    else:
+        where_block = f"""
+            WHERE {where}
+              {area_clause}
+              {tipo_clause}
+              {desde_clause}
+              {hasta_clause}
+        """
+        total = (
+            await session.execute(
+                text(f"SELECT count(*) AS total FROM documents d {where_block}"),
+                params,
+            )
+        ).scalar_one()
+        rows = (
+            await session.execute(
+                text(
+                    f"""
+                    SELECT
+                        d.id, d.titulo, d.fecha, d.area_path::text AS area_path,
+                        d.tipo, d.abstract,
+                        LEFT(COALESCE(d.abstract, ''), 200) AS snippet
+                    FROM documents d
+                    {where_block}
+                    ORDER BY d.fecha DESC, d.id DESC
+                    LIMIT :limit OFFSET :offset
+                    """
+                ),
+                params,
+            )
+        ).all()
 
     return Results(
         rows=[
@@ -157,7 +207,7 @@ async def _run_recientes(session: AsyncSession, filters: Filters) -> Results:
                 area_path=r.area_path,
                 tipo=r.tipo,
                 abstract=r.abstract,
-                snippet=(r.abstract or "")[:200],
+                snippet=r.snippet,
             )
             for r in rows
         ],
