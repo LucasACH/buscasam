@@ -1,0 +1,39 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: buscasam-db
+    environment:
+      POSTGRES_USER: buscasam
+      POSTGRES_PASSWORD: buscasam
+      POSTGRES_DB: buscasam
+    ports:
+      - "5432:5432"
+    volumes:
+      - buscasam-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U buscasam -d buscasam"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  tei:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.6
+    container_name: buscasam-tei
+    platform: linux/amd64
+    profiles: ["tei"]
+    environment:
+      HF_HUB_ENDPOINT: https://huggingface.co
+    command: ["--model-id", "intfloat/multilingual-e5-large"]
+    ports:
+      - "8080:80"
+    volumes:
+      - buscasam-tei-cache:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+
+volumes:
+  buscasam-db-data:
+  buscasam-tei-cache:
