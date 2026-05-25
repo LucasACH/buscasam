@@ -1,7 +1,7 @@
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from buscasam.api.app import app
+from buscasam.api.app import create_app
 from buscasam.api.deps import get_session
 from tests.factories import make_chunk, make_document
 
@@ -11,11 +11,11 @@ async def client(session):
     async def _override():
         yield session
 
+    app = create_app()
     app.dependency_overrides[get_session] = _override
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
-    app.dependency_overrides.clear()
 
 
 async def test_search_endpoint_returns_publico_only(client, session):

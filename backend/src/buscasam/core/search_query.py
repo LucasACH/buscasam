@@ -45,6 +45,7 @@ class ResultRow:
 class Results:
     rows: list[ResultRow]
     total: int
+    saturated: bool
 
 
 async def run(
@@ -52,25 +53,31 @@ async def run(
     *,
     filters: Filters,
     user_ctx: UserCtx,
-    embedding: object | None = None,
 ) -> Results:
     where = invitado_where("d")
     offset = (filters.pagina - 1) * PAGE_SIZE
     sql = text(
         f"""
-        WITH ranked AS (
+        WITH scored AS (
             SELECT
                 c.doc_id,
                 c.body_text,
-                ts_rank_cd(c.body_tsv, plainto_tsquery('es_unaccent', :q)) AS score,
-                ROW_NUMBER() OVER (
-                    PARTITION BY c.doc_id
-                    ORDER BY ts_rank_cd(c.body_tsv, plainto_tsquery('es_unaccent', :q)) DESC
-                ) AS rn
+                ts_rank_cd(c.body_tsv, plainto_tsquery('es_unaccent', :q)) AS score
             FROM chunks c
             JOIN documents d ON d.id = c.doc_id
             WHERE c.body_tsv @@ plainto_tsquery('es_unaccent', :q)
               AND {where}
+        ),
+        ranked AS (
+            SELECT
+                doc_id,
+                body_text,
+                score,
+                ROW_NUMBER() OVER (
+                    PARTITION BY doc_id
+                    ORDER BY score DESC
+                ) AS rn
+            FROM scored
         ),
         best_per_doc AS (
             SELECT doc_id, body_text, score FROM ranked WHERE rn = 1
@@ -129,4 +136,5 @@ async def run(
             for r in rows
         ],
         total=total,
+        saturated=total >= RELEVANCE_CAP,
     )
