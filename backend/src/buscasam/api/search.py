@@ -1,16 +1,23 @@
-"""GET /api/search — lexical-only retrieval for the invitado branch (slice 2)."""
+"""GET /api/search — hybrid retrieval with silent lexical fallback (slice 5)."""
 from __future__ import annotations
 
+import logging
 from dataclasses import asdict
 from datetime import date
 from typing import Literal
 
+import httpx
+import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from buscasam.api.deps import get_session
+from buscasam.api.deps import get_session, get_tei_client
 from buscasam.core import search_query
+from buscasam.core.embed import EmbedUnavailable, embed
+from buscasam.settings import settings
+
+logger = logging.getLogger("buscasam.search")
 
 router = APIRouter(prefix="/api")
 
@@ -41,6 +48,16 @@ class SearchResponse(BaseModel):
     total: int
     saturated: bool
     unfiltered_total: int | None = None
+    lexical_fallback: bool = False
+
+
+async def _embed_or_fallback(
+    tei: httpx.AsyncClient, q: str
+) -> tuple[np.ndarray | None, bool]:
+    try:
+        return await embed(tei, q, kind="query"), False
+    except EmbedUnavailable:
+        return None, True
 
 
 @router.get("/search", response_model=SearchResponse)
@@ -52,9 +69,15 @@ async def search(
     desde: int | None = Query(default=None, ge=1000, le=9999),
     hasta: int | None = Query(default=None, ge=1000, le=9999),
     session: AsyncSession = Depends(get_session),
+    tei: httpx.AsyncClient = Depends(get_tei_client),
 ) -> SearchResponse:
     if desde is not None and hasta is not None and desde > hasta:
         raise HTTPException(status_code=422, detail="desde must be <= hasta")
+    embedding, fallback = await _embed_or_fallback(tei, q)
+    logger.info(
+        "lexical_fallback_rate",
+        extra={"fallback": fallback, "q_len": len(q)},
+    )
     user_ctx = search_query.UserCtx(role="invitado")
     result = await search_query.run(
         session,
@@ -67,6 +90,8 @@ async def search(
             hasta=hasta,
         ),
         user_ctx=user_ctx,
+        embedding=embedding,
+        min_semantic_similarity=settings.min_semantic_similarity,
     )
     has_filter = area is not None or bool(tipo) or desde is not None or hasta is not None
     unfiltered_total: int | None = None
@@ -75,6 +100,8 @@ async def search(
             session,
             filters=search_query.Filters(q=q, pagina=1),
             user_ctx=user_ctx,
+            embedding=embedding,
+            min_semantic_similarity=settings.min_semantic_similarity,
         )
         unfiltered_total = unfiltered.total
     return SearchResponse(
@@ -82,4 +109,5 @@ async def search(
         total=result.total,
         saturated=result.saturated,
         unfiltered_total=unfiltered_total,
+        lexical_fallback=fallback,
     )
