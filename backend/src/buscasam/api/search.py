@@ -34,7 +34,7 @@ class SearchResponse(BaseModel):
 async def search(
     q: str = Query(min_length=1),
     pagina: int = Query(default=1, ge=1, le=20),
-    area: str | None = Query(default=None),
+    area: str | None = Query(default=None, pattern=r"^[a-z0-9_]+(\.[a-z0-9_]+)*$"),
     session: AsyncSession = Depends(get_session),
 ) -> SearchResponse:
     result = await search_query.run(
