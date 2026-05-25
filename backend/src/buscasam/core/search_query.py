@@ -56,7 +56,9 @@ async def run(
     user_ctx: UserCtx,
 ) -> Results:
     where = invitado_where("d")
-    area_clause = "AND d.area_path <@ CAST(:area AS ltree)" if filters.area_path else ""
+    area_clause = (
+        "AND d.area_path <@ CAST(:area AS ltree)" if filters.area_path is not None else ""
+    )
     offset = (filters.pagina - 1) * PAGE_SIZE
     sql = text(
         f"""
@@ -118,7 +120,7 @@ async def run(
         "limit": PAGE_SIZE,
         "offset": offset,
     }
-    if filters.area_path:
+    if filters.area_path is not None:
         params["area"] = filters.area_path
     rows = (await session.execute(sql, params)).all()
 

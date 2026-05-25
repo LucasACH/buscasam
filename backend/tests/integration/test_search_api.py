@@ -1,3 +1,4 @@
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
@@ -103,7 +104,7 @@ async def test_search_endpoint_area_param_narrows(client, session):
     assert data["total"] == 1
 
 
-async def test_search_endpoint_rejects_malformed_area(client):
-    for bad in ("foo!bar", "a.b.", ".a.b", "Escuelas", "a..b"):
-        r = await client.get("/api/search", params={"q": "anything", "area": bad})
-        assert r.status_code == 422, f"expected 422 for area={bad!r}, got {r.status_code}"
+@pytest.mark.parametrize("bad", ["foo!bar", "a.b.", ".a.b", "Escuelas", "a..b"])
+async def test_search_endpoint_rejects_malformed_area(client, bad):
+    r = await client.get("/api/search", params={"q": "anything", "area": bad})
+    assert r.status_code == 422
