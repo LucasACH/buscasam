@@ -1,0 +1,104 @@
+from buscasam.core import search_query
+from tests.factories import make_chunk, make_document
+
+
+async def test_search_lexical_invitado_only(session):
+    """Mixed-visibility corpus: only publico+published+visible doc is returned."""
+    publico_id = await make_document(
+        session,
+        titulo="Búsqueda léxica de prueba",
+        abstract="Documento público sobre búsqueda léxica.",
+    )
+    await make_chunk(
+        session,
+        publico_id,
+        is_headline=True,
+        body_text="Búsqueda léxica de prueba. Documento público sobre búsqueda léxica.",
+    )
+
+    for kwargs in (
+        {"visibility": "interno"},
+        {"visibility": "privado"},
+        {"publication_status": "draft"},
+        {"soft_deleted": True},
+        {"moderation_hidden": True},
+    ):
+        hidden_id = await make_document(
+            session,
+            titulo="Búsqueda léxica oculta",
+            abstract="Documento que NO debería aparecer en búsqueda léxica.",
+            **kwargs,
+        )
+        await make_chunk(
+            session,
+            hidden_id,
+            is_headline=True,
+            body_text="Búsqueda léxica oculta. NO debería aparecer en búsqueda léxica.",
+        )
+
+    await session.commit()
+
+    result = await search_query.run(
+        session,
+        filters=search_query.Filters(q="búsqueda léxica"),
+        user_ctx=search_query.UserCtx(role="invitado"),
+    )
+
+    assert [row.doc_id for row in result.rows] == [publico_id]
+    assert result.total == 1
+
+
+async def test_search_lexical_snippet_has_mark_highlights(session):
+    """ts_headline injects <mark> around matched terms in the snippet."""
+    doc_id = await make_document(
+        session,
+        titulo="Documento sobre redes neuronales",
+        abstract="Estudio detallado de las redes neuronales profundas en español.",
+    )
+    await make_chunk(
+        session,
+        doc_id,
+        is_headline=True,
+        body_text=(
+            "Documento sobre redes neuronales. Estudio detallado de las redes "
+            "neuronales profundas en español."
+        ),
+    )
+    await session.commit()
+
+    result = await search_query.run(
+        session,
+        filters=search_query.Filters(q="redes neuronales"),
+        user_ctx=search_query.UserCtx(role="invitado"),
+    )
+
+    assert len(result.rows) == 1
+    snippet = result.rows[0].snippet
+    assert "<mark>redes</mark>" in snippet
+    assert "<mark>neuronales</mark>" in snippet
+
+
+async def test_search_lexical_total_saturates_at_relevance_cap(session):
+    """When the matching set exceeds the top-200 cap, total saturates at 200."""
+    for i in range(205):
+        doc_id = await make_document(
+            session,
+            titulo=f"Estudio único {i} sobre quimica molecular",
+            abstract="Investigación sobre quimica molecular avanzada.",
+        )
+        await make_chunk(
+            session,
+            doc_id,
+            is_headline=True,
+            body_text=f"Estudio único {i} sobre quimica molecular avanzada.",
+        )
+    await session.commit()
+
+    result = await search_query.run(
+        session,
+        filters=search_query.Filters(q="quimica molecular"),
+        user_ctx=search_query.UserCtx(role="invitado"),
+    )
+
+    assert result.total == 200
+    assert len(result.rows) == 10
