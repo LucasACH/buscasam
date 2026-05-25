@@ -24,6 +24,9 @@ class Filters:
     q: str
     pagina: int = 1
     area_path: str | None = None
+    tipos: tuple[str, ...] = ()
+    desde: int | None = None
+    hasta: int | None = None
 
 
 @dataclass(frozen=True)
@@ -59,6 +62,13 @@ async def run(
     area_clause = (
         "AND d.area_path <@ CAST(:area AS ltree)" if filters.area_path is not None else ""
     )
+    tipo_clause = "AND d.tipo = ANY(:tipos)" if filters.tipos else ""
+    desde_clause = (
+        "AND EXTRACT(year FROM d.fecha) >= :desde" if filters.desde is not None else ""
+    )
+    hasta_clause = (
+        "AND EXTRACT(year FROM d.fecha) <= :hasta" if filters.hasta is not None else ""
+    )
     offset = (filters.pagina - 1) * PAGE_SIZE
     sql = text(
         f"""
@@ -72,6 +82,9 @@ async def run(
             WHERE c.body_tsv @@ plainto_tsquery('es_unaccent', :q)
               AND {where}
               {area_clause}
+              {tipo_clause}
+              {desde_clause}
+              {hasta_clause}
         ),
         ranked AS (
             SELECT
@@ -122,6 +135,12 @@ async def run(
     }
     if filters.area_path is not None:
         params["area"] = filters.area_path
+    if filters.tipos:
+        params["tipos"] = list(filters.tipos)
+    if filters.desde is not None:
+        params["desde"] = filters.desde
+    if filters.hasta is not None:
+        params["hasta"] = filters.hasta
     rows = (await session.execute(sql, params)).all()
 
     total = rows[0].total if rows else 0
