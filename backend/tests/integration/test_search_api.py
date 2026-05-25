@@ -57,3 +57,47 @@ async def test_search_endpoint_returns_publico_only(client, session):
 async def test_search_endpoint_rejects_pagina_over_20(client):
     r = await client.get("/api/search", params={"q": "anything", "pagina": 21})
     assert r.status_code == 422
+
+
+async def test_search_endpoint_area_param_narrows(client, session):
+    ciencia_id = await make_document(
+        session,
+        titulo="Búsqueda híbrida en repositorios",
+        abstract="Estudio sobre fusión léxico-semántica.",
+        area_path="escuela_ciencia.carrera_informatica",
+    )
+    await make_chunk(
+        session,
+        ciencia_id,
+        is_headline=True,
+        body_text="Búsqueda híbrida en repositorios académicos.",
+    )
+
+    humanidades_id = await make_document(
+        session,
+        titulo="Búsqueda híbrida de fuentes literarias",
+        abstract="Métodos mixtos de búsqueda híbrida en archivos.",
+        area_path="escuela_humanidades.carrera_letras",
+    )
+    await make_chunk(
+        session,
+        humanidades_id,
+        is_headline=True,
+        body_text="Búsqueda híbrida de fuentes literarias y archivos.",
+    )
+    await session.commit()
+
+    unfiltered = await client.get("/api/search", params={"q": "búsqueda híbrida"})
+    assert unfiltered.status_code == 200
+    assert {row["doc_id"] for row in unfiltered.json()["results"]} == {
+        ciencia_id,
+        humanidades_id,
+    }
+
+    narrowed = await client.get(
+        "/api/search", params={"q": "búsqueda híbrida", "area": "escuela_ciencia"}
+    )
+    assert narrowed.status_code == 200
+    data = narrowed.json()
+    assert [row["doc_id"] for row in data["results"]] == [ciencia_id]
+    assert data["total"] == 1

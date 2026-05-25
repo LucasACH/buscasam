@@ -23,6 +23,7 @@ TS_HEADLINE_OPTS = "StartSel=<mark>, StopSel=</mark>, MaxFragments=1, MaxWords=2
 class Filters:
     q: str
     pagina: int = 1
+    area_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -55,6 +56,7 @@ async def run(
     user_ctx: UserCtx,
 ) -> Results:
     where = invitado_where("d")
+    area_clause = "AND d.area_path <@ CAST(:area AS ltree)" if filters.area_path else ""
     offset = (filters.pagina - 1) * PAGE_SIZE
     sql = text(
         f"""
@@ -67,6 +69,7 @@ async def run(
             JOIN documents d ON d.id = c.doc_id
             WHERE c.body_tsv @@ plainto_tsquery('es_unaccent', :q)
               AND {where}
+              {area_clause}
         ),
         ranked AS (
             SELECT
@@ -108,18 +111,16 @@ async def run(
         LIMIT :limit OFFSET :offset
         """
     )
-    rows = (
-        await session.execute(
-            sql,
-            {
-                "q": filters.q,
-                "cap": RELEVANCE_CAP,
-                "headline_opts": TS_HEADLINE_OPTS,
-                "limit": PAGE_SIZE,
-                "offset": offset,
-            },
-        )
-    ).all()
+    params = {
+        "q": filters.q,
+        "cap": RELEVANCE_CAP,
+        "headline_opts": TS_HEADLINE_OPTS,
+        "limit": PAGE_SIZE,
+        "offset": offset,
+    }
+    if filters.area_path:
+        params["area"] = filters.area_path
+    rows = (await session.execute(sql, params)).all()
 
     total = rows[0].total if rows else 0
     return Results(

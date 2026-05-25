@@ -34,11 +34,12 @@ class SearchResponse(BaseModel):
 async def search(
     q: str = Query(min_length=1),
     pagina: int = Query(default=1, ge=1, le=20),
+    area: str | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
 ) -> SearchResponse:
     result = await search_query.run(
         session,
-        filters=search_query.Filters(q=q, pagina=pagina),
+        filters=search_query.Filters(q=q, pagina=pagina, area_path=area),
         user_ctx=search_query.UserCtx(role="invitado"),
     )
     return SearchResponse(
