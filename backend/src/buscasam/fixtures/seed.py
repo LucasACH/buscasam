@@ -26,22 +26,26 @@ def _halfvec(values: np.ndarray) -> str:
 
 
 async def insert_document(conn: AsyncConnection, doc: Document) -> None:
-    abstract_sql = (
-        "NULL" if doc.abstract is None
-        else "'" + doc.abstract.replace("'", "''") + "'"
-    )
     await conn.execute(
         text(
             "INSERT INTO documents (id, visibility, publication_status, titulo, "
             "fecha, area_path, tipo, abstract, soft_deleted_at, moderation_hidden_at) "
-            "VALUES "
-            f"({doc.id}, '{doc.visibility}', '{doc.publication_status}', "
-            f"'{doc.titulo.replace(chr(39), chr(39) * 2)}', '{doc.fecha.isoformat()}', "
-            f"'{doc.area_path}', '{doc.tipo}', {abstract_sql}, "
+            "VALUES (:id, :visibility, :publication_status, :titulo, :fecha, "
+            ":area_path, :tipo, :abstract, "
             f"{'now()' if doc.soft_deleted else 'NULL'}, "
             f"{'now()' if doc.moderation_hidden else 'NULL'}) "
             "ON CONFLICT (id) DO NOTHING"
-        )
+        ),
+        {
+            "id": doc.id,
+            "visibility": doc.visibility,
+            "publication_status": doc.publication_status,
+            "titulo": doc.titulo,
+            "fecha": doc.fecha,
+            "area_path": doc.area_path,
+            "tipo": doc.tipo,
+            "abstract": doc.abstract,
+        },
     )
 
 

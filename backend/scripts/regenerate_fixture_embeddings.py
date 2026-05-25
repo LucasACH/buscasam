@@ -39,8 +39,22 @@ def _wait_for_tei(timeout_s: int = 600) -> None:
     raise RuntimeError(f"TEI not healthy after {timeout_s}s")
 
 
+def _tei_revision() -> str:
+    """Return `model_id@sha` from TEI's `/info` for the fixture's provenance tag.
+
+    ADR-0002 §5 designates EMBEDDING_MODEL_REVISION as the single source for
+    the HF model and tokenizer revision. Capture it here when regenerating so
+    `chunks.embedding_model_version` traces back to a specific TEI run.
+    """
+    info = httpx.get(f"{TEI_URL}/info", timeout=5).json()
+    model = info.get("model_id", "unknown")
+    sha = info.get("model_sha") or info.get("model_revision", "unknown")
+    return f"{model}@{sha}"
+
+
 def main() -> None:
     _wait_for_tei()
+    print(f"TEI revision: {_tei_revision()} (paste into corpus.EMBEDDING_MODEL_VERSION)")
     texts = [f"passage: {c.body_text}" for c in CHUNKS]
     with httpx.Client(timeout=120) as client:
         r = client.post(

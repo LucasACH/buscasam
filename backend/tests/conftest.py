@@ -2,7 +2,6 @@ import os
 import uuid
 from pathlib import Path
 
-import pytest
 import pytest_asyncio
 from alembic import command
 from alembic.config import Config

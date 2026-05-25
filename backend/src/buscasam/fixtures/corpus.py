@@ -169,6 +169,22 @@ DOCUMENTS: tuple[Document, ...] = (
         abstract="Paper ocultado tras un reporte resuelto.",
         moderation_hidden=True,
     ),
+    Document(
+        id=14, visibility="publico", publication_status="published",
+        titulo="Reglamento general de la Escuela de Ciencia y Tecnología",
+        fecha=date(2023, 3, 1),
+        area_path="escuela_ciencia",
+        tipo="informe_catedra",
+        abstract="Documento marco a nivel de escuela, sin carrera ni materia asociada.",
+    ),
+    Document(
+        id=15, visibility="publico", publication_status="published",
+        titulo="Plan de estudios — Licenciatura en Filosofía",
+        fecha=date(2022, 11, 30),
+        area_path="escuela_humanidades.carrera_filosofia",
+        tipo="informe_catedra",
+        abstract="Documento de carrera, sin materia asociada.",
+    ),
 )
 
 

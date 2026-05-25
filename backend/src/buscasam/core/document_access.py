@@ -9,6 +9,9 @@ def invitado_where(alias: str) -> str:
     column qualification.
 
     See module map § `core/document_access` and ADR-0010 §6.
+
+    Predicate text must stay aligned with migration 0007's partial index
+    (`documents_publico_recientes`) — see comment there.
     """
     return (
         f"{alias}.visibility = 'publico' "

@@ -15,6 +15,10 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Predicate must stay textually identical to core.document_access.invitado_where
+    # — Postgres' predicate-implication check only matches index WHEREs that
+    # literally subsume the query WHERE. Rephrasing one side without the other
+    # silently disables this index for orden=recientes on the invitado branch.
     op.execute(
         """
         CREATE INDEX documents_publico_recientes
