@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -48,7 +49,10 @@ export default function EditarPage() {
   if (userLoading || isInvitado || !user) return null;
   if (isLoading || !state) return null;
 
-  return <EditarForm docId={docId} state={state} />;
+  // Re-seed the form when the candidate's status changes (e.g. processing →
+  // indexed): RHF captures defaultValues once at mount, so polled staged_*
+  // would otherwise never reach the editable inputs.
+  return <EditarForm key={state.index_status} docId={docId} state={state} />;
 }
 
 function EditarForm({ docId, state }: { docId: number; state: DraftStateDTO }) {
@@ -74,10 +78,11 @@ function EditarForm({ docId, state }: { docId: number; state: DraftStateDTO }) {
         .map((s) => s.trim())
         .filter(Boolean);
     if (field === "fecha") body.fecha = v.fecha || null;
-    await api.PATCH("/api/documents/{doc_id}", {
+    const { error } = await api.PATCH("/api/documents/{doc_id}", {
       params: { path: { doc_id: docId } },
       body,
     });
+    if (error) toast.error("No se pudo guardar el cambio");
   }
 
   const processing = state.index_status === "processing";

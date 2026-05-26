@@ -138,6 +138,32 @@ async def test_update_title_enqueues_reindex_and_gates_reindexing(session):
     assert state.publish_gate_reason == "reindexing_headline"
 
 
+async def test_update_title_while_processing_does_not_enqueue(session):
+    uid, doc_id, version_id = await _seed_candidate(
+        session, titulo="Viejo título", index_status="processing"
+    )
+    ctx = _ctx(uid)
+
+    await documents.update_draft_metadata(session, ctx, doc_id, title="Nuevo título")
+
+    # index_document owns the headline while processing; a concurrent refresh
+    # would write a duplicate is_headline chunk.
+    names = await _enqueued_task_names(session, version_id)
+    assert not any(n.endswith("refresh_headline") for n in names)
+
+
+async def test_update_title_unchanged_does_not_enqueue(session):
+    uid, doc_id, version_id = await _seed_candidate(
+        session, titulo="Mismo título", index_status="indexed"
+    )
+    ctx = _ctx(uid)
+
+    await documents.update_draft_metadata(session, ctx, doc_id, title="Mismo título")
+
+    names = await _enqueued_task_names(session, version_id)
+    assert not any(n.endswith("refresh_headline") for n in names)
+
+
 async def test_update_keywords_only_does_not_enqueue_reindex(session):
     uid, doc_id, version_id = await _seed_candidate(session, index_status="indexed")
     ctx = _ctx(uid)

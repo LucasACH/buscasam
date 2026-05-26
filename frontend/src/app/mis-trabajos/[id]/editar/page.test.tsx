@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-const { useDraftStateMock, apiPatch } = vi.hoisted(() => ({
+const { useDraftStateMock, apiPatch, toastError } = vi.hoisted(() => ({
   useDraftStateMock: vi.fn(),
   apiPatch: vi.fn(),
+  toastError: vi.fn(),
 }));
 vi.mock("../../useDraftState", () => ({ useDraftState: () => useDraftStateMock() }));
 vi.mock("@/api/client", () => ({ api: { PATCH: apiPatch } }));
+vi.mock("sonner", () => ({ toast: { error: toastError } }));
 vi.mock("@/lib/useUser", () => ({
   useUser: () => ({ user: { user_id: 1 }, isInvitado: false, isLoading: false, isError: false }),
 }));
@@ -40,6 +42,7 @@ describe("editar page", () => {
     useDraftStateMock.mockReset();
     apiPatch.mockReset();
     apiPatch.mockResolvedValue({ error: undefined });
+    toastError.mockReset();
   });
   afterEach(() => cleanup());
 
@@ -103,6 +106,30 @@ describe("editar page", () => {
     await waitFor(() => expect(apiPatch).toHaveBeenCalled());
     const opts = apiPatch.mock.calls[0]![1];
     expect(opts.body).toMatchObject({ title: "Nuevo título" });
+  });
+
+  it("re-seeds editable inputs when processing finishes", () => {
+    useDraftStateMock.mockReturnValue(
+      draft({ index_status: "processing", staged_abstract: null }),
+    );
+    const { rerender } = render(<EditarPage />);
+    expect(screen.getByLabelText("Resumen")).toHaveValue("");
+
+    useDraftStateMock.mockReturnValue(
+      draft({ index_status: "indexed", staged_abstract: "resumen extraído" }),
+    );
+    rerender(<EditarPage />);
+    expect(screen.getByLabelText("Resumen")).toHaveValue("resumen extraído");
+  });
+
+  it("toasts when a save-on-blur PATCH fails", async () => {
+    apiPatch.mockResolvedValue({ error: { detail: "boom" } });
+    useDraftStateMock.mockReturnValue(draft({ title: "Mi tesis" }));
+    render(<EditarPage />);
+    const input = screen.getByLabelText("Título");
+    fireEvent.change(input, { target: { value: "Nuevo" } });
+    fireEvent.blur(input);
+    await waitFor(() => expect(toastError).toHaveBeenCalled());
   });
 
   it("PATCHes keywords as an array on blur", async () => {
