@@ -1,6 +1,6 @@
 from datetime import date
 
-from buscasam.core import search_query
+from buscasam.core import auth, search_query
 from tests.factories import make_chunk, make_document
 
 
@@ -49,7 +49,7 @@ async def test_recientes_orders_by_fecha_desc_with_q_filter(session):
     result = await search_query.run(
         session,
         filters=search_query.Filters(q="redes neuronales", orden="recientes"),
-        user_ctx=search_query.UserCtx(role="invitado"),
+        user_ctx=auth.GUEST,
     )
 
     assert [row.doc_id for row in result.rows] == [new_id, mid_id, old_id]
@@ -79,7 +79,7 @@ async def test_recientes_snippet_has_mark_highlights_when_q_set(session):
     result = await search_query.run(
         session,
         filters=search_query.Filters(q="redes neuronales", orden="recientes"),
-        user_ctx=search_query.UserCtx(role="invitado"),
+        user_ctx=auth.GUEST,
     )
 
     assert len(result.rows) == 1
@@ -102,7 +102,7 @@ async def test_recientes_snippet_is_abstract_prefix_when_q_empty(session):
     result = await search_query.run(
         session,
         filters=search_query.Filters(q="", orden="recientes"),
-        user_ctx=search_query.UserCtx(role="invitado"),
+        user_ctx=auth.GUEST,
     )
 
     assert len(result.rows) == 1
@@ -149,7 +149,7 @@ async def test_recientes_enforces_invitado_visibility(session):
     result = await search_query.run(
         session,
         filters=search_query.Filters(q="", orden="recientes"),
-        user_ctx=search_query.UserCtx(role="invitado"),
+        user_ctx=auth.GUEST,
     )
 
     assert [row.doc_id for row in result.rows] == [publico_id]
@@ -178,7 +178,7 @@ async def test_recientes_uncapped_pagination(session):
     page21 = await search_query.run(
         session,
         filters=search_query.Filters(q="", orden="recientes", pagina=21),
-        user_ctx=search_query.UserCtx(role="invitado"),
+        user_ctx=auth.GUEST,
     )
     assert page21.saturated is False
     assert page21.rows == []
@@ -186,7 +186,7 @@ async def test_recientes_uncapped_pagination(session):
     page3 = await search_query.run(
         session,
         filters=search_query.Filters(q="", orden="recientes", pagina=3),
-        user_ctx=search_query.UserCtx(role="invitado"),
+        user_ctx=auth.GUEST,
     )
     assert page3.total == 25
     assert page3.saturated is False

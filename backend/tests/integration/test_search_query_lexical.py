@@ -1,4 +1,4 @@
-from buscasam.core import search_query
+from buscasam.core import auth, search_query
 from tests.factories import make_chunk, make_document
 
 
@@ -41,7 +41,7 @@ async def test_search_lexical_invitado_only(session):
     result = await search_query.run(
         session,
         filters=search_query.Filters(q="búsqueda léxica"),
-        user_ctx=search_query.UserCtx(role="invitado"),
+        user_ctx=auth.GUEST,
     )
 
     assert [row.doc_id for row in result.rows] == [publico_id]
@@ -69,7 +69,7 @@ async def test_search_lexical_snippet_has_mark_highlights(session):
     result = await search_query.run(
         session,
         filters=search_query.Filters(q="redes neuronales"),
-        user_ctx=search_query.UserCtx(role="invitado"),
+        user_ctx=auth.GUEST,
     )
 
     assert len(result.rows) == 1
@@ -97,7 +97,7 @@ async def test_search_lexical_total_saturates_at_relevance_cap(session):
     result = await search_query.run(
         session,
         filters=search_query.Filters(q="quimica molecular"),
-        user_ctx=search_query.UserCtx(role="invitado"),
+        user_ctx=auth.GUEST,
     )
 
     assert result.total == 200

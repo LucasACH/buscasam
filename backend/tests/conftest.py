@@ -1,7 +1,10 @@
+import asyncio
 import os
+import sys
 import uuid
 from pathlib import Path
 
+import pytest
 import pytest_asyncio
 from alembic import command
 from alembic.config import Config
@@ -13,6 +16,15 @@ ADMIN_URL = os.environ.get(
     "BUSCASAM_TEST_ADMIN_URL",
     "postgresql+psycopg://buscasam:buscasam@localhost:5432/postgres",
 )
+
+
+@pytest.fixture(scope="session")
+def event_loop_policy():
+    # psycopg async cannot run on Windows' default ProactorEventLoop; the
+    # selector loop matches the Linux/CI default. No-op off Windows.
+    if sys.platform == "win32":
+        return asyncio.WindowsSelectorEventLoopPolicy()
+    return asyncio.get_event_loop_policy()
 
 
 def _create_db(name: str) -> None:
@@ -39,7 +51,7 @@ def _drop_db(name: str) -> None:
 @pytest_asyncio.fixture(scope="session")
 async def engine():
     name = f"buscasam_test_{uuid.uuid4().hex[:12]}"
-    url = f"postgresql+psycopg://buscasam:buscasam@localhost:5432/{name}"
+    url = f"{ADMIN_URL.rsplit('/', 1)[0]}/{name}"
     _create_db(name)
 
     cfg = Config(str(BACKEND_ROOT / "alembic.ini"))

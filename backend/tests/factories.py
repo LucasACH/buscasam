@@ -5,6 +5,7 @@ Both helpers pre-allocate ids via `nextval` and route through
 """
 from __future__ import annotations
 
+import uuid
 from datetime import date
 
 import numpy as np
@@ -50,6 +51,62 @@ async def make_document(
         ),
     )
     return new_id
+
+
+_HD_BY_ROLE = {
+    "estudiante": "estudiantes.unsam.edu.ar",
+    "docente": "unsam.edu.ar",
+}
+
+
+async def make_user(
+    session: AsyncSession,
+    *,
+    role: str = "estudiante",
+    name: str = "Test User",
+) -> int:
+    conn = await session.connection()
+    sub = f"sub-{uuid.uuid4().hex}"
+    return (
+        await conn.execute(
+            text(
+                "INSERT INTO users (google_sub, email, hd, role, name) "
+                "VALUES (:sub, :email, :hd, :role, :name) RETURNING id"
+            ),
+            {
+                "sub": sub,
+                "email": f"{sub}@unsam.edu.ar",
+                "hd": _HD_BY_ROLE[role],
+                "role": role,
+                "name": name,
+            },
+        )
+    ).scalar_one()
+
+
+async def make_document_author(
+    session: AsyncSession,
+    doc_id: int,
+    *,
+    user_id: int | None = None,
+    status: str = "owner",
+    display_name: str = "Autor",
+) -> int:
+    conn = await session.connection()
+    return (
+        await conn.execute(
+            text(
+                "INSERT INTO document_authors (doc_id, user_id, display_name, status) "
+                "VALUES (:doc_id, :user_id, :display_name, :status) RETURNING id"
+            ),
+            {
+                "doc_id": doc_id,
+                "user_id": user_id,
+                "display_name": display_name,
+                "status": status,
+            },
+        )
+    ).scalar_one()
 
 
 async def make_chunk(
