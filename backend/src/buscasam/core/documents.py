@@ -11,6 +11,16 @@ from buscasam.core.document_access import manageable_where
 
 if TYPE_CHECKING:
     from buscasam.core.auth import UserCtx
+    from buscasam.core.blob_store import BlobPutResult
+
+
+class DocumentNotFound(Exception):
+    pass
+
+
+class InvalidCoauthorId(Exception):
+    def __init__(self, ids: set[int]) -> None:
+        self.ids = ids
 
 
 @dataclass(frozen=True)
@@ -19,6 +29,138 @@ class OwnDocSummary:
     title: str
     publication_status: str
     visibility: str
+
+
+async def create_draft(
+    session: AsyncSession,
+    user_ctx: UserCtx,
+    *,
+    title: str,
+    area_path: str,
+    document_type: str,
+    visibility: str,
+    external_authors: list[str],
+    coauthor_user_ids: list[int],
+) -> int:
+    owner_name = (
+        await session.execute(
+            text("SELECT name FROM users WHERE id = :uid"),
+            {"uid": user_ctx.user_id},
+        )
+    ).scalar_one_or_none() or ""
+
+    doc_id = (
+        await session.execute(
+            text(
+                "INSERT INTO documents (visibility, publication_status, titulo, fecha, area_path, tipo) "
+                "VALUES (:visibility, 'draft', :titulo, CURRENT_DATE, :area_path, :tipo) RETURNING id"
+            ),
+            {
+                "visibility": visibility,
+                "titulo": title,
+                "area_path": area_path,
+                "tipo": document_type,
+            },
+        )
+    ).scalar_one()
+
+    await session.execute(
+        text(
+            "INSERT INTO document_authors (doc_id, user_id, display_name, status) "
+            "VALUES (:doc_id, :uid, :name, 'owner')"
+        ),
+        {"doc_id": doc_id, "uid": user_ctx.user_id, "name": owner_name},
+    )
+
+    coauthor_names: dict[int, str] = {}
+    if coauthor_user_ids:
+        rows = (
+            await session.execute(
+                text("SELECT id, name FROM users WHERE id = ANY(:ids)"),
+                {"ids": coauthor_user_ids},
+            )
+        ).mappings().all()
+        coauthor_names = {r["id"]: r["name"] for r in rows}
+        missing = set(coauthor_user_ids) - coauthor_names.keys()
+        if missing:
+            raise InvalidCoauthorId(missing)
+
+    for coauthor_id in coauthor_user_ids:
+        await session.execute(
+            text(
+                "INSERT INTO document_authors (doc_id, user_id, display_name, status) "
+                "VALUES (:doc_id, :uid, :name, 'pending')"
+            ),
+            {"doc_id": doc_id, "uid": coauthor_id, "name": coauthor_names[coauthor_id]},
+        )
+
+    for external_name in external_authors:
+        await session.execute(
+            text(
+                "INSERT INTO document_authors (doc_id, user_id, display_name, status) "
+                "VALUES (:doc_id, NULL, :name, 'external')"
+            ),
+            {"doc_id": doc_id, "name": external_name},
+        )
+
+    return doc_id
+
+
+async def assert_manageable(
+    session: AsyncSession,
+    user_ctx: UserCtx,
+    doc_id: int,
+) -> None:
+    where, params = manageable_where("d", user_ctx)
+    exists = (
+        await session.execute(
+            text(f"SELECT 1 FROM documents d WHERE d.id = :doc_id AND ({where})"),
+            {"doc_id": doc_id, **params},
+        )
+    ).scalar_one_or_none()
+    if exists is None:
+        raise DocumentNotFound
+
+
+async def attach_main_version(
+    session: AsyncSession,
+    user_ctx: UserCtx,
+    doc_id: int,
+    blob: BlobPutResult,
+    *,
+    original_filename: str,
+) -> int:
+    version_no = (
+        await session.execute(
+            text(
+                "SELECT COALESCE(MAX(version_no), 0) + 1 "
+                "FROM document_versions WHERE doc_id = :doc_id"
+            ),
+            {"doc_id": doc_id},
+        )
+    ).scalar_one()
+
+    version_id = (
+        await session.execute(
+            text(
+                "INSERT INTO document_versions "
+                "(doc_id, version_no, sha256, original_filename, bytes, mime, uploaded_by) "
+                "VALUES (:doc_id, :version_no, decode(:sha256, 'hex'), "
+                ":filename, :bytes, :mime, :uid) RETURNING id"
+            ),
+            {
+                "doc_id": doc_id,
+                "version_no": version_no,
+                "sha256": blob.sha256,
+                "filename": original_filename,
+                "bytes": blob.bytes,
+                "mime": blob.sniffed_mime,
+                "uid": user_ctx.user_id,
+            },
+        )
+    ).scalar_one()
+
+    return version_id
 
 
 async def list_own_documents(
