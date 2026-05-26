@@ -17,7 +17,15 @@ dependencies = [
     "itsdangerous>=2.2.0",
     "python-magic>=0.4.27",
     "python-multipart>=0.0.9",
+    "procrastinate>=3.0.0",
+    "pdfminer.six>=20240706",
+    "python-docx>=1.1.2",
+    "odfpy>=1.4.1",
+    "yake>=0.4.8",
 ]
+
+[project.optional-dependencies]
+ocr = ["ocrmypdf>=16.0"]
 
 [dependency-groups]
 dev = [
@@ -36,3 +44,6 @@ packages = ["src/buscasam"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "ocr_slow: OCR integration tests; require ocrmypdf + Tesseract installed",
+]

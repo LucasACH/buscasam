@@ -92,7 +92,7 @@ async def upload_main_file(
 
     if data[:4] == b"%PDF":
         try:
-            probe_encrypted(data[:2048])
+            probe_encrypted(data)
         except PDFEncryptionError:
             raise HTTPException(
                 status_code=415,
