@@ -13,9 +13,7 @@ test("login?error=not_unsam shows retry copy and re-initiates the flow", async (
 
   await page.goto("/login?error=not_unsam");
 
-  await expect(
-    page.getByText(/Solo cuentas @unsam\.edu\.ar/i),
-  ).toBeVisible();
+  await expect(page.getByText(/Solo cuentas @unsam\.edu\.ar/i)).toBeVisible();
 
   const cta = page.getByRole("link", { name: /Probar otra cuenta/i });
   await expect(cta).toBeVisible();

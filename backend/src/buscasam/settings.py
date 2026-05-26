@@ -1,6 +1,7 @@
 from typing import Literal
+from urllib.parse import urlsplit
 
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEV_SECRET_KEY = "dev-secret-do-not-use-in-prod"
@@ -23,6 +24,27 @@ class Settings(BaseSettings):
     oidc_discovery_url: str = (
         "https://accounts.google.com/.well-known/openid-configuration"
     )
+
+    @field_validator("base_url", mode="after")
+    @classmethod
+    def _normalize_base_url(cls, raw: str) -> str:
+        """Match the shape a browser sends in `Origin`: `scheme://host[:port]`.
+
+        The Origin-check middleware compares against this verbatim, so a
+        trailing slash or path component in the env var would silently 403
+        every authenticated unsafe method.
+        """
+        parts = urlsplit(raw)
+        if not parts.scheme or not parts.netloc:
+            raise ValueError(
+                f"BUSCASAM_BASE_URL must be an absolute URL, got {raw!r}"
+            )
+        if parts.path not in ("", "/") or parts.query or parts.fragment:
+            raise ValueError(
+                "BUSCASAM_BASE_URL must not carry a path, query, or fragment "
+                f"(got {raw!r}); the Origin header never includes one"
+            )
+        return f"{parts.scheme}://{parts.netloc}"
 
     @model_validator(mode="after")
     def _reject_dev_secrets_in_prod(self) -> "Settings":

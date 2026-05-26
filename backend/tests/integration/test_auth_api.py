@@ -5,6 +5,9 @@ The MockOIDCIssuer fixture stands in for Google; the test seam is
 """
 from __future__ import annotations
 
+import base64
+import secrets
+from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlparse
 
 import httpx
@@ -16,6 +19,7 @@ from sqlalchemy import text
 
 from buscasam.api.app import create_app
 from buscasam.api.deps import get_session
+from buscasam.core import auth
 from buscasam.settings import settings
 from tests.fixtures.oidc_issuer import MockOIDCIssuer
 
@@ -24,6 +28,37 @@ SECRET_KEY = "test-secret-key-for-oauth-state"
 CLIENT_ID = "buscasam-test-client"
 CLIENT_SECRET = "test-secret"
 BASE_URL = "https://buscasam.test"
+
+
+def _sid_cookie_value(sid: bytes) -> str:
+    return base64.urlsafe_b64encode(sid).rstrip(b"=").decode()
+
+
+async def _seed_user(session, *, role: str = "docente") -> int:
+    return (
+        await session.execute(
+            text(
+                "INSERT INTO users (google_sub, email, hd, role, name, picture_url) "
+                "VALUES ('sub-me', 'ada@unsam.edu.ar', 'unsam.edu.ar', :role, "
+                "'Ada Lovelace', 'https://example.test/a.png') RETURNING id"
+            ),
+            {"role": role},
+        )
+    ).scalar_one()
+
+
+async def _seed_session(
+    session, *, user_id: int, last_seen_at=None, expires_at=None
+) -> bytes:
+    sid = secrets.token_bytes(32)
+    await session.execute(
+        text(
+            "INSERT INTO sessions (sid, user_id, last_seen_at, expires_at) "
+            "VALUES (:sid, :uid, COALESCE(:ls, now()), COALESCE(:exp, now() + interval '90 days'))"
+        ),
+        {"sid": sid, "uid": user_id, "ls": last_seen_at, "exp": expires_at},
+    )
+    return sid
 
 
 @pytest_asyncio.fixture
@@ -300,3 +335,194 @@ async def test_callback_state_param_mismatch_no_db_writes(client, issuer, sessio
     assert r.status_code == 302
     assert r.headers["location"] == "/login?error=not_unsam"
     assert await _row_counts(session) == (users_before, sessions_before)
+
+
+async def test_me_200_and_401(client, session):
+    """`GET /api/me`: 200+identity for valid sid; 401 for none/invalid/expired."""
+    uid = await _seed_user(session)
+    sid = await _seed_session(session, user_id=uid)
+
+    r_ok = await client.get(
+        "/api/me", headers={"cookie": f"sid={_sid_cookie_value(sid)}"}
+    )
+    assert r_ok.status_code == 200
+    body = r_ok.json()
+    assert body == {
+        "user_id": uid,
+        "role": "docente",
+        "name": "Ada Lovelace",
+        "picture_url": "https://example.test/a.png",
+        "hd": "unsam.edu.ar",
+    }
+
+    r_anon = await client.get("/api/me")
+    assert r_anon.status_code == 401
+
+    r_garbage = await client.get(
+        "/api/me", headers={"cookie": "sid=not-a-real-sid"}
+    )
+    assert r_garbage.status_code == 401
+
+    expired_sid = await _seed_session(
+        session,
+        user_id=uid,
+        last_seen_at=datetime.now(timezone.utc) - timedelta(days=31),
+    )
+    sessions_before = (
+        await session.execute(text("SELECT count(*) FROM sessions"))
+    ).scalar_one()
+
+    r_expired = await client.get(
+        "/api/me", headers={"cookie": f"sid={_sid_cookie_value(expired_sid)}"}
+    )
+    assert r_expired.status_code == 401
+
+    sessions_after = (
+        await session.execute(text("SELECT count(*) FROM sessions"))
+    ).scalar_one()
+    assert sessions_after == sessions_before
+
+
+async def test_me_stale_session_reissues_cookie(client, session):
+    """Stale session (last_seen_at > 24h ago) returns 200 with a fresh Set-Cookie."""
+    uid = await _seed_user(session)
+    stale_sid = await _seed_session(
+        session,
+        user_id=uid,
+        last_seen_at=datetime.now(timezone.utc) - timedelta(hours=25),
+    )
+
+    r = await client.get(
+        "/api/me", headers={"cookie": f"sid={_sid_cookie_value(stale_sid)}"}
+    )
+    assert r.status_code == 200
+    set_cookie = r.headers.get("set-cookie", "").lower()
+    assert "sid=" in set_cookie
+    assert "max-age=0" not in set_cookie
+
+
+async def test_logout_clears_cookie_and_session(client, session):
+    uid = await _seed_user(session)
+    sid = await _seed_session(session, user_id=uid)
+    cookie_header = f"sid={_sid_cookie_value(sid)}"
+
+    r = await client.post(
+        "/api/auth/logout",
+        headers={"cookie": cookie_header, "origin": BASE_URL},
+    )
+    assert r.status_code == 204
+
+    set_cookie = r.headers.get("set-cookie", "").lower()
+    assert "sid=" in set_cookie
+    assert "max-age=0" in set_cookie
+
+    remaining = (
+        await session.execute(
+            text("SELECT count(*) FROM sessions WHERE sid = :sid"), {"sid": sid}
+        )
+    ).scalar_one()
+    assert remaining == 0
+
+    r_after = await client.get("/api/me", headers={"cookie": cookie_header})
+    assert r_after.status_code == 401
+
+
+async def test_logout_requires_authenticated(client):
+    r = await client.post("/api/auth/logout", headers={"origin": BASE_URL})
+    assert r.status_code == 401
+
+
+async def test_origin_check_blocks_mismatched_unsafe(client, session):
+    uid = await _seed_user(session)
+    sid = await _seed_session(session, user_id=uid)
+    cookie_header = f"sid={_sid_cookie_value(sid)}"
+
+    r_mismatch = await client.post(
+        "/api/auth/logout",
+        headers={"cookie": cookie_header, "origin": "https://evil.example"},
+    )
+    assert r_mismatch.status_code == 403
+
+    r_missing = await client.post(
+        "/api/auth/logout", headers={"cookie": cookie_header}
+    )
+    assert r_missing.status_code == 403
+
+    r_ok = await client.post(
+        "/api/auth/logout",
+        headers={"cookie": cookie_header, "origin": BASE_URL},
+    )
+    assert r_ok.status_code == 204
+
+
+async def test_origin_check_ignores_anonymous_unsafe(client):
+    """Anonymous unsafe methods are not Origin-gated (no sid cookie)."""
+    r = await client.post("/api/auth/logout")
+    # 401 from require_authenticated, not 403 from Origin check.
+    assert r.status_code == 401
+
+
+async def test_origin_check_does_not_gate_safe_methods(client, session):
+    uid = await _seed_user(session)
+    sid = await _seed_session(session, user_id=uid)
+    cookie_header = f"sid={_sid_cookie_value(sid)}"
+
+    r = await client.get(
+        "/api/me",
+        headers={"cookie": cookie_header, "origin": "https://evil.example"},
+    )
+    assert r.status_code == 200
+
+
+async def test_expired_session_demotes_silently_on_read(session, issuer):
+    """An expired sid on GET /api/search returns the invitado result set, not 401."""
+    from buscasam.api.deps import get_tei_client
+    from tests.factories import make_chunk, make_document
+
+    publico_id = await make_document(
+        session,
+        titulo="Documento público sobre auth demote",
+        abstract="Probar democión silenciosa de sesiones expiradas.",
+    )
+    await make_chunk(
+        session,
+        publico_id,
+        is_headline=True,
+        body_text="Documento público sobre auth demote silencioso.",
+    )
+    uid = await _seed_user(session)
+    expired_sid = await _seed_session(
+        session,
+        user_id=uid,
+        last_seen_at=datetime.now(timezone.utc) - timedelta(days=31),
+    )
+
+    tei = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda req: httpx.Response(503)),
+        base_url="http://tei",
+    )
+
+    async def _session_override():
+        yield session
+
+    async def _tei_override():
+        return tei
+
+    app = create_app()
+    app.dependency_overrides[get_session] = _session_override
+    app.dependency_overrides[get_tei_client] = _tei_override
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        r = await c.get(
+            "/api/search",
+            params={"q": "auth demote"},
+            headers={"cookie": f"sid={_sid_cookie_value(expired_sid)}"},
+        )
+
+    await tei.aclose()
+
+    assert r.status_code == 200
+    data = r.json()
+    assert [row["doc_id"] for row in data["results"]] == [publico_id]
