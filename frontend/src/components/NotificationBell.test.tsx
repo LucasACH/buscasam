@@ -63,4 +63,15 @@ describe("NotificationBell", () => {
     expect(markAllRead).toHaveBeenCalledTimes(1);
     expect(await screen.findByText(/Doc 1/)).toBeInTheDocument();
   });
+
+  it("opening with zero unread does not fire markAllRead", async () => {
+    setup({ count: 0, items: [] });
+    render(<NotificationBell />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /Notificaciones/i }),
+    );
+
+    expect(markAllRead).not.toHaveBeenCalled();
+  });
 });
