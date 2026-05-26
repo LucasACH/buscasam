@@ -1,4 +1,4 @@
-from buscasam.core import search_query
+from buscasam.core import auth, search_query
 from tests.factories import make_chunk, make_document
 
 
@@ -34,7 +34,7 @@ async def test_area_filter_narrows_to_subtree(session):
     result = await search_query.run(
         session,
         filters=search_query.Filters(q="búsqueda híbrida", area_path="escuela_ciencia"),
-        user_ctx=search_query.UserCtx(role="invitado"),
+        user_ctx=auth.GUEST,
     )
 
     assert [row.doc_id for row in result.rows] == [ciencia_id]
@@ -73,7 +73,7 @@ async def test_empty_area_applies_no_filter(session):
     result = await search_query.run(
         session,
         filters=search_query.Filters(q="búsqueda híbrida"),
-        user_ctx=search_query.UserCtx(role="invitado"),
+        user_ctx=auth.GUEST,
     )
 
     assert {row.doc_id for row in result.rows} == {ciencia_id, humanidades_id}

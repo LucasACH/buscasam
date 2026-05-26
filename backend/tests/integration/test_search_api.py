@@ -1,3 +1,5 @@
+import base64
+import secrets
 from datetime import date
 
 import httpx
@@ -5,10 +7,22 @@ import numpy as np
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 
 from buscasam.api.app import create_app
 from buscasam.api.deps import get_session, get_tei_client
-from tests.factories import make_chunk, make_document
+from tests.factories import make_chunk, make_document, make_user
+
+
+async def _seed_authenticated(session, *, role: str = "estudiante") -> str:
+    """Seed a user + session row; return the `sid` cookie value."""
+    uid = await make_user(session, role=role)
+    sid = secrets.token_bytes(32)
+    await session.execute(
+        text("INSERT INTO sessions (sid, user_id) VALUES (:sid, :uid)"),
+        {"sid": sid, "uid": uid},
+    )
+    return base64.urlsafe_b64encode(sid).rstrip(b"=").decode()
 
 
 def _tei_5xx_transport() -> httpx.MockTransport:
@@ -93,6 +107,59 @@ async def test_search_endpoint_returns_publico_only(client, session):
     assert data["total"] == 1
     assert [row["doc_id"] for row in data["results"]] == [publico_id]
     assert data["results"][0]["titulo"] == "Búsqueda léxica vía API"
+
+
+async def test_response_includes_visibility_field(client, session):
+    """Every row carries visibility; unfiltered_total uses the same predicate."""
+    publico = await make_document(
+        session,
+        titulo="Redes públicas",
+        abstract="Estudio sobre redes neuronales.",
+        tipo="paper",
+    )
+    await make_chunk(
+        session, publico, is_headline=True, body_text="Redes neuronales públicas."
+    )
+    interno = await make_document(
+        session,
+        visibility="interno",
+        titulo="Redes internas",
+        abstract="Notas internas sobre redes neuronales.",
+        tipo="paper",
+    )
+    await make_chunk(
+        session, interno, is_headline=True, body_text="Redes neuronales internas."
+    )
+    sid = await _seed_authenticated(session, role="estudiante")
+    await session.commit()
+
+    cookie = {"cookie": f"sid={sid}"}
+
+    r = await client.get(
+        "/api/search", params={"q": "redes neuronales"}, headers=cookie
+    )
+    assert r.status_code == 200
+    rows = r.json()["results"]
+    assert {row["doc_id"] for row in rows} == {publico, interno}
+    assert all(
+        row["visibility"] in {"publico", "interno", "privado"} for row in rows
+    )
+    assert {row["doc_id"]: row["visibility"] for row in rows} == {
+        publico: "publico",
+        interno: "interno",
+    }
+
+    # unfiltered_total counts both readable docs under the same predicate.
+    filtered = await client.get(
+        "/api/search",
+        params=[("q", "redes neuronales"), ("tipo", "tesis")],
+        headers=cookie,
+    )
+    assert filtered.status_code == 200
+    data = filtered.json()
+    assert data["results"] == []
+    assert data["total"] == 0
+    assert data["unfiltered_total"] == 2
 
 
 async def test_search_endpoint_rejects_pagina_over_20(client):

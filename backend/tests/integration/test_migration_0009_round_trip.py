@@ -1,4 +1,4 @@
-"""Tracer 5: 0008 upgrade/downgrade is reversible.
+"""0009 upgrade/downgrade is reversible (document_authors, ADR-0010 §5).
 
 Runs against an isolated database so the session-scoped `engine` fixture
 (which stays at `head`) is never disturbed.
@@ -52,31 +52,29 @@ def isolated_db():
         admin.dispose()
 
 
-def _tables_present(url: str) -> set[str]:
+def _has_document_authors(url: str) -> bool:
     eng = create_engine(url)
     try:
         with eng.connect() as c:
-            rows = c.execute(
-                text(
-                    "SELECT table_name FROM information_schema.tables "
-                    "WHERE table_schema = 'public' "
-                    "AND table_name IN ('users', 'sessions', 'notifications')"
-                )
-            ).scalars().all()
-        return set(rows)
+            return (
+                c.execute(
+                    text("SELECT to_regclass('public.document_authors')")
+                ).scalar()
+                is not None
+            )
     finally:
         eng.dispose()
 
 
-def test_0008_upgrade_then_downgrade_then_upgrade(isolated_db):
+def test_0009_upgrade_then_downgrade_then_upgrade(isolated_db):
     url = isolated_db
     cfg = _alembic_cfg(url)
 
-    command.upgrade(cfg, "0008")
-    assert _tables_present(url) == {"users", "sessions", "notifications"}
+    command.upgrade(cfg, "0009")
+    assert _has_document_authors(url) is True
 
-    command.downgrade(cfg, "0007")
-    assert _tables_present(url) == set()
+    command.downgrade(cfg, "0008")
+    assert _has_document_authors(url) is False
 
-    command.upgrade(cfg, "0008")
-    assert _tables_present(url) == {"users", "sessions", "notifications"}
+    command.upgrade(cfg, "0009")
+    assert _has_document_authors(url) is True

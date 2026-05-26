@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from buscasam.core import search_query
+from buscasam.core import auth, search_query
 from tests.factories import make_chunk, make_document
 
 
@@ -41,7 +41,7 @@ async def test_search_hybrid_returns_pure_semantic_hit(session):
     result = await search_query.run(
         session,
         filters=search_query.Filters(q="zorgblat"),
-        user_ctx=search_query.UserCtx(role="invitado"),
+        user_ctx=auth.GUEST,
         embedding=_unit(0),
     )
 
@@ -74,7 +74,7 @@ async def test_search_excludes_below_floor(session):
     result = await search_query.run(
         session,
         filters=search_query.Filters(q="zorgblat"),
-        user_ctx=search_query.UserCtx(role="invitado"),
+        user_ctx=auth.GUEST,
         embedding=q_vec,
     )
 
@@ -110,7 +110,7 @@ async def test_search_snippet_rule_splits_by_row_source(session):
     result = await search_query.run(
         session,
         filters=search_query.Filters(q="alphabravo"),
-        user_ctx=search_query.UserCtx(role="invitado"),
+        user_ctx=auth.GUEST,
         embedding=_unit(0),
     )
 

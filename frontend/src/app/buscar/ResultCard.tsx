@@ -2,6 +2,11 @@ import type { components } from "@/api/schema";
 
 type Result = components["schemas"]["ResultDTO"];
 
+const VISIBILITY_LABEL: Record<string, string> = {
+  interno: "Interno",
+  privado: "Privado",
+};
+
 const TIPO_LABEL: Record<string, string> = {
   tesis: "Tesis",
   paper: "Paper",
@@ -26,10 +31,15 @@ export function ResultCard({ result }: { result: Result }) {
       <h2 className="text-foreground text-lg leading-snug font-semibold">
         {result.titulo}
       </h2>
-      <div className="text-muted-foreground mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+      <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
         <span>{year}</span>
         <span>{result.area_path}</span>
         <span>{tipo}</span>
+        {result.visibility !== "publico" && (
+          <span className="border-border bg-muted text-foreground rounded-full border px-2 py-0.5 font-medium">
+            {VISIBILITY_LABEL[result.visibility]}
+          </span>
+        )}
       </div>
       {result.abstract && (
         <p className="text-muted-foreground mt-3 text-sm">
