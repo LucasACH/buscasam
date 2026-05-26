@@ -125,6 +125,7 @@ class MockOIDCIssuer:
             self._codes[code] = {
                 "client_id": request.query_params.get("client_id"),
                 "redirect_uri": request.query_params.get("redirect_uri"),
+                "nonce": request.query_params.get("nonce"),
                 "claims": dict(self._claims),
             }
             return JSONResponse(
@@ -147,7 +148,7 @@ class MockOIDCIssuer:
                 "aud": entry["client_id"],
                 "iat": now,
                 "exp": now + 300,
-                "nonce": form.get("nonce"),
+                "nonce": entry.get("nonce"),
                 **entry["claims"],
             }
             header = {"alg": "RS256", "kid": self._key.kid, "typ": "JWT"}
