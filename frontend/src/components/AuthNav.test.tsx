@@ -118,4 +118,31 @@ describe("AuthNav", () => {
     expect(init?.method).toBe("POST");
     expect(replace).toHaveBeenCalledWith("/");
   });
+
+  it("logout evicts the notifications cache", async () => {
+    const removeQueries = vi.spyOn(QueryClient.prototype, "removeQueries");
+    const user = {
+      user_id: 7,
+      role: "estudiante",
+      name: "Ada Lovelace",
+      picture_url: null,
+      hd: "estudiantes.unsam.edu.ar",
+    };
+    renderWith(async (input) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.endsWith("/api/me"))
+        return new Response(JSON.stringify(user), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      return new Response(null, { status: 204 });
+    });
+
+    const btn = await screen.findByRole("button", { name: /Cerrar sesión/i });
+    await userEvent.click(btn);
+
+    expect(removeQueries).toHaveBeenCalledWith({
+      queryKey: ["notifications"],
+    });
+  });
 });
