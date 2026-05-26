@@ -216,6 +216,7 @@ async def test_upload_wrong_mime_returns_415_no_version(client, session, blob_ro
         )
     ).scalar_one()
     assert count == 0
+    assert not any(p for p in blob_root.rglob("*") if p.is_file())
 
 
 async def test_upload_oversized_file_returns_413(client, session, blob_root):

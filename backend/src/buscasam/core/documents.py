@@ -72,34 +72,26 @@ async def create_draft(
         {"doc_id": doc_id, "uid": user_ctx.user_id, "name": owner_name},
     )
 
+    coauthor_names: dict[int, str] = {}
     if coauthor_user_ids:
-        valid_ids = set(
-            (
-                await session.execute(
-                    text("SELECT id FROM users WHERE id = ANY(:ids)"),
-                    {"ids": coauthor_user_ids},
-                )
+        rows = (
+            await session.execute(
+                text("SELECT id, name FROM users WHERE id = ANY(:ids)"),
+                {"ids": coauthor_user_ids},
             )
-            .scalars()
-            .all()
-        )
-        missing = set(coauthor_user_ids) - valid_ids
+        ).mappings().all()
+        coauthor_names = {r["id"]: r["name"] for r in rows}
+        missing = set(coauthor_user_ids) - coauthor_names.keys()
         if missing:
             raise InvalidCoauthorId(missing)
 
     for coauthor_id in coauthor_user_ids:
-        coauthor_name = (
-            await session.execute(
-                text("SELECT name FROM users WHERE id = :uid"),
-                {"uid": coauthor_id},
-            )
-        ).scalar_one_or_none() or ""
         await session.execute(
             text(
                 "INSERT INTO document_authors (doc_id, user_id, display_name, status) "
                 "VALUES (:doc_id, :uid, :name, 'pending')"
             ),
-            {"doc_id": doc_id, "uid": coauthor_id, "name": coauthor_name},
+            {"doc_id": doc_id, "uid": coauthor_id, "name": coauthor_names[coauthor_id]},
         )
 
     for external_name in external_authors:

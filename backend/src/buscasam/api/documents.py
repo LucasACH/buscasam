@@ -62,7 +62,11 @@ async def create_draft_endpoint(
     return CreateDraftResponse(id=doc_id)
 
 
-_ALLOWED_MIMES = {"application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.oasis.opendocument.text"}
+_ALLOWED_MIMES = {
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.oasis.opendocument.text",
+}
 _MAX_MAIN_BYTES = 50 * 1024 * 1024
 
 
@@ -82,7 +86,9 @@ async def upload_main_file(
     except DocumentNotFound:
         raise HTTPException(status_code=404)
 
-    data = await file.read()
+    data = await file.read(_MAX_MAIN_BYTES + 1)
+    if len(data) > _MAX_MAIN_BYTES:
+        raise HTTPException(status_code=413, detail="El archivo supera los 50 MB")
 
     if data[:4] == b"%PDF":
         try:
@@ -93,10 +99,7 @@ async def upload_main_file(
                 detail="Este PDF está protegido por contraseña — quitá la protección y reintentá",
             )
 
-    try:
-        result = await blob_store.put_stream(_stream_bytes(data), max_bytes=_MAX_MAIN_BYTES)
-    except blob_store.BlobTooLarge:
-        raise HTTPException(status_code=413, detail="El archivo supera los 50 MB")
+    result = await blob_store.put_stream(_stream_bytes(data), max_bytes=_MAX_MAIN_BYTES)
 
     if result.sniffed_mime not in _ALLOWED_MIMES:
         await blob_store.delete(result.sha256)
