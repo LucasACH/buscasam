@@ -1,7 +1,8 @@
 import secrets
 
+import pytest
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 
 
 async def _make_user(session, *, google_sub: str = "sub-s1") -> int:
@@ -75,7 +76,7 @@ async def test_sessions_expires_at_is_immutable(session):
     )
     await session.commit()
 
-    try:
+    with pytest.raises(DBAPIError, match="immutable"):
         await session.execute(
             text(
                 "UPDATE sessions SET expires_at = expires_at + interval '1 day' "
@@ -84,10 +85,7 @@ async def test_sessions_expires_at_is_immutable(session):
             {"sid": sid},
         )
         await session.commit()
-    except Exception:
-        await session.rollback()
-    else:
-        raise AssertionError("expected DB rejection on expires_at mutation")
+    await session.rollback()
 
 
 async def test_sessions_last_seen_at_remains_mutable(session):

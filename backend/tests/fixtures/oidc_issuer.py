@@ -63,8 +63,10 @@ class MockOIDCIssuer:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
-        self._server.should_exit = True
-        self._thread.join(timeout=5)
+        if self._server is not None:
+            self._server.should_exit = True
+        if self._thread is not None:
+            self._thread.join(timeout=5)
 
     # --- public surface ---
 
