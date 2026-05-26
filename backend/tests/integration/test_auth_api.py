@@ -203,3 +203,100 @@ async def test_callback_rejected_claims_no_db_writes(client, issuer, session, cl
     ).scalar_one()
     assert users_after == users_before
     assert sessions_after == sessions_before
+
+
+async def _row_counts(session):
+    users = (
+        await session.execute(text("SELECT count(*) FROM users"))
+    ).scalar_one()
+    sessions_n = (
+        await session.execute(text("SELECT count(*) FROM sessions"))
+    ).scalar_one()
+    return users, sessions_n
+
+
+async def _begin_login(client, *, next_path="/buscar"):
+    r = await client.get(
+        "/api/auth/login", params={"next": next_path}, follow_redirects=False
+    )
+    assert r.status_code == 302
+    return r.cookies["oauth_state"], r.headers["location"]
+
+
+async def _exchange_authorize(authorize_url):
+    async with httpx.AsyncClient() as h:
+        authorize_resp = await h.get(authorize_url, follow_redirects=False)
+    return authorize_resp.json()
+
+
+async def test_callback_missing_state_cookie_no_db_writes(client, issuer, session):
+    issuer.set_claims(
+        sub="google-sub-nocookie",
+        email="ada@unsam.edu.ar",
+        hd="unsam.edu.ar",
+        email_verified=True,
+    )
+    users_before, sessions_before = await _row_counts(session)
+
+    _, authorize_url = await _begin_login(client)
+    payload = await _exchange_authorize(authorize_url)
+
+    r = await client.get(
+        "/api/auth/google/callback",
+        params={"code": payload["code"], "state": payload["state"]},
+        follow_redirects=False,
+    )
+
+    assert r.status_code == 302
+    assert r.headers["location"] == "/login?error=not_unsam"
+    assert await _row_counts(session) == (users_before, sessions_before)
+
+
+async def test_callback_tampered_state_cookie_no_db_writes(client, issuer, session):
+    issuer.set_claims(
+        sub="google-sub-tampered",
+        email="ada@unsam.edu.ar",
+        hd="unsam.edu.ar",
+        email_verified=True,
+    )
+    users_before, sessions_before = await _row_counts(session)
+
+    state_cookie, authorize_url = await _begin_login(client)
+    payload = await _exchange_authorize(authorize_url)
+
+    tampered = state_cookie[:-4] + ("A" * 4 if state_cookie[-4:] != "AAAA" else "B" * 4)
+
+    r = await client.get(
+        "/api/auth/google/callback",
+        params={"code": payload["code"], "state": payload["state"]},
+        headers={"cookie": f"oauth_state={tampered}"},
+        follow_redirects=False,
+    )
+
+    assert r.status_code == 302
+    assert r.headers["location"] == "/login?error=not_unsam"
+    assert await _row_counts(session) == (users_before, sessions_before)
+
+
+async def test_callback_state_param_mismatch_no_db_writes(client, issuer, session):
+    issuer.set_claims(
+        sub="google-sub-mismatch",
+        email="ada@unsam.edu.ar",
+        hd="unsam.edu.ar",
+        email_verified=True,
+    )
+    users_before, sessions_before = await _row_counts(session)
+
+    state_cookie, authorize_url = await _begin_login(client)
+    payload = await _exchange_authorize(authorize_url)
+
+    r = await client.get(
+        "/api/auth/google/callback",
+        params={"code": payload["code"], "state": "not-the-issued-state"},
+        headers={"cookie": f"oauth_state={state_cookie}"},
+        follow_redirects=False,
+    )
+
+    assert r.status_code == 302
+    assert r.headers["location"] == "/login?error=not_unsam"
+    assert await _row_counts(session) == (users_before, sessions_before)

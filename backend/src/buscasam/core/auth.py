@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import logging
 import secrets
 import time
 from types import MappingProxyType
@@ -15,15 +16,19 @@ from typing import Literal, Mapping
 from urllib.parse import urlencode
 
 import httpx
+from authlib.integrations.base_client.errors import OAuthError
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from fastapi import Response
 from fastapi.responses import RedirectResponse
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from joserfc import jwk, jwt
+from joserfc.errors import JoseError
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from buscasam.settings import settings
+
+log = logging.getLogger(__name__)
 
 STATE_COOKIE = "oauth_state"
 STATE_COOKIE_MAX_AGE = 600  # 10 minutes per ADR-0005 §4
@@ -242,7 +247,8 @@ async def complete_login(
         claims = jwt.decode(
             token["id_token"], jwk.KeySet.import_key_set(jwks_doc)
         ).claims
-    except Exception:
+    except (OAuthError, httpx.HTTPError, JoseError, KeyError) as e:
+        log.warning("oauth callback rejected", exc_info=e)
         return _reject_to_login()
 
     if (
