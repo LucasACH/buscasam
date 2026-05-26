@@ -1,3 +1,5 @@
+import pytest
+
 from buscasam.settings import Settings
 
 
@@ -10,3 +12,23 @@ def test_min_semantic_similarity_calibrated_to_committed_value():
 def test_tei_url_default():
     s = Settings()
     assert s.tei_url == "http://localhost:8080"
+
+
+def test_prod_env_rejects_dev_secret_key():
+    with pytest.raises(ValueError, match="BUSCASAM_SECRET_KEY"):
+        Settings(env="prod", oidc_client_secret="real-client-secret")
+
+
+def test_prod_env_rejects_dev_oidc_client_secret():
+    with pytest.raises(ValueError, match="BUSCASAM_OIDC_CLIENT_SECRET"):
+        Settings(env="prod", secret_key="real-secret")
+
+
+def test_prod_env_accepts_non_dev_secrets():
+    s = Settings(env="prod", secret_key="real-secret", oidc_client_secret="real-client-secret")
+    assert s.env == "prod"
+
+
+def test_dev_env_allows_dev_defaults():
+    s = Settings()
+    assert s.env == "dev"
