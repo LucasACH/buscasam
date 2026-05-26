@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+import numpy as np
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +13,25 @@ from buscasam.core.document_access import manageable_where
 if TYPE_CHECKING:
     from buscasam.core.auth import UserCtx
     from buscasam.core.blob_store import BlobPutResult
+    from buscasam.core.chunk import Chunk
+    from buscasam.core.extract import IndexableMetadata
+
+
+_EMBEDDING_MODEL_VERSION = "multilingual-e5-large@v1"
+
+
+def _halfvec_literal(values: np.ndarray) -> str:
+    return "[" + ",".join(f"{float(v):.6f}" for v in values) + "]"
+
+
+@dataclass(frozen=True)
+class CandidateVersion:
+    version_id: int
+    doc_id: int
+    sha256: str
+    mime: str
+    title: str
+    owner_user_id: int | None
 
 
 class DocumentNotFound(Exception):
@@ -160,7 +180,174 @@ async def attach_main_version(
         )
     ).scalar_one()
 
+    # ADR-0008 §1: defer index_document through the active transaction so the
+    # version row + the job row commit together.
+    from buscasam.core import jobs
+
+    await jobs.enqueue_index_document(session, version_id)
+
     return version_id
+
+
+async def load_candidate(
+    session: AsyncSession, version_id: int
+) -> CandidateVersion:
+    row = (
+        await session.execute(
+            text(
+                "SELECT v.id, v.doc_id, encode(v.sha256, 'hex') AS sha, v.mime, "
+                "       d.titulo, "
+                "       (SELECT a.user_id FROM document_authors a "
+                "         WHERE a.doc_id = v.doc_id AND a.status = 'owner' LIMIT 1) "
+                "         AS owner_user_id "
+                "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
+                "WHERE v.id = :id"
+            ),
+            {"id": version_id},
+        )
+    ).mappings().one_or_none()
+    if row is None:
+        raise DocumentNotFound
+    return CandidateVersion(
+        version_id=row["id"],
+        doc_id=row["doc_id"],
+        sha256=row["sha"],
+        mime=row["mime"],
+        title=row["titulo"],
+        owner_user_id=row["owner_user_id"],
+    )
+
+
+async def write_indexed_candidate(
+    session: AsyncSession,
+    version_id: int,
+    *,
+    body: list["Chunk"],
+    headline: "Chunk",
+    embeds: list[np.ndarray],
+    meta: "IndexableMetadata",
+    headline_fingerprint: str,
+) -> None:
+    doc_id = (
+        await session.execute(
+            text("SELECT doc_id FROM document_versions WHERE id = :id"),
+            {"id": version_id},
+        )
+    ).scalar_one()
+
+    all_chunks = [headline, *body]
+    for c, emb in zip(all_chunks, embeds):
+        await session.execute(
+            text(
+                "INSERT INTO chunks (doc_id, chunk_seq, is_headline, body_text, "
+                "  embedding, embedding_model_version, version_id, is_current) "
+                f"VALUES (:doc_id, :seq, :hl, :body, '{_halfvec_literal(emb)}'::halfvec(1024), "
+                ":mv, :vid, false)"
+            ),
+            {
+                "doc_id": doc_id,
+                "seq": c.chunk_seq,
+                "hl": c.is_headline,
+                "body": c.body_text,
+                "mv": _EMBEDDING_MODEL_VERSION,
+                "vid": version_id,
+            },
+        )
+
+    await session.execute(
+        text(
+            "UPDATE document_versions SET "
+            "  index_status = 'indexed', "
+            "  staged_abstract = :abstract, "
+            "  staged_keywords = :keywords, "
+            "  staged_fecha = :fecha, "
+            "  headline_fingerprint = :fp, "
+            "  indexed_at = now() "
+            "WHERE id = :id"
+        ),
+        {
+            "abstract": meta.abstract,
+            "keywords": meta.keywords,
+            "fecha": meta.fecha,
+            "fp": headline_fingerprint,
+            "id": version_id,
+        },
+    )
+
+
+async def write_headline(
+    session: AsyncSession,
+    version_id: int,
+    headline: "Chunk",
+    embed: np.ndarray,
+    headline_fingerprint: str,
+) -> None:
+    doc_id = (
+        await session.execute(
+            text("SELECT doc_id FROM document_versions WHERE id = :id"),
+            {"id": version_id},
+        )
+    ).scalar_one()
+
+    await session.execute(
+        text(
+            "DELETE FROM chunks WHERE version_id = :vid AND is_headline"
+        ),
+        {"vid": version_id},
+    )
+    await session.execute(
+        text(
+            "INSERT INTO chunks (doc_id, chunk_seq, is_headline, body_text, "
+            "  embedding, embedding_model_version, version_id, is_current) "
+            f"VALUES (:doc_id, 0, true, :body, '{_halfvec_literal(embed)}'::halfvec(1024), "
+            ":mv, :vid, false)"
+        ),
+        {
+            "doc_id": doc_id,
+            "body": headline.body_text,
+            "mv": _EMBEDDING_MODEL_VERSION,
+            "vid": version_id,
+        },
+    )
+    await session.execute(
+        text(
+            "UPDATE document_versions SET headline_fingerprint = :fp WHERE id = :id"
+        ),
+        {"fp": headline_fingerprint, "id": version_id},
+    )
+
+
+async def mark_failed(
+    session: AsyncSession, version_id: int, error: str
+) -> None:
+    """ADR-0010 §9: insert a unique-keyed processing_failed notification."""
+    cv = await load_candidate(session, version_id)
+    await session.execute(
+        text(
+            "UPDATE document_versions SET index_status = 'failed', "
+            "  index_error = :err WHERE id = :id"
+        ),
+        {"err": error, "id": version_id},
+    )
+    if cv.owner_user_id is None:
+        return
+    await session.execute(
+        text(
+            "INSERT INTO notifications (user_id, event_key, kind, payload_json) "
+            "VALUES (:uid, :ek, 'processing_failed', "
+            "        jsonb_build_object('doc_id', cast(:doc_id as bigint), "
+            "                           'version_id', cast(:vid as bigint), "
+            "                           'error', cast(:err as text))) "
+            "ON CONFLICT (user_id, event_key) DO NOTHING"
+        ),
+        {
+            "uid": cv.owner_user_id,
+            "ek": f"processing_failed:{version_id}",
+            "doc_id": cv.doc_id,
+            "vid": version_id,
+            "err": error,
+        },
+    )
 
 
 async def list_own_documents(
