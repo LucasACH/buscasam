@@ -7,6 +7,8 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { ME_QUERY_KEY, useUser, type User } from "@/lib/useUser";
 
+import { NotificationBell } from "./NotificationBell";
+
 const ROLE_LABEL: Record<User["role"], string> = {
   estudiante: "Estudiante",
   docente: "Docente",
@@ -44,6 +46,7 @@ export function AuthNav() {
 
   return (
     <nav className="flex items-center gap-3">
+      <NotificationBell />
       {user.picture_url ? (
         <Image
           src={user.picture_url}
