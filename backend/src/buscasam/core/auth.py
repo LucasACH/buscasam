@@ -88,6 +88,9 @@ async def load_session(
     Returns `(GUEST, None)` on no/invalid/expired `sid` — never raises. When
     the session is active and `last_seen_at < now() - 24h`, refreshes the row
     and returns the sid bytes so the caller can re-emit the cookie (ADR-0005 §6).
+
+    Commits on refresh — callers sharing this `AsyncSession` must not expect
+    a single transaction across this call and their own writes.
     """
     if not sid_cookie:
         return GUEST, None
@@ -125,7 +128,11 @@ async def current_user(
     response: Response,
     session: AsyncSession = Depends(get_session),
 ) -> UserCtx:
-    """FastAPI dep: resolve sid cookie → UserCtx. Reissues cookie on refresh."""
+    """FastAPI dep: resolve sid cookie → UserCtx. Reissues cookie on refresh.
+
+    May commit (via `load_session`) before the route handler runs; route
+    handlers sharing this session do not get a single transaction.
+    """
     user_ctx, reissue = await load_session(
         session, sid_cookie=request.cookies.get(SID_COOKIE)
     )

@@ -21,7 +21,7 @@ auth_router = APIRouter(prefix="/api/auth")
 
 class MeResponse(BaseModel):
     user_id: int
-    role: str
+    role: auth.Role
     name: str
     picture_url: str | None
     hd: str

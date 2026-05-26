@@ -383,6 +383,24 @@ async def test_me_200_and_401(client, session):
     assert sessions_after == sessions_before
 
 
+async def test_me_stale_session_reissues_cookie(client, session):
+    """Stale session (last_seen_at > 24h ago) returns 200 with a fresh Set-Cookie."""
+    uid = await _seed_user(session)
+    stale_sid = await _seed_session(
+        session,
+        user_id=uid,
+        last_seen_at=datetime.now(timezone.utc) - timedelta(hours=25),
+    )
+
+    r = await client.get(
+        "/api/me", headers={"cookie": f"sid={_sid_cookie_value(stale_sid)}"}
+    )
+    assert r.status_code == 200
+    set_cookie = r.headers.get("set-cookie", "").lower()
+    assert "sid=" in set_cookie
+    assert "max-age=0" not in set_cookie
+
+
 async def test_logout_clears_cookie_and_session(client, session):
     uid = await _seed_user(session)
     sid = await _seed_session(session, user_id=uid)
