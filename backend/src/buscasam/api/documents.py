@@ -1,8 +1,10 @@
 """HTTP surface for document management endpoints."""
 from __future__ import annotations
 
+from datetime import date
+
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from buscasam.api.deps import get_session
@@ -13,7 +15,9 @@ from buscasam.core.documents import (
     assert_manageable,
     attach_main_version,
     create_draft,
+    get_draft_state,
     list_own_documents,
+    update_draft_metadata,
 )
 from buscasam.core.extract import PDFEncryptionError, probe_encrypted
 
@@ -113,6 +117,72 @@ async def upload_main_file(
         original_filename=file.filename or "upload",
     )
     return {}
+
+
+class DraftStateDTO(BaseModel):
+    title: str
+    index_status: str
+    staged_abstract: str | None
+    staged_keywords: list[str]
+    staged_fecha: date | None
+    index_error: str | None
+    publish_gate_reason: str | None
+
+
+class UpdateDraftRequest(BaseModel):
+    title: str | None = None
+    abstract: str | None = None
+    keywords: list[str] | None = None
+    fecha: date | None = None
+    visibility: str | None = None
+    area_path: str | None = None
+    document_type: str | None = None
+
+
+@router.get("/documents/{doc_id}/draft", response_model=DraftStateDTO)
+async def get_draft(
+    doc_id: int,
+    user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
+    session: AsyncSession = Depends(get_session),
+) -> DraftStateDTO:
+    try:
+        state = await get_draft_state(session, user_ctx, doc_id)
+    except DocumentNotFound:
+        raise HTTPException(status_code=404)
+    return DraftStateDTO(
+        title=state.title,
+        index_status=state.index_status,
+        staged_abstract=state.staged_abstract,
+        staged_keywords=state.staged_keywords,
+        staged_fecha=state.staged_fecha,
+        index_error=state.index_error,
+        publish_gate_reason=state.publish_gate_reason,
+    )
+
+
+@router.patch("/documents/{doc_id}", status_code=204)
+async def patch_draft(
+    doc_id: int,
+    body: UpdateDraftRequest,
+    user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    try:
+        await update_draft_metadata(
+            session,
+            user_ctx,
+            doc_id,
+            title=body.title,
+            abstract=body.abstract,
+            keywords=body.keywords,
+            fecha=body.fecha,
+            visibility=body.visibility,
+            area_path=body.area_path,
+            document_type=body.document_type,
+        )
+    except DocumentNotFound:
+        raise HTTPException(status_code=404)
+    return Response(status_code=204)
 
 
 @router.get("/me/documents", response_model=list[OwnDocDTO])
