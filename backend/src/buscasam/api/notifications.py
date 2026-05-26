@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api/notifications")
 class NotificationDTO(BaseModel):
     id: int
     kind: str
-    payload: dict
+    payload: dict[str, object]
     read_at: datetime | None
     created_at: datetime
 
@@ -107,14 +107,11 @@ async def mark_all_read(
     user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
     session: AsyncSession = Depends(get_session),
 ) -> MarkAllReadResponse:
-    rows = (
-        await session.execute(
-            text(
-                "UPDATE notifications SET read_at = now() "
-                "WHERE user_id = :uid AND read_at IS NULL "
-                "RETURNING id"
-            ),
-            {"uid": user_ctx.user_id},
-        )
-    ).fetchall()
-    return MarkAllReadResponse(count=len(rows))
+    result = await session.execute(
+        text(
+            "UPDATE notifications SET read_at = now() "
+            "WHERE user_id = :uid AND read_at IS NULL"
+        ),
+        {"uid": user_ctx.user_id},
+    )
+    return MarkAllReadResponse(count=result.rowcount)
