@@ -16,8 +16,21 @@ from buscasam.settings import settings
 from tests.factories import make_user
 
 _PLAIN_PDF = b"%PDF-1.4\n1 0 obj\n<<\n/Type /Catalog\n>>\nendobj\n"
-_ENCRYPTED_PDF = b"%PDF-1.4\n1 0 obj\n<<\n/Encrypt 2 0 R\n>>\nendobj\n"
 _PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
+
+
+def _encrypted_pdf() -> bytes:
+    from fpdf import FPDF
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=12)
+    pdf.cell(0, 10, "secret")
+    pdf.set_encryption(owner_password="owner", user_password="user")
+    return bytes(pdf.output())
+
+
+_ENCRYPTED_PDF = _encrypted_pdf()
 
 
 @pytest.fixture

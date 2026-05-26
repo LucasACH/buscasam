@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://buscasam:buscasam@localhost:5432/buscasam"
     tei_url: str = "http://localhost:8080"
     min_semantic_similarity: float = 0.78
+    # ADR-0007 §12: per-row provenance stamp for the extraction pipeline.
+    extract_pipeline_version: str = "extract-v1"
 
     base_url: str = "http://localhost:3000"
     secret_key: str = DEV_SECRET_KEY

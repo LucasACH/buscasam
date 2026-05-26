@@ -76,7 +76,8 @@ async def test_write_indexed_candidate_inserts_chunks_and_updates_version(sessio
         await session.execute(
             text(
                 "SELECT index_status, staged_abstract, staged_keywords, "
-                "  staged_fecha, headline_fingerprint, indexed_at "
+                "  staged_fecha, headline_fingerprint, indexed_at, "
+                "  extract_pipeline_version "
                 "FROM document_versions WHERE id = :id"
             ),
             {"id": version_id},
@@ -87,6 +88,8 @@ async def test_write_indexed_candidate_inserts_chunks_and_updates_version(sessio
     assert row["staged_keywords"] == ["a", "b"]
     assert row["headline_fingerprint"] == fp
     assert row["indexed_at"] is not None
+    # ADR-0007 §12: per-row provenance stamp must be persisted, not 'unknown'.
+    assert row["extract_pipeline_version"] != "unknown"
 
     chunk_rows = (
         await session.execute(
@@ -167,8 +170,21 @@ async def test_write_headline_replaces_only_the_headline_chunk(session):
         headline_fingerprint=fp,
     )
 
+    # Simulate the user edit that the refresh_headline task is reacting to:
+    # staged_abstract is updated to 'r2' before the task runs.
+    titulo = (
+        await session.execute(
+            text(
+                "UPDATE document_versions SET staged_abstract = 'r2' "
+                "WHERE id = :vid "
+                "RETURNING (SELECT titulo FROM documents WHERE id = doc_id)"
+            ),
+            {"vid": version_id},
+        )
+    ).scalar_one()
+
     new_headline = Chunk(body_text="Replaced headline", is_headline=True, chunk_seq=0)
-    new_fp = headline_fingerprint("t", "r2")
+    new_fp = headline_fingerprint(titulo, "r2")
     await documents.write_headline(
         session, version_id, new_headline, np.full(1024, 0.2, dtype=np.float16), new_fp,
     )
@@ -202,3 +218,59 @@ async def test_write_headline_replaces_only_the_headline_chunk(session):
         )
     ).scalar_one()
     assert fp_row == new_fp
+
+
+async def test_write_headline_skips_when_fingerprint_no_longer_matches(session):
+    """ADR-0007 §10: a stale refresh_headline must not stomp on newer state."""
+    uid = await make_user(session)
+    version_id = await _make_candidate_version(session, owner_id=uid)
+
+    body = [Chunk(body_text="body", is_headline=False, chunk_seq=1)]
+    headline = Chunk(body_text="Original headline", is_headline=True, chunk_seq=0)
+    embeds = [np.full(1024, 0.1, dtype=np.float16) for _ in range(2)]
+    meta = IndexableMetadata(abstract="initial", keywords=[], fecha=None)
+    titulo = (
+        await session.execute(
+            text(
+                "SELECT d.titulo FROM document_versions v "
+                "JOIN documents d ON d.id = v.doc_id WHERE v.id = :id"
+            ),
+            {"id": version_id},
+        )
+    ).scalar_one()
+    initial_fp = headline_fingerprint(titulo, "initial")
+    await documents.write_indexed_candidate(
+        session, version_id, body=body, headline=headline, embeds=embeds, meta=meta,
+        headline_fingerprint=initial_fp,
+    )
+
+    # The task computed its embedding against 'initial', but in the meantime
+    # the user edited the abstract again. Stale write must be a no-op.
+    await session.execute(
+        text("UPDATE document_versions SET staged_abstract = 'newer' WHERE id = :vid"),
+        {"vid": version_id},
+    )
+    stale_headline = Chunk(body_text="STALE headline", is_headline=True, chunk_seq=0)
+    stale_fp = headline_fingerprint(titulo, "initial")
+    await documents.write_headline(
+        session, version_id, stale_headline,
+        np.full(1024, 0.2, dtype=np.float16), stale_fp,
+    )
+
+    headlines = (
+        await session.execute(
+            text(
+                "SELECT body_text FROM chunks "
+                "WHERE version_id = :vid AND is_headline"
+            ),
+            {"vid": version_id},
+        )
+    ).scalars().all()
+    assert headlines == ["Original headline"]
+    fp_row = (
+        await session.execute(
+            text("SELECT headline_fingerprint FROM document_versions WHERE id = :id"),
+            {"id": version_id},
+        )
+    ).scalar_one()
+    assert fp_row == initial_fp

@@ -6,6 +6,7 @@ directly (ADR-0008 §3, architecture test in tests/unit/test_jobs_architecture.p
 """
 from __future__ import annotations
 
+import asyncio
 import io
 import logging
 import zipfile
@@ -109,7 +110,10 @@ async def _run_ocr_index_document(
 
     out_buf = io.BytesIO()
     try:
-        ocrmypdf.ocr(
+        # ADR-0008 §11: OCR can take ~30 min on CPU. Run in a worker thread so
+        # the event loop stays responsive (heartbeats, signals, cancellation).
+        await asyncio.to_thread(
+            ocrmypdf.ocr,
             io.BytesIO(bytes(raw_pdf)),
             out_buf,
             language=["spa", "eng"],
@@ -231,6 +235,12 @@ async def _raw_psycopg_conn(session: AsyncSession):
 async def _defer_with_savepoint(task, *, lock: str, **defer_kwargs) -> None:
     """Wrap procrastinate's defer in a SAVEPOINT so an AlreadyEnqueued duplicate
     does not abort the outer SQLAlchemy transaction (ADR-0008 §7).
+
+    The SAVEPOINT is issued through the raw psycopg cursor — not via
+    `session.begin_nested()` — because procrastinate's defer_async writes
+    directly on the underlying psycopg connection. SQLAlchemy's savepoint
+    layer cannot recover the connection's `InFailedSqlTransaction` state on
+    a procrastinate UniqueViolation; a cursor-level ROLLBACK TO SAVEPOINT can.
     """
     session: AsyncSession = defer_kwargs.pop("session")
     conn = await _raw_psycopg_conn(session)

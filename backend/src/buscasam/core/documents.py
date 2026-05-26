@@ -9,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from buscasam.core.document_access import manageable_where
+from buscasam.settings import settings
 
 if TYPE_CHECKING:
     from buscasam.core.auth import UserCtx
@@ -241,14 +242,15 @@ async def write_indexed_candidate(
             text(
                 "INSERT INTO chunks (doc_id, chunk_seq, is_headline, body_text, "
                 "  embedding, embedding_model_version, version_id, is_current) "
-                f"VALUES (:doc_id, :seq, :hl, :body, '{_halfvec_literal(emb)}'::halfvec(1024), "
-                ":mv, :vid, false)"
+                "VALUES (:doc_id, :seq, :hl, :body, "
+                "        cast(:emb as halfvec(1024)), :mv, :vid, false)"
             ),
             {
                 "doc_id": doc_id,
                 "seq": c.chunk_seq,
                 "hl": c.is_headline,
                 "body": c.body_text,
+                "emb": _halfvec_literal(emb),
                 "mv": _EMBEDDING_MODEL_VERSION,
                 "vid": version_id,
             },
@@ -262,6 +264,7 @@ async def write_indexed_candidate(
             "  staged_keywords = :keywords, "
             "  staged_fecha = :fecha, "
             "  headline_fingerprint = :fp, "
+            "  extract_pipeline_version = :pv, "
             "  indexed_at = now() "
             "WHERE id = :id"
         ),
@@ -270,6 +273,7 @@ async def write_indexed_candidate(
             "keywords": meta.keywords,
             "fecha": meta.fecha,
             "fp": headline_fingerprint,
+            "pv": settings.extract_pipeline_version,
             "id": version_id,
         },
     )
@@ -282,12 +286,29 @@ async def write_headline(
     embed: np.ndarray,
     headline_fingerprint: str,
 ) -> None:
-    doc_id = (
+    """ADR-0007 §10: only write if the row's title+abstract still match the
+    fingerprint the caller computed for this embedding. A racing edit that
+    updates staged_abstract between embed-time and write-time wins."""
+    from buscasam.core.chunk import headline_fingerprint as _compute_fp
+
+    row = (
         await session.execute(
-            text("SELECT doc_id FROM document_versions WHERE id = :id"),
+            text(
+                "SELECT v.doc_id, d.titulo, v.staged_abstract "
+                "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
+                "WHERE v.id = :id FOR UPDATE OF v"
+            ),
             {"id": version_id},
         )
-    ).scalar_one()
+    ).mappings().one_or_none()
+    if row is None:
+        return
+    current_fp = _compute_fp(row["titulo"], row["staged_abstract"] or "")
+    if current_fp != headline_fingerprint:
+        # Title or abstract changed since this task computed its embedding;
+        # let the newer refresh_headline task own the write.
+        return
+    doc_id = row["doc_id"]
 
     await session.execute(
         text(
@@ -299,12 +320,13 @@ async def write_headline(
         text(
             "INSERT INTO chunks (doc_id, chunk_seq, is_headline, body_text, "
             "  embedding, embedding_model_version, version_id, is_current) "
-            f"VALUES (:doc_id, 0, true, :body, '{_halfvec_literal(embed)}'::halfvec(1024), "
-            ":mv, :vid, false)"
+            "VALUES (:doc_id, 0, true, :body, "
+            "        cast(:emb as halfvec(1024)), :mv, :vid, false)"
         ),
         {
             "doc_id": doc_id,
             "body": headline.body_text,
+            "emb": _halfvec_literal(embed),
             "mv": _EMBEDDING_MODEL_VERSION,
             "vid": version_id,
         },

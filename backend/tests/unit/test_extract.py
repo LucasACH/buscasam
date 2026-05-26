@@ -123,14 +123,25 @@ def test_probe_encrypted_accepts_plain_pdf():
     pdf.add_page()
     pdf.set_font("Helvetica", size=12)
     pdf.cell(0, 10, "hi")
-    head = bytes(pdf.output())[:4096]
-    probe_encrypted(head)  # should not raise
+    probe_encrypted(bytes(pdf.output()))  # should not raise
 
 
 def test_probe_encrypted_rejects_encrypted_pdf():
-    encrypted = b"%PDF-1.4\n1 0 obj\n<< /Encrypt 2 0 R >>\nendobj\n"
+    from fpdf import FPDF
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=12)
+    pdf.cell(0, 10, "secret")
+    pdf.set_encryption(owner_password="owner", user_password="user")
+    payload = bytes(pdf.output())
     with pytest.raises(PDFEncryptionError):
-        probe_encrypted(encrypted)
+        probe_encrypted(payload)
+
+
+def test_probe_encrypted_does_not_raise_on_corrupted_non_encrypted_input():
+    """ADR-0007 §9: parse failures unrelated to encryption fall through to async."""
+    probe_encrypted(b"%PDF-1.4\nnot a real pdf body")
 
 
 async def test_extract_pdf_below_threshold_raises_ocr_required(blob_root):

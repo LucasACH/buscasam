@@ -49,10 +49,23 @@ class IndexableMetadata:
     fecha: date | None
 
 
-def probe_encrypted(head_bytes: bytes) -> None:
-    """Raises PDFEncryptionError if head_bytes indicate a password-protected PDF."""
-    if b"/Encrypt" in head_bytes:
-        raise PDFEncryptionError("PDF is password-protected")
+def probe_encrypted(data: bytes) -> None:
+    """ADR-0007 §9: raise PDFEncryptionError if `data` is a password-protected PDF.
+
+    Uses pdfminer to detect the encryption dictionary properly. Non-encryption
+    parse failures (corrupted, truncated) are deferred to async indexing per
+    ADR-0007 §9 and do not surface here.
+    """
+    from pdfminer.pdfdocument import PDFDocument
+    from pdfminer.pdfdocument import PDFPasswordIncorrect as _PDFPwd
+    from pdfminer.pdfparser import PDFParser
+
+    try:
+        PDFDocument(PDFParser(io.BytesIO(data)))
+    except _PDFPwd as e:
+        raise PDFEncryptionError("PDF is password-protected") from e
+    except Exception:
+        return
 
 
 async def _read_blob(sha256: str) -> bytes:
@@ -100,57 +113,55 @@ def _extract_odt(data: bytes) -> ExtractedDoc:
     return _build_doc_from_paragraphs(paragraphs)
 
 
-def _extract_pdf(data: bytes) -> ExtractedDoc:
+def _extract_pdf(data: bytes) -> tuple[ExtractedDoc, int]:
+    """Returns (doc, page_count). page_count includes blank pages (for OCR gate)."""
     from pdfminer.high_level import extract_text
     from pdfminer.pdfdocument import PDFDocument
     from pdfminer.pdfparser import PDFParser
 
     parser = PDFParser(io.BytesIO(data))
     pdfdoc = PDFDocument(parser)
-    page_count = sum(1 for _ in pdfdoc.get_pages()) if hasattr(pdfdoc, "get_pages") else 1
-    if page_count == 0:
-        page_count = 1
-
-    full_text = extract_text(io.BytesIO(data)) or ""
-    # pdfminer separates pages by form feed \x0c; build page_breaks from those.
-    page_breaks: list[int] = []
-    cursor = 0
-    pages = full_text.split("\x0c")
-    paragraphs: list[str] = []
-    for page_idx, page in enumerate(pages):
-        if not page:
-            continue
-        # paragraphs inside a page split on blank lines
-        for para in page.split("\n\n"):
-            para = para.strip()
-            if para:
-                paragraphs.append(para)
-        if page_idx < len(pages) - 1:
-            # cumulative offset into the assembled text
-            pass
-
-    doc = _build_doc_from_paragraphs(paragraphs)
-
-    # Recompute page_breaks against assembled text — best-effort.
-    # If pdfminer reports a multi-page document, mark even splits across text.
-    if page_count > 1 and doc.text:
-        step = max(1, len(doc.text) // page_count)
-        page_breaks = [min(len(doc.text), step * (i + 1)) for i in range(page_count - 1)]
-    return ExtractedDoc(
-        text=doc.text,
-        paragraph_breaks=doc.paragraph_breaks,
-        page_breaks=page_breaks,
-        raw_metadata=getattr(pdfdoc, "info", [{}])[0] if getattr(pdfdoc, "info", None) else {},
+    raw_metadata = (
+        getattr(pdfdoc, "info", [{}])[0] if getattr(pdfdoc, "info", None) else {}
     )
 
+    full_text = extract_text(io.BytesIO(data)) or ""
+    # pdfminer separates pages with form feed \x0c, trailing one after the last page.
+    pages = full_text.split("\x0c")
+    if pages and pages[-1] == "":
+        pages = pages[:-1]
+    page_count = max(1, len(pages))
 
-def _page_count(data: bytes) -> int:
-    from pdfminer.pdfdocument import PDFDocument
-    from pdfminer.pdfparser import PDFParser
+    pieces: list[str] = []
+    paragraph_breaks: list[int] = []
+    page_breaks: list[int] = []
+    cursor = 0
+    for page_idx, page in enumerate(pages):
+        for para in page.split("\n\n"):
+            stripped = para.strip()
+            if not stripped:
+                continue
+            pieces.append(stripped)
+            cursor += len(stripped)
+            paragraph_breaks.append(cursor)
+            pieces.append("\n\n")
+            cursor += 2
+        if page_idx < len(pages) - 1:
+            page_breaks.append(cursor)
 
-    parser = PDFParser(io.BytesIO(data))
-    pdfdoc = PDFDocument(parser)
-    return max(1, sum(1 for _ in pdfdoc.get_pages())) if hasattr(pdfdoc, "get_pages") else 1
+    text = "".join(pieces).rstrip()
+    paragraph_breaks = [b for b in paragraph_breaks if b <= len(text)]
+    page_breaks = [b for b in page_breaks if 0 < b <= len(text)]
+
+    return (
+        ExtractedDoc(
+            text=text,
+            paragraph_breaks=paragraph_breaks,
+            page_breaks=page_breaks,
+            raw_metadata=raw_metadata,
+        ),
+        page_count,
+    )
 
 
 _ABSTRACT_HEADING = re.compile(
@@ -211,7 +222,10 @@ def _derive_keywords(text: str) -> list[str]:
         return []
 
 
-def _derive_fecha(text: str) -> date | None:
+_PDF_CREATION_DATE_RE = re.compile(r"^D:(\d{4})")
+
+
+def _derive_fecha_from_text(text: str) -> date | None:
     head = text[: 8000]
     current_year = date.today().year
     best: int | None = None
@@ -227,11 +241,43 @@ def _derive_fecha(text: str) -> date | None:
     return date(best, 1, 1) if best else None
 
 
+def _derive_fecha_from_metadata(raw_metadata: dict) -> date | None:
+    """ADR-0007 §8 step 2: fall back to PDF `/CreationDate` if plausible.
+
+    PDF dates use `D:YYYYMMDDHHmmSS+TZ`; values may be `str` or `bytes`.
+    """
+    if not raw_metadata:
+        return None
+    raw = raw_metadata.get("CreationDate") or raw_metadata.get(b"CreationDate")
+    if raw is None:
+        return None
+    if isinstance(raw, bytes):
+        try:
+            raw = raw.decode("ascii", errors="ignore")
+        except Exception:
+            return None
+    m = _PDF_CREATION_DATE_RE.match(raw)
+    if not m:
+        return None
+    year = int(m.group(1))
+    current_year = date.today().year
+    if not (1970 <= year <= current_year + 1):
+        return None
+    return date(year, 1, 1)
+
+
+def _derive_fecha(doc: ExtractedDoc) -> date | None:
+    from_text = _derive_fecha_from_text(doc.text)
+    if from_text is not None:
+        return from_text
+    return _derive_fecha_from_metadata(doc.raw_metadata)
+
+
 def derive_metadata(doc: ExtractedDoc) -> IndexableMetadata:
     return IndexableMetadata(
         abstract=_derive_abstract(doc.text),
         keywords=_derive_keywords(doc.text),
-        fecha=_derive_fecha(doc.text),
+        fecha=_derive_fecha(doc),
     )
 
 
@@ -243,11 +289,9 @@ async def extract(sha256: str, mime: str) -> ExtractedDoc:
     if mime == _ODT_MIME:
         return _extract_odt(data)
     if mime == _PDF_MIME:
-        doc = _extract_pdf(data)
+        doc, page_count = _extract_pdf(data)
         # ADR-0007 §4: if average chars/page < threshold, OCR is required.
-        pages = _page_count(data)
-        avg = len(doc.text) / pages
-        if avg < OCR_MIN_CHARS_PER_PAGE:
+        if len(doc.text) / page_count < OCR_MIN_CHARS_PER_PAGE:
             raise OCRRequired(sha256)
         return doc
     raise ValueError(f"Unsupported mime: {mime}")
