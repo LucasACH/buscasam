@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { Suspense, useCallback, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -16,10 +16,19 @@ function parsePagina(raw: string | null): number {
 }
 
 export default function BuscarPage() {
+  return (
+    <Suspense fallback={null}>
+      <BuscarPageInner />
+    </Suspense>
+  );
+}
+
+function BuscarPageInner() {
   const router = useRouter();
   const params = useSearchParams();
   const q = params.get("q") ?? "";
   const pagina = parsePagina(params.get("pagina"));
+  const [qInput, setQInput] = useState(q);
 
   const update = useCallback(
     (next: { q?: string; pagina?: number }) => {
@@ -46,7 +55,14 @@ export default function BuscarPage() {
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8">
       <h1 className="text-2xl font-semibold tracking-tight">Buscar</h1>
-      <form className="mt-4" role="search" onSubmit={(e) => e.preventDefault()}>
+      <form
+        className="mt-4"
+        role="search"
+        onSubmit={(e) => {
+          e.preventDefault();
+          update({ q: qInput.trim() });
+        }}
+      >
         <label htmlFor="q" className="sr-only">
           Consulta
         </label>
@@ -55,8 +71,8 @@ export default function BuscarPage() {
           type="search"
           className="border-input bg-background focus-visible:ring-ring h-10 w-full rounded-lg border px-3 text-sm outline-none focus-visible:ring-2"
           placeholder="Buscar por título, tema, autor…"
-          value={q}
-          onChange={(e) => update({ q: e.target.value })}
+          value={qInput}
+          onChange={(e) => setQInput(e.target.value)}
         />
       </form>
 

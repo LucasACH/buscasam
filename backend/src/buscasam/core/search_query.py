@@ -54,6 +54,7 @@ class ResultRow:
     tipo: str
     abstract: str | None
     snippet: str
+    snippet_is_html: bool
 
 
 @dataclass(frozen=True)
@@ -174,6 +175,7 @@ async def _run_recientes(session: AsyncSession, filters: Filters) -> Results:
 
     rows = (await session.execute(sql, params)).all()
     total = rows[0].total if rows else 0
+    snippet_is_html = bool(filters.q)
     return Results(
         rows=[
             ResultRow(
@@ -184,6 +186,7 @@ async def _run_recientes(session: AsyncSession, filters: Filters) -> Results:
                 tipo=r.tipo,
                 abstract=r.abstract,
                 snippet=r.snippet,
+                snippet_is_html=snippet_is_html,
             )
             for r in rows
         ],
@@ -272,6 +275,7 @@ async def _run_lexical(session: AsyncSession, filters: Filters) -> Results:
                 tipo=r.tipo,
                 abstract=r.abstract,
                 snippet=r.snippet,
+                snippet_is_html=True,
             )
             for r in rows
         ],
@@ -384,6 +388,7 @@ async def _run_hybrid(
                     )
                 ELSE LEFT(COALESCE(d.abstract, ''), 200)
             END AS snippet,
+            (c.body_text IS NOT NULL) AS snippet_is_html,
             (SELECT count(*) FROM capped) AS total
         FROM capped c
         JOIN documents d ON d.id = c.doc_id
@@ -415,6 +420,7 @@ async def _run_hybrid(
                 tipo=r.tipo,
                 abstract=r.abstract,
                 snippet=r.snippet,
+                snippet_is_html=r.snippet_is_html,
             )
             for r in rows
         ],

@@ -22,7 +22,8 @@ export function useSearch(params: SearchParams) {
         params: { query: { q: params.q, pagina: params.pagina } },
       });
       if (error) throw error;
-      return data!;
+      if (!data) throw new Error("empty search response");
+      return data;
     },
   });
   return {

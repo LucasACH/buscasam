@@ -73,6 +73,8 @@ export interface components {
             abstract: string | null;
             /** Snippet */
             snippet: string;
+            /** Snippet Is Html */
+            snippet_is_html: boolean;
         };
         /** SearchResponse */
         SearchResponse: {

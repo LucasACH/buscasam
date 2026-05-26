@@ -36,10 +36,14 @@ export function ResultCard({ result }: { result: Result }) {
           {truncate(result.abstract, 280)}
         </p>
       )}
-      <p
-        className="mt-3 text-sm leading-relaxed [&_mark]:bg-yellow-200 [&_mark]:px-0.5 [&_mark]:font-medium"
-        dangerouslySetInnerHTML={{ __html: result.snippet }}
-      />
+      {result.snippet_is_html ? (
+        <p
+          className="mt-3 text-sm leading-relaxed [&_mark]:bg-yellow-200 [&_mark]:px-0.5 [&_mark]:font-medium"
+          dangerouslySetInnerHTML={{ __html: result.snippet }}
+        />
+      ) : (
+        <p className="mt-3 text-sm leading-relaxed">{result.snippet}</p>
+      )}
     </article>
   );
 }
