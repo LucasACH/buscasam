@@ -14,7 +14,9 @@ Implements the `/buscar` slice end-to-end: URL-driven hybrid search over the pú
 
 **Responsibilities:** Hybrid SQL — lexical CTE (`es_unaccent`, `ts_rank_cd`, `ts_headline` for snippet), semantic CTE (pgvector cosine, HNSW iterative scan), RRF fusion, chunk→doc aggregation via `MAX(score)`, top-200 cap, área (`ltree <@`), tipo (`IN`), fecha (year range), `orden=recientes` partial-btree path. Owns snippet generation: `ts_headline` on lexical rows, `LEFT(abstract, 200)` for pure-semantic rows. Truncation of abstract to ~280 chars happens here.
 
-**Seams:** None in PRD-1 scope. The access fragment is a parameter, not an adapter (no second implementation exists yet — only `document_access.invitado_fragment()`). Score normalization is locked at RRF only.
+**Internal seams:** `_lexical_candidates_ctes(where, filter_clauses, cap)` produces the `lex_scored`/`lex_best`/`lex_ranked` CTE chain (best-matching chunk per readable doc, optional top-N cap) used identically by `_run_recientes`, `_run_lexical`, and the lex side of `_run_hybrid`. `_headline_expr(body_col)` produces the `ts_headline` SQL expression. These are private to the module — the external interface is unchanged.
+
+**Seams:** None in PRD-1 scope at the external interface. The access fragment is a parameter, not an adapter (no second implementation exists yet — only `document_access.invitado_fragment()`). Score normalization is locked at RRF only.
 
 **Depth note:** Owns every SQL detail of ranked retrieval. Without it, RRF, the iterative-scan setting, the chunk-aggregation rule, the headline-vs-body snippet fallback, and the access fragment would scatter across endpoints. Deletion test: callers would each rewrite ~150 lines of SQL with subtly different semantics. ADR-0001 + ADR-0003 §3 lock this depth.
 
@@ -27,6 +29,8 @@ Implements the `/buscar` slice end-to-end: URL-driven hybrid search over the pú
 **Responsibilities:** Sole owner of "what counts as a readable document." Visibility, publication state, soft-delete, moderation-hidden are joined into one fragment so search, recientes ordering, future detail, related, and sitemap reuse identical semantics.
 
 **Seams:** Conceptual seam on visibility role (invitado / autenticated UNSAM / owner-or-coauthor) but only one adapter exists at PRD-1 — no real seam yet. PRD-2 makes it real.
+
+**Alignment invariant:** Migration 0007's `documents_publico_recientes` partial index has the same predicate text. Postgres' predicate-implication check is textual; drift silently disables the index. Guarded by `tests/integration/test_indices.py::test_invitado_predicate_matches_partial_index_where`, which reads `pg_get_expr(indpred, indrelid)` and compares (normalised for whitespace, `::text` casts, parens) to `invitado_where("documents")`. Future migrations touching this index should construct the WHERE from `invitado_where`.
 
 **Depth note:** A central security predicate. The deletion test is hard: every leak in the MVP would trace back to this module. ADR-0010 §6 locks it as the chokepoint for every document-derived read.
 
@@ -44,15 +48,27 @@ Implements the `/buscar` slice end-to-end: URL-driven hybrid search over the pú
 
 ---
 
+### `core/search`
+
+**Interface:** `search.execute(session, tei, *, filters, user_ctx, min_semantic_similarity) -> ExecuteResult`. Inputs: validated `Filters`, the requester's `UserCtx`, the TEI client, and the calibrated semantic floor. Returns `ExecuteResult { rows, total, saturated, unfiltered_total: int | None, lexical_fallback: bool }`. Invariants: `unfiltered_total` is populated iff any filter is active and is computed under the same `user_ctx` and `embedding` as the primary call; `lexical_fallback` is always `False` under `orden=recientes` (no embedding requested).
+
+**Responsibilities:** Sole owner of the silent lexical-fallback policy (ADR-0002 §8: catch `EmbedUnavailable`, substitute `embedding=None`, log `lexical_fallback_rate`); sole owner of the "second call with filters dropped" rule for `unfiltered_total`; chooses whether to embed at all (skipped under `orden=recientes`).
+
+**Seams:** Embedder is concrete (`core.embed`) — no adapter at MVP. The retrieval adapter is `core.search_query.run` (single implementation).
+
+**Depth note:** Sits between router and `search_query`. Deletion test: the three policies (fallback, unfiltered double-call, embed-skip on recientes) would each leak into the router and have to be re-pasted into every future authenticated route (PRD-2 onward). The route shrinks to validation + DTO shaping — both URL-shape concerns it correctly owns.
+
+---
+
 ### `api/search` (FastAPI router)
 
-**Interface:** `GET /api/search?q=&area=&tipo=&tipo=&desde=&hasta=&orden=&pagina=`. Returns `{results: ResultDTO[], total: int, unfiltered_total: int | null}`. `unfiltered_total` populated only when ≥1 filter is active; same access predicate applied. Validates `q` empty ↔ `orden=recientes` (rejects `orden=relevancia` with empty q). Validates `pagina ≤ 20` under relevance.
+**Interface:** `GET /api/search?q=&area=&tipo=&tipo=&desde=&hasta=&orden=&pagina=`. Returns `{results: ResultDTO[], total: int, saturated: bool, unfiltered_total: int | null, lexical_fallback: bool}`. Validates `q` empty ↔ `orden=recientes` (rejects `orden=relevancia` with empty q). Validates `pagina ≤ 20` under relevance. Validates `desde ≤ hasta`.
 
-**Responsibilities:** URL-param → Pydantic request DTO; calls `embed(q, "query")`, catching `EmbedUnavailable` and continuing with `embedding=None` while logging `lexical_fallback_rate`; constructs the invitado `UserCtx`; calls `search_query.run(filters, user_ctx, embedding)` once with active filters; if any filter active, calls again with filters dropped (same `user_ctx`, same `embedding`) for `unfiltered_total`; shapes ORM-free `ResultDTO`s. The access predicate stays inside `search_query` — the router never sees a fragment.
+**Responsibilities:** URL-param → Pydantic Query validation; constructs `Filters` and the invitado `UserCtx`; calls `search.execute(...)`; shapes ORM-free `ResultDTO`s onto `SearchResponse`. Orchestration (embed/fallback, unfiltered double-call, telemetry) lives in `core/search`.
 
-**Seams:** None. The "two calls for unfiltered_total" is implementation, not architecture.
+**Seams:** None.
 
-**Depth note:** The orchestrator. Centralizes the lexical-fallback decision, the unfiltered-count rule, and the empty-q validation so the frontend never replays them. Deletion test: those three policies would otherwise leak into either `search_query` (wrong layer — would couple SQL to URL contract) or the frontend (wrong process — would re-bake fallback).
+**Depth note:** Thin by design now — pure HTTP edge. Deletion test for the route alone: trivial. Deletion test for the route + `core/search` together: the policy bundle reappears in every future search-style endpoint.
 
 ---
 
@@ -157,11 +173,11 @@ Implements the `/buscar` slice end-to-end: URL-driven hybrid search over the pú
                 |
               GET /api/search
                 |
-              api/search ─── core/embed ─── TEI sidecar
-                |       \
-                |        \─ core/document_access (invitado_fragment)
+              api/search (validation + DTO)
                 |
-              core/search_query (consumes embedding + access fragment)
+              core/search (execute) ─── core/embed ─── TEI sidecar
+                |
+              core/search_query ─── core/document_access (invitado_where)
                 |
               (Postgres: chunks + documents + áreas)
 ```
