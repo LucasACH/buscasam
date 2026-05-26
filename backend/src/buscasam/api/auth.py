@@ -63,6 +63,41 @@ async def google_callback(
     )
 
 
+class UserSearchResult(BaseModel):
+    user_id: int
+    name: str
+    email_local: str
+    picture_url: str | None
+
+
+@me_router.get("/users/search", response_model=list[UserSearchResult])
+async def search_users(
+    q: str = Query(default="", min_length=1),
+    user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
+    session: AsyncSession = Depends(get_session),
+) -> list[UserSearchResult]:
+    rows = (
+        await session.execute(
+            text(
+                "SELECT id, name, split_part(email, '@', 1) AS email_local, picture_url "
+                "FROM users "
+                "WHERE id != :uid AND name ILIKE :prefix "
+                "ORDER BY name LIMIT 10"
+            ),
+            {"uid": user_ctx.user_id, "prefix": f"{q}%"},
+        )
+    ).mappings().all()
+    return [
+        UserSearchResult(
+            user_id=r["id"],
+            name=r["name"],
+            email_local=r["email_local"],
+            picture_url=r["picture_url"],
+        )
+        for r in rows
+    ]
+
+
 @me_router.get("/me", response_model=MeResponse)
 async def me(
     user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
