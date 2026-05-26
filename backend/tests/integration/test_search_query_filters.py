@@ -1,6 +1,6 @@
 from datetime import date
 
-from buscasam.core import search_query
+from buscasam.core import auth, search_query
 from tests.factories import make_chunk, make_document
 
 
@@ -49,14 +49,14 @@ async def test_tipo_filter_narrows_to_selected_tipos(session):
     single = await search_query.run(
         session,
         filters=search_query.Filters(q="redes neuronales", tipos=("tesis",)),
-        user_ctx=search_query.UserCtx(role="invitado"),
+        user_ctx=auth.GUEST,
     )
     assert {row.doc_id for row in single.rows} == {tesis_id}
 
     multi = await search_query.run(
         session,
         filters=search_query.Filters(q="redes neuronales", tipos=("tesis", "paper")),
-        user_ctx=search_query.UserCtx(role="invitado"),
+        user_ctx=auth.GUEST,
     )
     assert {row.doc_id for row in multi.rows} == {tesis_id, paper_id}
 
@@ -106,21 +106,21 @@ async def test_fecha_year_range_narrows(session):
     inside = await search_query.run(
         session,
         filters=search_query.Filters(q="redes neuronales", desde=2020, hasta=2023),
-        user_ctx=search_query.UserCtx(role="invitado"),
+        user_ctx=auth.GUEST,
     )
     assert {row.doc_id for row in inside.rows} == {mid_id}
 
     open_ended = await search_query.run(
         session,
         filters=search_query.Filters(q="redes neuronales", desde=2022),
-        user_ctx=search_query.UserCtx(role="invitado"),
+        user_ctx=auth.GUEST,
     )
     assert {row.doc_id for row in open_ended.rows} == {mid_id, new_id}
 
     out_of_range = await search_query.run(
         session,
         filters=search_query.Filters(q="redes neuronales", desde=2030, hasta=2040),
-        user_ctx=search_query.UserCtx(role="invitado"),
+        user_ctx=auth.GUEST,
     )
     assert out_of_range.rows == []
     assert out_of_range.total == 0

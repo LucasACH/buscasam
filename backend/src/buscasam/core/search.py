@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING
 
 import httpx
 import numpy as np
@@ -16,7 +17,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from buscasam.core import search_query
 from buscasam.core.embed import EmbedUnavailable, embed
-from buscasam.core.search_query import Filters, ResultRow, UserCtx
+from buscasam.core.search_query import Filters, ResultRow
+
+if TYPE_CHECKING:
+    from buscasam.core.auth import UserCtx
 
 logger = logging.getLogger("buscasam.search")
 

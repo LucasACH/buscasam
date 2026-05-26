@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from buscasam.api.deps import get_session, get_tei_client
-from buscasam.core import search, search_query
+from buscasam.core import auth, search, search_query
 from buscasam.core.search_query import Orden
 from buscasam.settings import settings
 
@@ -40,6 +40,7 @@ class ResultDTO(BaseModel):
     abstract: str | None
     snippet: str
     snippet_is_html: bool
+    visibility: Literal["publico", "interno", "privado"]
 
 
 class SearchResponse(BaseModel):
@@ -61,6 +62,7 @@ async def search_endpoint(
     orden: Orden = Query(default="relevancia"),
     session: AsyncSession = Depends(get_session),
     tei: httpx.AsyncClient = Depends(get_tei_client),
+    user_ctx: auth.UserCtx = Depends(auth.current_user),
 ) -> SearchResponse:
     if orden == "relevancia" and not q:
         raise HTTPException(
@@ -86,7 +88,7 @@ async def search_endpoint(
             hasta=hasta,
             orden=orden,
         ),
-        user_ctx=search_query.UserCtx(role="invitado"),
+        user_ctx=user_ctx,
         min_semantic_similarity=settings.min_semantic_similarity,
     )
     return SearchResponse(

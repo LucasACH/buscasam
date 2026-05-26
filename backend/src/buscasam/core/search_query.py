@@ -9,13 +9,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from buscasam.core.document_access import invitado_where
+from buscasam.core.document_access import readable_where
+
+if TYPE_CHECKING:
+    from buscasam.core.auth import UserCtx
 
 Orden = Literal["relevancia", "recientes"]
 
@@ -41,11 +44,6 @@ class Filters:
 
 
 @dataclass(frozen=True)
-class UserCtx:
-    role: str
-
-
-@dataclass(frozen=True)
 class ResultRow:
     doc_id: int
     titulo: str
@@ -55,6 +53,7 @@ class ResultRow:
     abstract: str | None
     snippet: str
     snippet_is_html: bool
+    visibility: str
 
 
 @dataclass(frozen=True)
@@ -157,16 +156,20 @@ async def run(
     min_semantic_similarity: float = 0.78,
 ) -> Results:
     if filters.orden == "recientes":
-        return await _run_recientes(session, filters)
+        return await _run_recientes(session, filters, user_ctx)
     if embedding is None:
-        return await _run_lexical(session, filters)
-    return await _run_hybrid(session, filters, embedding, min_semantic_similarity)
+        return await _run_lexical(session, filters, user_ctx)
+    return await _run_hybrid(
+        session, filters, user_ctx, embedding, min_semantic_similarity
+    )
 
 
-async def _run_recientes(session: AsyncSession, filters: Filters) -> Results:
-    where = invitado_where("d")
+async def _run_recientes(
+    session: AsyncSession, filters: Filters, user_ctx: UserCtx
+) -> Results:
+    where, where_params = readable_where("d", user_ctx)
     filter_clauses = _filter_clauses(filters)
-    params: dict[str, object] = _filter_params(filters)
+    params: dict[str, object] = {**_filter_params(filters), **where_params}
     params["limit"] = PAGE_SIZE
     params["offset"] = (filters.pagina - 1) * PAGE_SIZE
 
@@ -182,7 +185,7 @@ async def _run_recientes(session: AsyncSession, filters: Filters) -> Results:
             WITH {lex_ctes}
             SELECT
                 d.id, d.titulo, d.fecha, d.area_path::text AS area_path,
-                d.tipo, d.abstract,
+                d.tipo, d.abstract, d.visibility,
                 {_headline_expr("lex.body_text")} AS snippet,
                 (SELECT count(*) FROM lex_best) AS total
             FROM lex_best lex
@@ -196,7 +199,7 @@ async def _run_recientes(session: AsyncSession, filters: Filters) -> Results:
             f"""
             SELECT
                 d.id, d.titulo, d.fecha, d.area_path::text AS area_path,
-                d.tipo, d.abstract,
+                d.tipo, d.abstract, d.visibility,
                 LEFT(COALESCE(d.abstract, ''), 200) AS snippet,
                 count(*) OVER () AS total
             FROM documents d
@@ -221,6 +224,7 @@ async def _run_recientes(session: AsyncSession, filters: Filters) -> Results:
                 abstract=r.abstract,
                 snippet=r.snippet,
                 snippet_is_html=snippet_is_html,
+                visibility=r.visibility,
             )
             for r in rows
         ],
@@ -229,8 +233,10 @@ async def _run_recientes(session: AsyncSession, filters: Filters) -> Results:
     )
 
 
-async def _run_lexical(session: AsyncSession, filters: Filters) -> Results:
-    where = invitado_where("d")
+async def _run_lexical(
+    session: AsyncSession, filters: Filters, user_ctx: UserCtx
+) -> Results:
+    where, where_params = readable_where("d", user_ctx)
     filter_clauses = _filter_clauses(filters)
     lex_ctes, lex_params = _lexical_candidates_ctes(
         where=where, filter_clauses=filter_clauses, cap=RELEVANCE_CAP
@@ -246,6 +252,7 @@ async def _run_lexical(session: AsyncSession, filters: Filters) -> Results:
             d.area_path::text AS area_path,
             d.tipo         AS tipo,
             d.abstract     AS abstract,
+            d.visibility   AS visibility,
             {_headline_expr("lex.body_text")} AS snippet,
             (SELECT count(*) FROM lex_ranked) AS total
         FROM lex_ranked lex
@@ -260,6 +267,7 @@ async def _run_lexical(session: AsyncSession, filters: Filters) -> Results:
         "limit": PAGE_SIZE,
         "offset": offset,
         **lex_params,
+        **where_params,
         **_filter_params(filters),
     }
     rows = (await session.execute(sql, params)).all()
@@ -275,6 +283,7 @@ async def _run_lexical(session: AsyncSession, filters: Filters) -> Results:
                 abstract=r.abstract,
                 snippet=r.snippet,
                 snippet_is_html=True,
+                visibility=r.visibility,
             )
             for r in rows
         ],
@@ -286,13 +295,14 @@ async def _run_lexical(session: AsyncSession, filters: Filters) -> Results:
 async def _run_hybrid(
     session: AsyncSession,
     filters: Filters,
+    user_ctx: UserCtx,
     embedding: np.ndarray,
     min_semantic_similarity: float,
 ) -> Results:
     await session.execute(text("SET LOCAL hnsw.iterative_scan = 'strict_order'"))
     await session.execute(text(f"SET LOCAL hnsw.ef_search = {HNSW_EF_SEARCH}"))
 
-    where = invitado_where("d")
+    where, where_params = readable_where("d", user_ctx)
     filter_clauses = _filter_clauses(filters)
     lex_ctes, lex_params = _lexical_candidates_ctes(
         where=where, filter_clauses=filter_clauses, cap=RELEVANCE_CAP
@@ -353,6 +363,7 @@ async def _run_hybrid(
             d.area_path::text AS area_path,
             d.tipo            AS tipo,
             d.abstract        AS abstract,
+            d.visibility      AS visibility,
             CASE
                 WHEN c.body_text IS NOT NULL THEN {_headline_expr("c.body_text")}
                 ELSE LEFT(COALESCE(d.abstract, ''), 200)
@@ -376,6 +387,7 @@ async def _run_hybrid(
         "limit": PAGE_SIZE,
         "offset": offset,
         **lex_params,
+        **where_params,
         **_filter_params(filters),
     }
     rows = (await session.execute(sql, params)).all()
@@ -391,6 +403,7 @@ async def _run_hybrid(
                 abstract=r.abstract,
                 snippet=r.snippet,
                 snippet_is_html=r.snippet_is_html,
+                visibility=r.visibility,
             )
             for r in rows
         ],
