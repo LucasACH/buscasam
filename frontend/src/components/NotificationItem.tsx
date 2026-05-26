@@ -7,6 +7,10 @@ type DocumentHidden = { doc_title?: string; reason?: string };
 type DocumentUnhidden = { doc_title?: string; note?: string };
 type ProcessingFailed = { doc_title?: string };
 
+// Payloads come from out-of-scope producer PRDs (#3/#5/#8); degrade gracefully
+// rather than render the literal "undefined" if a field is missing.
+const FALLBACK_TITLE = "sin título";
+
 function Title({ children }: { children: React.ReactNode }) {
   return <span className="text-foreground font-medium">«{children}»</span>;
 }
@@ -14,8 +18,9 @@ function Title({ children }: { children: React.ReactNode }) {
 function CoauthorInviteItem({ payload }: { payload: CoauthorInvite }) {
   return (
     <p className="text-sm">
-      <span className="font-medium">{payload.inviter}</span> te invitó como
-      coautor en <Title>{payload.doc_title}</Title>.
+      <span className="font-medium">{payload.inviter ?? "Alguien"}</span> te
+      invitó como coautor en <Title>{payload.doc_title ?? FALLBACK_TITLE}</Title>
+      .
     </p>
   );
 }
@@ -23,8 +28,8 @@ function CoauthorInviteItem({ payload }: { payload: CoauthorInvite }) {
 function DocumentHiddenItem({ payload }: { payload: DocumentHidden }) {
   return (
     <p className="text-sm">
-      Tu documento <Title>{payload.doc_title}</Title> fue ocultado. Motivo:{" "}
-      {payload.reason}
+      Tu documento <Title>{payload.doc_title ?? FALLBACK_TITLE}</Title> fue
+      ocultado.{payload.reason ? ` Motivo: ${payload.reason}` : ""}
     </p>
   );
 }
@@ -32,8 +37,8 @@ function DocumentHiddenItem({ payload }: { payload: DocumentHidden }) {
 function DocumentUnhiddenItem({ payload }: { payload: DocumentUnhidden }) {
   return (
     <p className="text-sm">
-      Tu documento <Title>{payload.doc_title}</Title> fue restaurado.{" "}
-      {payload.note}
+      Tu documento <Title>{payload.doc_title ?? FALLBACK_TITLE}</Title> fue
+      restaurado.{payload.note ? ` ${payload.note}` : ""}
     </p>
   );
 }
@@ -41,7 +46,8 @@ function DocumentUnhiddenItem({ payload }: { payload: DocumentUnhidden }) {
 function ProcessingFailedItem({ payload }: { payload: ProcessingFailed }) {
   return (
     <p className="text-sm">
-      Falló el procesamiento de <Title>{payload.doc_title}</Title>.
+      Falló el procesamiento de{" "}
+      <Title>{payload.doc_title ?? FALLBACK_TITLE}</Title>.
     </p>
   );
 }

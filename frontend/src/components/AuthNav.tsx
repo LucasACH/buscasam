@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 
+import { NOTIFICATIONS_QUERY_KEY } from "@/lib/useNotifications";
 import { ME_QUERY_KEY, useUser, type User } from "@/lib/useUser";
 
 import { NotificationBell } from "./NotificationBell";
@@ -41,6 +42,9 @@ export function AuthNav() {
       credentials: "same-origin",
     });
     qc.setQueryData(ME_QUERY_KEY, null);
+    // Drop the prior user's notifications so a next login can't flash them
+    // (the count key is a prefix of NOTIFICATIONS_QUERY_KEY, removed too).
+    qc.removeQueries({ queryKey: NOTIFICATIONS_QUERY_KEY });
     router.replace("/");
   }
 

@@ -76,6 +76,15 @@ describe("NotificationItem per-kind renderers", () => {
     expect(screen.getByText(/Álgebra lineal/)).toBeInTheDocument();
   });
 
+  it("degrades gracefully when payload fields are missing", () => {
+    render(
+      <NotificationItem item={item({ kind: "coauthor_invite", payload: {} })} />,
+    );
+    expect(screen.queryByText(/undefined/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Alguien/)).toBeInTheDocument();
+    expect(screen.getByText(/sin título/)).toBeInTheDocument();
+  });
+
   it("per-row 'Marcar como leída' calls markRead(id) when unread", async () => {
     render(
       <NotificationItem

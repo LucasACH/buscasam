@@ -14,7 +14,7 @@ export function NotificationBell() {
   return (
     <Popover
       onOpenChange={(open) => {
-        if (open) markAllRead();
+        if (open && count > 0) markAllRead();
       }}
     >
       <PopoverTrigger asChild>

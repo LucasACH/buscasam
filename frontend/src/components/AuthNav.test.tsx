@@ -16,6 +16,7 @@ vi.mock("next/navigation", () => ({
 // The mounted NotificationBell pulls these; stub them so AuthNav tests stay
 // hermetic and don't reach the network through the typed client.
 vi.mock("@/lib/useNotifications", () => ({
+  NOTIFICATIONS_QUERY_KEY: ["notifications"],
   useUnreadCount: () => ({ count: 0, isLoading: false }),
   useNotifications: () => ({
     items: [],

@@ -51,8 +51,12 @@ export function useNotifications() {
       );
       if (error) throw error;
     },
-    onMutate: (id) => flipLocally(qc, (n) => n.id === id),
+    onMutate: async (id) => {
+      await cancelBoth(qc);
+      return flipLocally(qc, (n) => n.id === id);
+    },
     onError: (_e, _id, ctx) => rollback(qc, ctx),
+    onSettled: () => invalidateBoth(qc),
   });
 
   const markAllRead = useMutation({
@@ -60,8 +64,12 @@ export function useNotifications() {
       const { error } = await api.POST("/api/notifications/mark_all_read");
       if (error) throw error;
     },
-    onMutate: () => flipLocally(qc, () => true),
+    onMutate: async () => {
+      await cancelBoth(qc);
+      return flipLocally(qc, () => true);
+    },
     onError: (_e, _v, ctx) => rollback(qc, ctx),
+    onSettled: () => invalidateBoth(qc),
   });
 
   return {
@@ -108,4 +116,18 @@ function rollback(
   if (!ctx) return;
   qc.setQueryData(NOTIFICATIONS_QUERY_KEY, ctx.items);
   qc.setQueryData(UNREAD_COUNT_QUERY_KEY, ctx.count);
+}
+
+// Cancel in-flight refetches so a slow GET can't land after the optimistic
+// flip and clobber it; settle then re-syncs both keys with server truth.
+async function cancelBoth(qc: ReturnType<typeof useQueryClient>) {
+  await Promise.all([
+    qc.cancelQueries({ queryKey: NOTIFICATIONS_QUERY_KEY }),
+    qc.cancelQueries({ queryKey: UNREAD_COUNT_QUERY_KEY }),
+  ]);
+}
+
+function invalidateBoth(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: NOTIFICATIONS_QUERY_KEY });
+  qc.invalidateQueries({ queryKey: UNREAD_COUNT_QUERY_KEY });
 }
