@@ -54,7 +54,7 @@ async def list_notifications(
             text(
                 "SELECT id, kind, payload_json AS payload, read_at, created_at "
                 "FROM notifications WHERE user_id = :uid "
-                "ORDER BY created_at DESC, id DESC"
+                "ORDER BY created_at DESC, id DESC LIMIT 50"
             ),
             {"uid": user_ctx.user_id},
         )
