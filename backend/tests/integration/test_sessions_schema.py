@@ -110,13 +110,9 @@ async def test_sessions_last_seen_at_remains_mutable(session):
 
 async def test_sessions_user_fk_rejects_unknown_user(session):
     sid = secrets.token_bytes(32)
-    try:
+    with pytest.raises(IntegrityError):
         await session.execute(
             text("INSERT INTO sessions (sid, user_id) VALUES (:sid, 9999999)"),
             {"sid": sid},
         )
         await session.commit()
-    except IntegrityError:
-        pass
-    else:
-        raise AssertionError("expected FK violation on unknown user_id")

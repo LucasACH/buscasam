@@ -1,3 +1,4 @@
+import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
@@ -42,7 +43,7 @@ async def test_users_google_sub_is_unique(session):
     )
     await session.commit()
 
-    try:
+    with pytest.raises(IntegrityError):
         await session.execute(
             text(
                 "INSERT INTO users (google_sub, email, hd, role, name) "
@@ -51,7 +52,3 @@ async def test_users_google_sub_is_unique(session):
             )
         )
         await session.commit()
-    except IntegrityError:
-        pass
-    else:
-        raise AssertionError("expected unique violation on google_sub")

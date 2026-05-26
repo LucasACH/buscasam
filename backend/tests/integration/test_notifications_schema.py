@@ -1,3 +1,4 @@
+import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
@@ -56,7 +57,7 @@ async def test_notifications_event_key_is_unique_per_user(session):
     )
     await session.commit()
 
-    try:
+    with pytest.raises(IntegrityError):
         await session.execute(
             text(
                 "INSERT INTO notifications (user_id, event_key, kind, payload_json) "
@@ -65,12 +66,6 @@ async def test_notifications_event_key_is_unique_per_user(session):
             {"uid": uid},
         )
         await session.commit()
-    except IntegrityError:
-        pass
-    else:
-        raise AssertionError(
-            "expected unique violation on (user_id, event_key) retry"
-        )
 
 
 async def test_notifications_same_event_key_allowed_for_different_users(session):
