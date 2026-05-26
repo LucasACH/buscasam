@@ -13,6 +13,18 @@ vi.mock("next/navigation", () => ({
   usePathname: () => pathname(),
 }));
 
+// The mounted NotificationBell pulls these; stub them so AuthNav tests stay
+// hermetic and don't reach the network through the typed client.
+vi.mock("@/lib/useNotifications", () => ({
+  useUnreadCount: () => ({ count: 0, isLoading: false }),
+  useNotifications: () => ({
+    items: [],
+    isLoading: false,
+    markRead: vi.fn(),
+    markAllRead: vi.fn(),
+  }),
+}));
+
 function renderWith(fetchImpl: typeof fetch) {
   vi.spyOn(global, "fetch").mockImplementation(fetchImpl);
   const client = new QueryClient({

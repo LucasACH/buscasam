@@ -5,8 +5,9 @@ Both helpers pre-allocate ids via `nextval` and route through
 """
 from __future__ import annotations
 
+import json
 import uuid
-from datetime import date
+from datetime import date, datetime
 
 import numpy as np
 from sqlalchemy import text
@@ -79,6 +80,37 @@ async def make_user(
                 "hd": _HD_BY_ROLE[role],
                 "role": role,
                 "name": name,
+            },
+        )
+    ).scalar_one()
+
+
+async def make_notification(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    kind: str = "coauthor_invite",
+    payload: dict | None = None,
+    read_at: datetime | None = None,
+    created_at: datetime | None = None,
+    event_key: str | None = None,
+) -> int:
+    conn = await session.connection()
+    return (
+        await conn.execute(
+            text(
+                "INSERT INTO notifications "
+                "(user_id, event_key, kind, payload_json, read_at, created_at) "
+                "VALUES (:uid, :ek, :kind, CAST(:payload AS jsonb), :read_at, "
+                "COALESCE(:created_at, now())) RETURNING id"
+            ),
+            {
+                "uid": user_id,
+                "ek": event_key or f"evt-{uuid.uuid4().hex}",
+                "kind": kind,
+                "payload": json.dumps(payload or {}),
+                "read_at": read_at,
+                "created_at": created_at,
             },
         )
     ).scalar_one()
