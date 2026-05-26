@@ -56,3 +56,23 @@ def readable_where(alias: str, user_ctx: UserCtx) -> tuple[str, dict]:
         f")"
     )
     return where, {"user_id": user_ctx.user_id, "is_unsam": user_ctx.is_unsam}
+
+
+def manageable_where(alias: str, user_ctx: UserCtx) -> tuple[str, dict]:
+    """`WHERE`-clause body + bind params for the author-management predicate.
+
+    Returns documents where `user_ctx` is an `owner` or `accepted` coauthor
+    (ADR-0010 §8). Drafts and published documents both qualify; soft-deleted
+    are excluded. No visibility filter — manageable scope is author-scoped,
+    not visibility-scoped.
+    """
+    where = (
+        f"{alias}.soft_deleted_at IS NULL "
+        f"AND EXISTS ("
+        f"SELECT 1 FROM document_authors da "
+        f"WHERE da.doc_id = {alias}.id "
+        f"AND da.user_id = :mgmt_user_id "
+        f"AND da.status IN ('owner', 'accepted')"
+        f")"
+    )
+    return where, {"mgmt_user_id": user_ctx.user_id}
