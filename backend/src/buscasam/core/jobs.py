@@ -7,6 +7,7 @@ directly (ADR-0008 §3, architecture test in tests/unit/test_jobs_architecture.p
 from __future__ import annotations
 
 import io
+import logging
 import zipfile
 
 import httpx
@@ -22,6 +23,8 @@ from buscasam.core import documents
 from buscasam.core import embed as embedmod
 from buscasam.core import extract as extractmod
 from buscasam.settings import settings
+
+logger = logging.getLogger(__name__)
 
 
 def _make_app() -> App:
@@ -89,15 +92,11 @@ async def _run_index_document(
 async def _run_ocr_index_document(
     session: AsyncSession, tei: httpx.AsyncClient, version_id: int
 ) -> None:
-    """Runs ocrmypdf to add a text layer, then delegates to _run_index_document.
-
-    The OCR'd output is written back at the same content-addressed path
-    (ADR-0007 §10) — but since the sha256 would change, we OCR in-memory and
-    re-extract from the OCR'd bytes directly.
-    """
+    """Runs ocrmypdf to add a text layer, then re-extracts from the OCR'd bytes."""
     cv = await documents.load_candidate(session, version_id)
     try:
         import ocrmypdf
+        from ocrmypdf.exceptions import ExitCodeException
     except ImportError as e:
         await documents.mark_failed(
             session, version_id, error=f"ocr_unavailable: {type(e).__name__}"
@@ -117,35 +116,39 @@ async def _run_ocr_index_document(
             skip_text=True,
             progress_bar=False,
         )
-    except Exception as e:
+    except ExitCodeException as e:
+        # ocrmypdf documented input/config failure → terminal for this candidate.
+        logger.warning("ocr_failed version_id=%s", version_id, exc_info=True)
         await documents.mark_failed(
             session, version_id, error=f"ocr_failed: {type(e).__name__}"
         )
         return
 
-    # Persist the OCR'd PDF as a new blob (via blob_store — architecture rule).
-    ocrd_bytes = out_buf.getvalue()
-
+    # ADR-0007 §10: the OCR'd PDF is a scratch artifact — it goes through
+    # blob_store (architecture rule) but must not survive the task.
     async def _one_chunk():
-        yield ocrd_bytes
+        yield out_buf.getvalue()
 
     put = await blob_store.put_stream(_one_chunk(), max_bytes=200_000_000)
-    doc = await extractmod.extract(put.sha256, "application/pdf")
-    meta = extractmod.derive_metadata(doc)
-    body = chunkmod.chunk(doc)
-    headline = chunkmod.headline_chunk(cv.title, meta.abstract)
-    fp = chunkmod.headline_fingerprint(cv.title, meta.abstract)
-    texts = [c.body_text for c in [headline, *body]]
-    embeds = [await embedmod.embed(tei, t, kind="passage") for t in texts]
-    await documents.write_indexed_candidate(
-        session,
-        version_id,
-        body=body,
-        headline=headline,
-        embeds=embeds,
-        meta=meta,
-        headline_fingerprint=fp,
-    )
+    try:
+        doc = await extractmod.extract(put.sha256, "application/pdf")
+        meta = extractmod.derive_metadata(doc)
+        body = chunkmod.chunk(doc)
+        headline = chunkmod.headline_chunk(cv.title, meta.abstract)
+        fp = chunkmod.headline_fingerprint(cv.title, meta.abstract)
+        texts = [c.body_text for c in [headline, *body]]
+        embeds = [await embedmod.embed(tei, t, kind="passage") for t in texts]
+        await documents.write_indexed_candidate(
+            session,
+            version_id,
+            body=body,
+            headline=headline,
+            embeds=embeds,
+            meta=meta,
+            headline_fingerprint=fp,
+        )
+    finally:
+        await blob_store.delete(put.sha256)
 
 
 async def _run_refresh_headline(

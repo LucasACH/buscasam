@@ -8,11 +8,14 @@ heuristic, and the encrypted-PDF probe.
 from __future__ import annotations
 
 import io
+import logging
 import re
 from dataclasses import dataclass, field
 from datetime import date
 
 from buscasam.core import blob_store
+
+logger = logging.getLogger(__name__)
 
 _PDF_MIME = "application/pdf"
 _DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -202,6 +205,9 @@ def _derive_keywords(text: str) -> list[str]:
         results = kw.extract_keywords(text)
         return [phrase for phrase, _score in results][:10]
     except Exception:
+        # YAKE failure must not block indexing (keywords are best-effort
+        # suggestions per ADR-0007 §7); log so operators see degraded output.
+        logger.warning("yake_failed", exc_info=True)
         return []
 
 
