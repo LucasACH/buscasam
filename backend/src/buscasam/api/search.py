@@ -44,6 +44,7 @@ class ResultDTO(BaseModel):
     tipo: str
     abstract: str | None
     snippet: str
+    snippet_is_html: bool
 
 
 class SearchResponse(BaseModel):
