@@ -72,7 +72,7 @@ class UserSearchResult(BaseModel):
 
 @me_router.get("/users/search", response_model=list[UserSearchResult])
 async def search_users(
-    q: str = Query(default="", min_length=1),
+    q: str = Query(min_length=1),
     user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
     session: AsyncSession = Depends(get_session),
 ) -> list[UserSearchResult]:

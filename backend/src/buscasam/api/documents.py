@@ -7,7 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from buscasam.api.deps import get_session
 from buscasam.core import auth, blob_store
-from buscasam.core.documents import attach_main_version, create_draft, list_own_documents
+from buscasam.core.documents import (
+    DocumentNotFound,
+    InvalidCoauthorId,
+    assert_manageable,
+    attach_main_version,
+    create_draft,
+    list_own_documents,
+)
 from buscasam.core.extract import PDFEncryptionError, probe_encrypted
 
 router = APIRouter(prefix="/api")
@@ -39,16 +46,19 @@ async def create_draft_endpoint(
     user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
     session: AsyncSession = Depends(get_session),
 ) -> CreateDraftResponse:
-    doc_id = await create_draft(
-        session,
-        user_ctx,
-        title=body.title,
-        area_path=body.area_path,
-        document_type=body.document_type,
-        visibility=body.visibility,
-        external_authors=body.external_authors,
-        coauthor_user_ids=body.coauthor_user_ids,
-    )
+    try:
+        doc_id = await create_draft(
+            session,
+            user_ctx,
+            title=body.title,
+            area_path=body.area_path,
+            document_type=body.document_type,
+            visibility=body.visibility,
+            external_authors=body.external_authors,
+            coauthor_user_ids=body.coauthor_user_ids,
+        )
+    except InvalidCoauthorId as exc:
+        raise HTTPException(status_code=422, detail=f"Unknown coauthor user_id(s): {sorted(exc.ids)}")
     return CreateDraftResponse(id=doc_id)
 
 
@@ -67,6 +77,11 @@ async def upload_main_file(
     user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
+    try:
+        await assert_manageable(session, user_ctx, doc_id)
+    except DocumentNotFound:
+        raise HTTPException(status_code=404)
+
     data = await file.read()
 
     if data[:4] == b"%PDF":

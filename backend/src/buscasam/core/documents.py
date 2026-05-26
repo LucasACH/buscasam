@@ -11,6 +11,16 @@ from buscasam.core.document_access import manageable_where
 
 if TYPE_CHECKING:
     from buscasam.core.auth import UserCtx
+    from buscasam.core.blob_store import BlobPutResult
+
+
+class DocumentNotFound(Exception):
+    pass
+
+
+class InvalidCoauthorId(Exception):
+    def __init__(self, ids: set[int]) -> None:
+        self.ids = ids
 
 
 @dataclass(frozen=True)
@@ -62,6 +72,21 @@ async def create_draft(
         {"doc_id": doc_id, "uid": user_ctx.user_id, "name": owner_name},
     )
 
+    if coauthor_user_ids:
+        valid_ids = set(
+            (
+                await session.execute(
+                    text("SELECT id FROM users WHERE id = ANY(:ids)"),
+                    {"ids": coauthor_user_ids},
+                )
+            )
+            .scalars()
+            .all()
+        )
+        missing = set(coauthor_user_ids) - valid_ids
+        if missing:
+            raise InvalidCoauthorId(missing)
+
     for coauthor_id in coauthor_user_ids:
         coauthor_name = (
             await session.execute(
@@ -89,14 +114,11 @@ async def create_draft(
     return doc_id
 
 
-async def attach_main_version(
+async def assert_manageable(
     session: AsyncSession,
     user_ctx: UserCtx,
     doc_id: int,
-    blob: "BlobPutResult",
-    *,
-    original_filename: str,
-) -> int:
+) -> None:
     where, params = manageable_where("d", user_ctx)
     exists = (
         await session.execute(
@@ -105,9 +127,17 @@ async def attach_main_version(
         )
     ).scalar_one_or_none()
     if exists is None:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404)
+        raise DocumentNotFound
 
+
+async def attach_main_version(
+    session: AsyncSession,
+    user_ctx: UserCtx,
+    doc_id: int,
+    blob: BlobPutResult,
+    *,
+    original_filename: str,
+) -> int:
     version_no = (
         await session.execute(
             text(
