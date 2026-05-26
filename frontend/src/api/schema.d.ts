@@ -89,6 +89,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/users/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search Users */
+        get: operations["search_users_api_users_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me": {
         parameters: {
             query?: never;
@@ -174,6 +191,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Draft Endpoint */
+        post: operations["create_draft_endpoint_api_documents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{doc_id}/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload Main File */
+        post: operations["upload_main_file_api_documents__doc_id__upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{doc_id}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Draft */
+        get: operations["get_draft_api_documents__doc_id__draft_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{doc_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Draft */
+        patch: operations["patch_draft_api_documents__doc_id__patch"];
+        trace?: never;
+    };
+    "/api/me/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Own Documents */
+        get: operations["get_own_documents_api_me_documents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -184,6 +286,54 @@ export interface components {
             area_path: string;
             /** Display Name */
             display_name: string;
+        };
+        /** Body_upload_main_file_api_documents__doc_id__upload_post */
+        Body_upload_main_file_api_documents__doc_id__upload_post: {
+            /** File */
+            file: string;
+        };
+        /** CreateDraftRequest */
+        CreateDraftRequest: {
+            /** Title */
+            title: string;
+            /** Area Path */
+            area_path: string;
+            /** Document Type */
+            document_type: string;
+            /** Visibility */
+            visibility: string;
+            /**
+             * External Authors
+             * @default []
+             */
+            external_authors: string[];
+            /**
+             * Coauthor User Ids
+             * @default []
+             */
+            coauthor_user_ids: number[];
+        };
+        /** CreateDraftResponse */
+        CreateDraftResponse: {
+            /** Id */
+            id: number;
+        };
+        /** DraftStateDTO */
+        DraftStateDTO: {
+            /** Title */
+            title: string;
+            /** Index Status */
+            index_status: string;
+            /** Staged Abstract */
+            staged_abstract: string | null;
+            /** Staged Keywords */
+            staged_keywords: string[];
+            /** Staged Fecha */
+            staged_fecha: string | null;
+            /** Index Error */
+            index_error: string | null;
+            /** Publish Gate Reason */
+            publish_gate_reason: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -244,6 +394,17 @@ export interface components {
             /** Items */
             items: components["schemas"]["NotificationDTO"][];
         };
+        /** OwnDocDTO */
+        OwnDocDTO: {
+            /** Id */
+            id: number;
+            /** Title */
+            title: string;
+            /** Publication Status */
+            publication_status: string;
+            /** Visibility */
+            visibility: string;
+        };
         /** ResultDTO */
         ResultDTO: {
             /** Doc Id */
@@ -291,6 +452,34 @@ export interface components {
         UnreadCountResponse: {
             /** Count */
             count: number;
+        };
+        /** UpdateDraftRequest */
+        UpdateDraftRequest: {
+            /** Title */
+            title?: string | null;
+            /** Abstract */
+            abstract?: string | null;
+            /** Keywords */
+            keywords?: string[] | null;
+            /** Fecha */
+            fecha?: string | null;
+            /** Visibility */
+            visibility?: string | null;
+            /** Area Path */
+            area_path?: string | null;
+            /** Document Type */
+            document_type?: string | null;
+        };
+        /** UserSearchResult */
+        UserSearchResult: {
+            /** User Id */
+            user_id: number;
+            /** Name */
+            name: string;
+            /** Email Local */
+            email_local: string;
+            /** Picture Url */
+            picture_url: string | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -452,6 +641,37 @@ export interface operations {
             };
         };
     };
+    search_users_api_users_search_get: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserSearchResult"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     me_api_me_get: {
         parameters: {
             query?: never;
@@ -559,6 +779,160 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MarkAllReadResponse"];
+                };
+            };
+        };
+    };
+    create_draft_endpoint_api_documents_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_main_file_api_documents__doc_id__upload_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_main_file_api_documents__doc_id__upload_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_draft_api_documents__doc_id__draft_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftStateDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_draft_api_documents__doc_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_own_documents_api_me_documents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnDocDTO"][];
                 };
             };
         };
