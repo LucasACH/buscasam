@@ -28,7 +28,11 @@ export function useUser() {
   });
   return {
     user: query.data ?? null,
-    isInvitado: !query.isLoading && (query.data ?? null) === null,
+    // Only treat the user as invitado on a confirmed 401 (data === null).
+    // Errors propagate via `isError` — the network being down is not the
+    // same as the server saying "no session".
+    isInvitado:
+      !query.isLoading && !query.isError && query.data === null,
     isLoading: query.isLoading,
     isError: query.isError,
   };

@@ -15,8 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from buscasam.api.deps import get_session
 from buscasam.core import auth
 
-router = APIRouter(prefix="/api")
 auth_router = APIRouter(prefix="/api/auth")
+me_router = APIRouter(prefix="/api")
 
 
 class MeResponse(BaseModel):
@@ -63,7 +63,7 @@ async def google_callback(
     )
 
 
-@router.get("/me", response_model=MeResponse)
+@me_router.get("/me", response_model=MeResponse)
 async def me(
     user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
     session: AsyncSession = Depends(get_session),

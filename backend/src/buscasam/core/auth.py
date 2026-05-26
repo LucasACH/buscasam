@@ -28,7 +28,7 @@ from joserfc.errors import JoseError
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from buscasam.api.deps import get_session
+from buscasam.core.db import get_session
 from buscasam.settings import settings
 
 log = logging.getLogger(__name__)
@@ -83,14 +83,12 @@ def _decode_sid(raw: str) -> bytes | None:
 async def load_session(
     session: AsyncSession, *, sid_cookie: str | None
 ) -> tuple[UserCtx, bytes | None]:
-    """Validate `sid_cookie`, return (UserCtx, sid_to_reissue_or_None).
+    """Validate `sid_cookie`, return (UserCtx, sid_to_refresh_or_None).
 
-    Returns `(GUEST, None)` on no/invalid/expired `sid` — never raises. When
-    the session is active and `last_seen_at < now() - 24h`, refreshes the row
-    and returns the sid bytes so the caller can re-emit the cookie (ADR-0005 §6).
-
-    Commits on refresh — callers sharing this `AsyncSession` must not expect
-    a single transaction across this call and their own writes.
+    Read-only: never writes. Returns `(GUEST, None)` on no/invalid/expired
+    `sid`; never raises. When the session is active and stale (last_seen_at
+    < now() - 24h), returns the raw sid so the caller can perform the
+    `UPDATE` + cookie reissue on its own transaction (ADR-0005 §6).
     """
     if not sid_cookie:
         return GUEST, None
@@ -114,11 +112,6 @@ async def load_session(
         return GUEST, None
     user_ctx = UserCtx(user_id=row.user_id, is_unsam=True, role=row.role)
     if now - row.last_seen_at > SESSION_REFRESH_INTERVAL:
-        await session.execute(
-            text("UPDATE sessions SET last_seen_at = :now WHERE sid = :sid"),
-            {"now": now, "sid": sid_bytes},
-        )
-        await session.commit()
         return user_ctx, sid_bytes
     return user_ctx, None
 
@@ -130,14 +123,19 @@ async def current_user(
 ) -> UserCtx:
     """FastAPI dep: resolve sid cookie → UserCtx. Reissues cookie on refresh.
 
-    May commit (via `load_session`) before the route handler runs; route
-    handlers sharing this session do not get a single transaction.
+    The refresh `UPDATE` runs on the request-scoped session without an
+    explicit `commit()`. `get_session` commits at scope exit on success, so
+    if the route handler raises, the refresh rolls back with it.
     """
-    user_ctx, reissue = await load_session(
+    user_ctx, refresh_sid = await load_session(
         session, sid_cookie=request.cookies.get(SID_COOKIE)
     )
-    if reissue is not None:
-        _set_sid_cookie(response, reissue)
+    if refresh_sid is not None:
+        await session.execute(
+            text("UPDATE sessions SET last_seen_at = :now WHERE sid = :sid"),
+            {"now": _utcnow(), "sid": refresh_sid},
+        )
+        _set_sid_cookie(response, refresh_sid)
     return user_ctx
 
 

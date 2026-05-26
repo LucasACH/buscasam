@@ -173,7 +173,12 @@ async def test_session_validity_idle_and_absolute(session, user_id, monkeypatch)
 
 
 async def test_refresh_threshold(session, user_id, monkeypatch):
-    """ADR-0005 §6: refresh last_seen_at + reissue cookie only when stale > 24h."""
+    """ADR-0005 §6: signal refresh only when last_seen_at > 24h ago.
+
+    `load_session` is read-only — the actual `UPDATE` lives in
+    `current_user` and is exercised by the integration test
+    `test_me_stale_session_reissues_cookie`.
+    """
     now = datetime(2026, 6, 1, tzinfo=timezone.utc)
     monkeypatch.setattr(auth, "_utcnow", lambda: now)
 
@@ -209,6 +214,7 @@ async def test_refresh_threshold(session, user_id, monkeypatch):
     assert recent_reissue is None
     assert stale_reissue == stale
 
+    # No row mutation expected — load_session is pure.
     seen = dict(
         (row.sid, row.last_seen_at)
         for row in (
@@ -219,7 +225,7 @@ async def test_refresh_threshold(session, user_id, monkeypatch):
         ).all()
     )
     assert seen[recent] == recent_last_seen
-    assert seen[stale] == now
+    assert seen[stale] == stale_last_seen
 
 
 @pytest.mark.parametrize(
@@ -253,10 +259,13 @@ def test_require_docente_rejects_non_docente():
         auth.require_docente(estudiante)
     assert exc.value.status_code == 403
 
+    # Called directly (no `Depends` chain), `GUEST` falls through to the
+    # role check and 403s. The 401-first ordering only fires when
+    # `require_authenticated` is wired upstream via `Depends`; coverage for
+    # that path lives in the integration tests.
     with pytest.raises(HTTPException) as exc:
         auth.require_docente(auth.GUEST)
-    # guest hits the 401 first (no user_id) per the dep chain
-    assert exc.value.status_code in (401, 403)
+    assert exc.value.status_code == 403
 
 
 def test_require_docente_returns_docente():

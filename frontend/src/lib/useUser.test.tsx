@@ -66,4 +66,15 @@ describe("useUser", () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.isError).toBe(true);
   });
+
+  it("does NOT treat a network error as invitado", async () => {
+    vi.spyOn(global, "fetch").mockRejectedValue(new Error("network down"));
+
+    const { result } = renderHook(() => useUser(), { wrapper: wrapper() });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.isError).toBe(true);
+    expect(result.current.isInvitado).toBe(false);
+    expect(result.current.user).toBeNull();
+  });
 });

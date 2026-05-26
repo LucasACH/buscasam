@@ -10,7 +10,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import PlainTextResponse
 
 from buscasam.api.areas import router as areas_router
-from buscasam.api.auth import auth_router, router as me_router
+from buscasam.api.auth import auth_router, me_router
 from buscasam.api.search import router as search_router
 from buscasam.core import auth
 from buscasam.settings import settings
