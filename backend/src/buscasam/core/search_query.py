@@ -64,12 +64,70 @@ class Results:
     saturated: bool
 
 
-def _filter_clauses(filters: Filters) -> tuple[str, str, str, str]:
+def _filter_clauses(filters: Filters) -> str:
+    return "\n              ".join(
+        clause
+        for clause in (
+            "AND d.area_path <@ CAST(:area AS ltree)" if filters.area_path is not None else None,
+            "AND d.tipo = ANY(:tipos)" if filters.tipos else None,
+            "AND EXTRACT(year FROM d.fecha) >= :desde" if filters.desde is not None else None,
+            "AND EXTRACT(year FROM d.fecha) <= :hasta" if filters.hasta is not None else None,
+        )
+        if clause is not None
+    )
+
+
+def _lexical_candidates_ctes(
+    *,
+    where: str,
+    filter_clauses: str,
+    cap: int | None,
+) -> tuple[str, dict[str, object]]:
+    """CTEs exposing `lex_best (doc_id, body_text, score)` and `lex_ranked (+ rank)`,
+    the best-matching chunk per readable doc.
+
+    Embed as `WITH {ctes}, mine AS (...) SELECT ...`. Caller must bind `:q`; when
+    `cap` is not None, the returned params dict adds `:lex_cap`.
+    """
+    cap_clause = "ORDER BY score DESC LIMIT :lex_cap" if cap is not None else ""
+    ctes = f"""
+        lex_scored AS (
+            SELECT c.doc_id,
+                   c.body_text,
+                   ts_rank_cd(c.body_tsv, plainto_tsquery('es_unaccent', :q)) AS score
+            FROM chunks c
+            JOIN documents d ON d.id = c.doc_id
+            WHERE c.body_tsv @@ plainto_tsquery('es_unaccent', :q)
+              AND {where}
+              {filter_clauses}
+        ),
+        lex_best AS (
+            SELECT doc_id, body_text, score
+            FROM (
+                SELECT doc_id, body_text, score,
+                       ROW_NUMBER() OVER (PARTITION BY doc_id ORDER BY score DESC) AS rn
+                FROM lex_scored
+            ) s
+            WHERE rn = 1
+        ),
+        lex_ranked AS (
+            SELECT doc_id, body_text, score,
+                   ROW_NUMBER() OVER (ORDER BY score DESC) AS rank
+            FROM lex_best
+            {cap_clause}
+        )
+    """
+    params: dict[str, object] = {}
+    if cap is not None:
+        params["lex_cap"] = cap
+    return ctes, params
+
+
+def _headline_expr(body_col: str) -> str:
+    """ts_headline SQL expression; caller must bind `:q` and `:headline_opts`."""
     return (
-        "AND d.area_path <@ CAST(:area AS ltree)" if filters.area_path is not None else "",
-        "AND d.tipo = ANY(:tipos)" if filters.tipos else "",
-        "AND EXTRACT(year FROM d.fecha) >= :desde" if filters.desde is not None else "",
-        "AND EXTRACT(year FROM d.fecha) <= :hasta" if filters.hasta is not None else "",
+        f"ts_headline('es_unaccent', {body_col}, "
+        f"plainto_tsquery('es_unaccent', :q), :headline_opts)"
     )
 
 
@@ -107,49 +165,28 @@ async def run(
 
 async def _run_recientes(session: AsyncSession, filters: Filters) -> Results:
     where = invitado_where("d")
-    area_clause, tipo_clause, desde_clause, hasta_clause = _filter_clauses(filters)
+    filter_clauses = _filter_clauses(filters)
     params: dict[str, object] = _filter_params(filters)
     params["limit"] = PAGE_SIZE
     params["offset"] = (filters.pagina - 1) * PAGE_SIZE
 
     if filters.q:
+        lex_ctes, lex_params = _lexical_candidates_ctes(
+            where=where, filter_clauses=filter_clauses, cap=None
+        )
         params["q"] = filters.q
         params["headline_opts"] = TS_HEADLINE_OPTS
-        # Best matching chunk per doc supplies body_text for ts_headline so the
-        # snippet shows match context (PRD #1 US-6).
+        params.update(lex_params)
         sql = text(
             f"""
-            WITH scored AS (
-                SELECT
-                    c.doc_id,
-                    c.body_text,
-                    ts_rank_cd(c.body_tsv, plainto_tsquery('es_unaccent', :q)) AS score
-                FROM chunks c
-                JOIN documents d ON d.id = c.doc_id
-                WHERE c.body_tsv @@ plainto_tsquery('es_unaccent', :q)
-                  AND {where}
-                  {area_clause}
-                  {tipo_clause}
-                  {desde_clause}
-                  {hasta_clause}
-            ),
-            best_per_doc AS (
-                SELECT DISTINCT ON (doc_id) doc_id, body_text
-                FROM scored
-                ORDER BY doc_id, score DESC
-            )
+            WITH {lex_ctes}
             SELECT
                 d.id, d.titulo, d.fecha, d.area_path::text AS area_path,
                 d.tipo, d.abstract,
-                ts_headline(
-                    'es_unaccent',
-                    b.body_text,
-                    plainto_tsquery('es_unaccent', :q),
-                    :headline_opts
-                ) AS snippet,
-                (SELECT count(*) FROM best_per_doc) AS total
-            FROM best_per_doc b
-            JOIN documents d ON d.id = b.doc_id
+                {_headline_expr("lex.body_text")} AS snippet,
+                (SELECT count(*) FROM lex_best) AS total
+            FROM lex_best lex
+            JOIN documents d ON d.id = lex.doc_id
             ORDER BY d.fecha DESC, d.id DESC
             LIMIT :limit OFFSET :offset
             """
@@ -164,10 +201,7 @@ async def _run_recientes(session: AsyncSession, filters: Filters) -> Results:
                 count(*) OVER () AS total
             FROM documents d
             WHERE {where}
-              {area_clause}
-              {tipo_clause}
-              {desde_clause}
-              {hasta_clause}
+              {filter_clauses}
             ORDER BY d.fecha DESC, d.id DESC
             LIMIT :limit OFFSET :offset
             """
@@ -197,44 +231,14 @@ async def _run_recientes(session: AsyncSession, filters: Filters) -> Results:
 
 async def _run_lexical(session: AsyncSession, filters: Filters) -> Results:
     where = invitado_where("d")
-    area_clause, tipo_clause, desde_clause, hasta_clause = _filter_clauses(filters)
+    filter_clauses = _filter_clauses(filters)
+    lex_ctes, lex_params = _lexical_candidates_ctes(
+        where=where, filter_clauses=filter_clauses, cap=RELEVANCE_CAP
+    )
     offset = (filters.pagina - 1) * PAGE_SIZE
     sql = text(
         f"""
-        WITH scored AS (
-            SELECT
-                c.doc_id,
-                c.body_text,
-                ts_rank_cd(c.body_tsv, plainto_tsquery('es_unaccent', :q)) AS score
-            FROM chunks c
-            JOIN documents d ON d.id = c.doc_id
-            WHERE c.body_tsv @@ plainto_tsquery('es_unaccent', :q)
-              AND {where}
-              {area_clause}
-              {tipo_clause}
-              {desde_clause}
-              {hasta_clause}
-        ),
-        ranked AS (
-            SELECT
-                doc_id,
-                body_text,
-                score,
-                ROW_NUMBER() OVER (
-                    PARTITION BY doc_id
-                    ORDER BY score DESC
-                ) AS rn
-            FROM scored
-        ),
-        best_per_doc AS (
-            SELECT doc_id, body_text, score FROM ranked WHERE rn = 1
-        ),
-        capped AS (
-            SELECT doc_id, body_text, score
-            FROM best_per_doc
-            ORDER BY score DESC
-            LIMIT :cap
-        )
+        WITH {lex_ctes}
         SELECT
             d.id           AS doc_id,
             d.titulo       AS titulo,
@@ -242,25 +246,20 @@ async def _run_lexical(session: AsyncSession, filters: Filters) -> Results:
             d.area_path::text AS area_path,
             d.tipo         AS tipo,
             d.abstract     AS abstract,
-            ts_headline(
-                'es_unaccent',
-                c.body_text,
-                plainto_tsquery('es_unaccent', :q),
-                :headline_opts
-            ) AS snippet,
-            (SELECT count(*) FROM capped) AS total
-        FROM capped c
-        JOIN documents d ON d.id = c.doc_id
-        ORDER BY c.score DESC
+            {_headline_expr("lex.body_text")} AS snippet,
+            (SELECT count(*) FROM lex_ranked) AS total
+        FROM lex_ranked lex
+        JOIN documents d ON d.id = lex.doc_id
+        ORDER BY lex.rank
         LIMIT :limit OFFSET :offset
         """
     )
     params: dict[str, object] = {
         "q": filters.q,
-        "cap": RELEVANCE_CAP,
         "headline_opts": TS_HEADLINE_OPTS,
         "limit": PAGE_SIZE,
         "offset": offset,
+        **lex_params,
         **_filter_params(filters),
     }
     rows = (await session.execute(sql, params)).all()
@@ -294,35 +293,14 @@ async def _run_hybrid(
     await session.execute(text(f"SET LOCAL hnsw.ef_search = {HNSW_EF_SEARCH}"))
 
     where = invitado_where("d")
-    area_clause, tipo_clause, desde_clause, hasta_clause = _filter_clauses(filters)
+    filter_clauses = _filter_clauses(filters)
+    lex_ctes, lex_params = _lexical_candidates_ctes(
+        where=where, filter_clauses=filter_clauses, cap=RELEVANCE_CAP
+    )
     offset = (filters.pagina - 1) * PAGE_SIZE
     sql = text(
         f"""
-        WITH lex AS (
-            SELECT
-                c.doc_id,
-                c.body_text,
-                ts_rank_cd(c.body_tsv, plainto_tsquery('es_unaccent', :q)) AS score
-            FROM chunks c
-            JOIN documents d ON d.id = c.doc_id
-            WHERE c.body_tsv @@ plainto_tsquery('es_unaccent', :q)
-              AND {where}
-              {area_clause}
-              {tipo_clause}
-              {desde_clause}
-              {hasta_clause}
-        ),
-        lex_best AS (
-            SELECT DISTINCT ON (doc_id) doc_id, body_text, score
-            FROM lex
-            ORDER BY doc_id, score DESC
-        ),
-        lex_ranked AS (
-            SELECT doc_id, body_text, score,
-                   ROW_NUMBER() OVER (ORDER BY score DESC) AS rank
-            FROM lex_best
-            LIMIT :cap
-        ),
+        WITH {lex_ctes},
         sem AS (
             SELECT
                 c.doc_id,
@@ -330,10 +308,7 @@ async def _run_hybrid(
             FROM chunks c
             JOIN documents d ON d.id = c.doc_id
             WHERE {where}
-              {area_clause}
-              {tipo_clause}
-              {desde_clause}
-              {hasta_clause}
+              {filter_clauses}
             ORDER BY c.embedding <=> CAST(:embedding AS halfvec(1024))
             LIMIT :sem_chunk_cap
         ),
@@ -379,13 +354,7 @@ async def _run_hybrid(
             d.tipo            AS tipo,
             d.abstract        AS abstract,
             CASE
-                WHEN c.body_text IS NOT NULL THEN
-                    ts_headline(
-                        'es_unaccent',
-                        c.body_text,
-                        plainto_tsquery('es_unaccent', :q),
-                        :headline_opts
-                    )
+                WHEN c.body_text IS NOT NULL THEN {_headline_expr("c.body_text")}
                 ELSE LEFT(COALESCE(d.abstract, ''), 200)
             END AS snippet,
             (c.body_text IS NOT NULL) AS snippet_is_html,
@@ -406,6 +375,7 @@ async def _run_hybrid(
         "headline_opts": TS_HEADLINE_OPTS,
         "limit": PAGE_SIZE,
         "offset": offset,
+        **lex_params,
         **_filter_params(filters),
     }
     rows = (await session.execute(sql, params)).all()
