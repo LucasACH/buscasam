@@ -32,3 +32,27 @@ def test_prod_env_accepts_non_dev_secrets():
 def test_dev_env_allows_dev_defaults():
     s = Settings()
     assert s.env == "dev"
+
+
+def test_base_url_strips_trailing_slash():
+    s = Settings(base_url="https://app.example.com/")
+    assert s.base_url == "https://app.example.com"
+
+
+def test_base_url_default_unchanged():
+    assert Settings().base_url == "http://localhost:3000"
+
+
+def test_base_url_rejects_path():
+    with pytest.raises(ValueError, match="must not carry a path"):
+        Settings(base_url="https://app.example.com/api")
+
+
+def test_base_url_rejects_query():
+    with pytest.raises(ValueError, match="must not carry a path"):
+        Settings(base_url="https://app.example.com?x=1")
+
+
+def test_base_url_rejects_relative():
+    with pytest.raises(ValueError, match="must be an absolute URL"):
+        Settings(base_url="app.example.com")
