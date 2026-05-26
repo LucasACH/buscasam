@@ -16,6 +16,7 @@ dependencies = [
     "joserfc>=1.0.0",
     "itsdangerous>=2.2.0",
     "python-magic>=0.4.27",
+    "python-multipart>=0.0.9",
 ]
 
 [dependency-groups]
