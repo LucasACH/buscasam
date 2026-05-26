@@ -416,6 +416,20 @@ async def update_draft_metadata(
     §core/documents). Manageable-scoped; cross-user → DocumentNotFound."""
     await assert_manageable(session, user_ctx, doc_id)
 
+    # Pre-update candidate state: drives change-detection and the index_status
+    # guard on the headline reindex enqueue below.
+    current = (
+        await session.execute(
+            text(
+                "SELECT v.id AS version_id, v.index_status, v.staged_abstract, "
+                "       d.titulo "
+                "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
+                "WHERE v.doc_id = :doc_id ORDER BY v.version_no DESC LIMIT 1"
+            ),
+            {"doc_id": doc_id},
+        )
+    ).mappings().one_or_none()
+
     doc_sets: list[str] = []
     doc_params: dict = {"doc_id": doc_id}
     if title is not None:
@@ -436,17 +450,9 @@ async def update_draft_metadata(
             doc_params,
         )
 
-    version_id = (
-        await session.execute(
-            text(
-                "SELECT id FROM document_versions WHERE doc_id = :doc_id "
-                "ORDER BY version_no DESC LIMIT 1"
-            ),
-            {"doc_id": doc_id},
-        )
-    ).scalar_one_or_none()
-    if version_id is None:
+    if current is None:
         return
+    version_id = current["version_id"]
 
     ver_sets: list[str] = []
     ver_params: dict = {"vid": version_id}
@@ -467,7 +473,14 @@ async def update_draft_metadata(
             ver_params,
         )
 
-    if title is not None or abstract is not None:
+    # Reindex only when a headline input actually changed AND the candidate is
+    # already indexed: while still processing, index_document builds the headline
+    # from the current title, so a concurrent refresh would duplicate it.
+    title_changed = title is not None and title != current["titulo"]
+    abstract_changed = abstract is not None and abstract != (
+        current["staged_abstract"] or ""
+    )
+    if current["index_status"] == "indexed" and (title_changed or abstract_changed):
         from buscasam.core import jobs
 
         await jobs.enqueue_refresh_headline(session, version_id)
