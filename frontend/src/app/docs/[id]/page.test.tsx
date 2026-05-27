@@ -48,6 +48,30 @@ const PUBLICO_DETAIL = {
   manageable: false,
 };
 
+const MANAGEABLE_DETAIL = {
+  ...PUBLICO_DETAIL,
+  visibility: "privado",
+  manageable: true,
+  versions: [
+    {
+      n: 1,
+      original_filename: "tesis_v1.pdf",
+      mime: "application/pdf",
+      size_bytes: 1000,
+      indexed_at: "2024-01-01T10:00:00+00:00",
+      is_current: false,
+    },
+    {
+      n: 2,
+      original_filename: "tesis_v2.pdf",
+      mime: "application/pdf",
+      size_bytes: 2048,
+      indexed_at: "2024-02-01T10:00:00+00:00",
+      is_current: true,
+    },
+  ],
+};
+
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -150,6 +174,34 @@ describe("/docs/[id] page", () => {
     await screen.findByText("No encontramos este documento");
     // No metadata leak — none of the public-detail fields are rendered.
     expect(screen.queryByText("Descargar archivo principal")).toBeNull();
+  });
+
+  it("renders the Editar CTA and Versiones panel when manageable", async () => {
+    mockFetchByUrl({
+      "/api/docs/42": () => jsonResponse(MANAGEABLE_DETAIL),
+      "/api/areas": () => jsonResponse(AREAS),
+    });
+
+    renderPage();
+
+    const editar = await screen.findByRole("link", { name: /editar/i });
+    expect(editar).toHaveAttribute("href", "/mis-trabajos/42/editar");
+    expect(screen.getByText("Versiones anteriores")).toBeInTheDocument();
+    expect(screen.getByText(/tesis_v2\.pdf/)).toBeInTheDocument();
+    expect(screen.getByText(/tesis_v1\.pdf/)).toBeInTheDocument();
+  });
+
+  it("hides the Editar CTA and Versiones panel for non-managers", async () => {
+    mockFetchByUrl({
+      "/api/docs/42": () => jsonResponse(PUBLICO_DETAIL),
+      "/api/areas": () => jsonResponse(AREAS),
+    });
+
+    renderPage();
+
+    await screen.findByText("Búsqueda híbrida en repositorios académicos");
+    expect(screen.queryByRole("link", { name: /editar/i })).toBeNull();
+    expect(screen.queryByText("Versiones anteriores")).toBeNull();
   });
 
   it("does not render the interno badge for publico but renders it for non-publico", async () => {
