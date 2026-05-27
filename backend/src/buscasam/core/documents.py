@@ -289,13 +289,17 @@ async def write_indexed_candidate(
             },
         )
 
+    # Extraction is an initial fill, not an overwrite: a user who lands on the
+    # editar form while still `processing` can save their own staged_* via
+    # save-on-blur. COALESCE leaves any column they already wrote untouched
+    # (staged_* are NULL until first written), so the author edit always wins.
     await session.execute(
         text(
             "UPDATE document_versions SET "
             "  index_status = 'indexed', "
-            "  staged_abstract = :abstract, "
-            "  staged_keywords = :keywords, "
-            "  staged_fecha = :fecha, "
+            "  staged_abstract = COALESCE(staged_abstract, :abstract), "
+            "  staged_keywords = COALESCE(staged_keywords, :keywords), "
+            "  staged_fecha = COALESCE(staged_fecha, :fecha), "
             "  headline_fingerprint = :fp, "
             "  extract_pipeline_version = :pv, "
             "  indexed_at = now() "
@@ -311,11 +315,12 @@ async def write_indexed_candidate(
         },
     )
 
-    # A título PATCH can land after this task embedded its headline (the index
-    # window spans minutes for OCR). The R001 guard suppresses the enqueue while
-    # processing, so the stamped fingerprint is now stale against documents.titulo
-    # with no refresh queued — a permanently stuck `reindexing_headline` gate.
-    # Detect the drift here and enqueue the refresh ourselves.
+    # A título/abstract edit can land after this task embedded its headline (the
+    # index window spans minutes for OCR). The R001 guard suppresses the enqueue
+    # while processing, so the stamped fingerprint is now stale against the
+    # current título + preserved staged_abstract with no refresh queued — a
+    # permanently stuck `reindexing_headline` gate. Detect the drift here and
+    # enqueue the refresh ourselves so the headline catches up to the edit.
     from buscasam.core.chunk import headline_fingerprint as _compute_fp
 
     drift = (
