@@ -3,6 +3,9 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+const { apiGet } = vi.hoisted(() => ({ apiGet: vi.fn() }));
+vi.mock("@/api/client", () => ({ api: { GET: apiGet } }));
+
 import { AreasCascader } from "./AreasCascader";
 
 function wrap(ui: React.ReactNode) {
@@ -17,27 +20,16 @@ const AREAS = [
   { area_path: "escuela_humanidades", display_name: "Escuela de Humanidades" },
 ];
 
-function mockAreas(body = AREAS) {
-  return vi.spyOn(global, "fetch").mockResolvedValue(
-    new Response(JSON.stringify(body), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    }),
-  );
-}
-
 describe("AreasCascader", () => {
   beforeEach(() => {
-    vi.spyOn(global, "fetch").mockReset();
+    apiGet.mockReset();
+    apiGet.mockResolvedValue({ data: AREAS });
   });
   afterEach(() => {
     cleanup();
-    vi.restoreAllMocks();
   });
 
   it("fetches /api/areas and renders Escuela options", async () => {
-    mockAreas();
-
     wrap(<AreasCascader onChange={() => {}} />);
 
     await waitFor(() => {
@@ -49,7 +41,6 @@ describe("AreasCascader", () => {
   });
 
   it("reveals Carrera options scoped to the selected Escuela", async () => {
-    mockAreas();
     const user = userEvent.setup();
 
     wrap(<AreasCascader onChange={() => {}} />);
@@ -72,7 +63,6 @@ describe("AreasCascader", () => {
   });
 
   it("reveals Materia options scoped to the selected Carrera", async () => {
-    mockAreas();
     const user = userEvent.setup();
 
     wrap(<AreasCascader onChange={() => {}} />);
@@ -96,7 +86,6 @@ describe("AreasCascader", () => {
   });
 
   it("requireLeaf: emits onChange only once Materia is selected and shows error on partial", async () => {
-    mockAreas();
     const user = userEvent.setup();
     const onChange = vi.fn();
 
@@ -138,7 +127,6 @@ describe("AreasCascader", () => {
   });
 
   it("requireLeaf=false: emits the deepest selected path and never shows the leaf error", async () => {
-    mockAreas();
     const user = userEvent.setup();
     const onChange = vi.fn();
 

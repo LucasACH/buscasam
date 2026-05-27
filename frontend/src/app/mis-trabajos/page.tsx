@@ -5,19 +5,16 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 
+import { api } from "@/api/client";
+import type { components } from "@/api/schema";
 import { useUser } from "@/lib/useUser";
 
-type OwnDoc = {
-  id: number;
-  title: string;
-  publication_status: string;
-  visibility: string;
-};
+type OwnDoc = components["schemas"]["OwnDocDTO"];
 
 async function fetchOwnDocs(): Promise<OwnDoc[]> {
-  const r = await fetch("/api/me/documents", { credentials: "same-origin" });
-  if (!r.ok) throw new Error(`/api/me/documents ${r.status}`);
-  return (await r.json()) as OwnDoc[];
+  const { data, error } = await api.GET("/api/me/documents");
+  if (error) throw error;
+  return data ?? [];
 }
 
 export default function MisTrabajosPage() {
@@ -30,7 +27,7 @@ export default function MisTrabajosPage() {
     }
   }, [isInvitado, router]);
 
-  const { data: docs } = useQuery({
+  const { data: docs, isPending: docsPending } = useQuery({
     queryKey: ["me", "documents"],
     queryFn: fetchOwnDocs,
     enabled: !isInvitado && !isLoading,
@@ -54,17 +51,25 @@ export default function MisTrabajosPage() {
         </Link>
       </div>
 
-      <Section title="Borradores" docs={borradores} />
-      <Section title="Publicados" docs={publicados} />
+      <Section title="Borradores" docs={borradores} pending={docsPending} />
+      <Section title="Publicados" docs={publicados} pending={docsPending} />
     </main>
   );
 }
 
-function Section({ title, docs }: { title: string; docs: OwnDoc[] }) {
+function Section({
+  title,
+  docs,
+  pending,
+}: {
+  title: string;
+  docs: OwnDoc[];
+  pending: boolean;
+}) {
   return (
     <section className="mt-8">
       <h2 className="text-lg font-medium">{title}</h2>
-      {docs.length === 0 ? (
+      {pending ? null : docs.length === 0 ? (
         <p className="text-muted-foreground mt-4 text-sm">
           Aún no subiste ningún trabajo — empezá con Nuevo trabajo
         </p>

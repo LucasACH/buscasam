@@ -3,21 +3,19 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-type UserHit = {
-  user_id: number;
-  name: string;
-  email_local: string;
-  picture_url: string | null;
-};
+import { api } from "@/api/client";
+import type { components } from "@/api/schema";
+
+type UserHit = components["schemas"]["UserSearchResult"];
 
 const DEBOUNCE_MS = 250;
 
 async function fetchUsersSearch(q: string): Promise<UserHit[]> {
-  const r = await fetch(`/api/users/search?q=${encodeURIComponent(q)}`, {
-    credentials: "same-origin",
+  const { data, error } = await api.GET("/api/users/search", {
+    params: { query: { q } },
   });
-  if (!r.ok) throw new Error(`/api/users/search ${r.status}`);
-  return (await r.json()) as UserHit[];
+  if (error) throw error;
+  return data ?? [];
 }
 
 export type CoauthorPickerProps = {
@@ -28,7 +26,9 @@ export type CoauthorPickerProps = {
 export function CoauthorPicker({ value, onChange }: CoauthorPickerProps) {
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
-  const [selected, setSelected] = useState<UserHit[]>([]);
+  // Display data for ids the user has picked in this session. Chips are derived
+  // from `value`; ids the parent passed but we never saw render as a placeholder.
+  const [picked, setPicked] = useState<ReadonlyMap<number, UserHit>>(new Map());
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(query), query ? DEBOUNCE_MS : 0);
@@ -43,12 +43,20 @@ export function CoauthorPicker({ value, onChange }: CoauthorPickerProps) {
 
   function pick(hit: UserHit) {
     if (value.includes(hit.user_id)) return;
-    const nextIds = [...value, hit.user_id];
-    const nextSelected = [...selected, hit];
-    setSelected(nextSelected);
-    onChange(nextIds);
+    setPicked((prev) => {
+      const next = new Map(prev);
+      next.set(hit.user_id, hit);
+      return next;
+    });
+    onChange([...value, hit.user_id]);
     setQuery("");
   }
+
+  function remove(id: number) {
+    onChange(value.filter((x) => x !== id));
+  }
+
+  const chips = value.map((id) => picked.get(id) ?? placeholder(id));
 
   return (
     <label className="flex flex-col gap-1 text-sm">
@@ -79,9 +87,9 @@ export function CoauthorPicker({ value, onChange }: CoauthorPickerProps) {
         </ul>
       )}
 
-      {selected.length > 0 && (
+      {chips.length > 0 && (
         <div className="mt-1 flex flex-wrap gap-1">
-          {selected.map((s) => (
+          {chips.map((s) => (
             <span
               key={s.user_id}
               className="bg-muted inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs"
@@ -91,11 +99,7 @@ export function CoauthorPicker({ value, onChange }: CoauthorPickerProps) {
                 type="button"
                 aria-label={`Quitar ${s.name}`}
                 className="text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  const nextSelected = selected.filter((x) => x.user_id !== s.user_id);
-                  setSelected(nextSelected);
-                  onChange(value.filter((id) => id !== s.user_id));
-                }}
+                onClick={() => remove(s.user_id)}
               >
                 ×
               </button>
@@ -105,4 +109,8 @@ export function CoauthorPicker({ value, onChange }: CoauthorPickerProps) {
       )}
     </label>
   );
+}
+
+function placeholder(id: number): UserHit {
+  return { user_id: id, name: `Usuario #${id}`, email_local: "", picture_url: null };
 }

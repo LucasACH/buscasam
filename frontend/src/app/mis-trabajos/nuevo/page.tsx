@@ -6,6 +6,7 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
+import { api } from "@/api/client";
 import { useUser } from "@/lib/useUser";
 import { AreasCascader } from "@/components/AreasCascader";
 import { CoauthorPicker } from "@/components/CoauthorPicker";
@@ -110,29 +111,26 @@ function NuevoForm() {
     }
     setSubmitting(true);
     try {
-      const createResp = await fetch("/api/documents", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({
+      const { data, error } = await api.POST("/api/documents", {
+        body: {
           title: values.titulo,
           area_path: values.area_path,
           document_type: values.tipo,
           visibility: values.visibilidad,
           external_authors: parseExternalAuthors(values.external_authors),
           coauthor_user_ids: values.coauthor_user_ids,
-        }),
+        },
       });
-      if (!createResp.ok) {
-        const detail = await createResp
-          .json()
-          .then((b) => (b as { detail?: string }).detail)
-          .catch(() => undefined);
+      if (error || !data) {
+        const detail = (error as { detail?: string } | undefined)?.detail;
         setSubmitError(detail ?? "No se pudo crear el borrador. Revisá los datos.");
         return;
       }
-      const { id } = (await createResp.json()) as { id: number };
+      const { id } = data;
 
+      // Raw fetch: the generated body type for /upload is `{ file: string }`
+      // (FastAPI's binary placeholder), not assignable from a runtime File +
+      // FormData. The typed client does not help here.
       const form = new FormData();
       form.append("file", file);
       const uploadResp = await fetch(`/api/documents/${id}/upload`, {
@@ -149,6 +147,8 @@ function NuevoForm() {
         .then((b) => (b as { detail?: string }).detail)
         .catch(() => undefined);
       setSubmitError(detail ?? "No se pudo subir el archivo.");
+    } catch {
+      setSubmitError("No se pudo conectar con el servidor. Intentá de nuevo.");
     } finally {
       setSubmitting(false);
     }

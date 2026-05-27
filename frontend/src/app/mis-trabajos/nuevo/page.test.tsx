@@ -23,6 +23,11 @@ const replace = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace }),
 }));
+const { apiGet, apiPost } = vi.hoisted(() => ({
+  apiGet: vi.fn(),
+  apiPost: vi.fn(),
+}));
+vi.mock("@/api/client", () => ({ api: { GET: apiGet, POST: apiPost } }));
 
 import NuevoPage from "./page";
 
@@ -35,22 +40,18 @@ const AREAS = [
   },
 ];
 
-type Handler = (url: string, init: RequestInit | undefined) => Response | Promise<Response>;
-
-function setupFetch(handlers: Record<string, Handler>) {
-  return vi.spyOn(global, "fetch").mockImplementation(async (input, init) => {
-    const url = typeof input === "string" ? input : (input as Request).url;
-    for (const [key, h] of Object.entries(handlers)) {
-      if (url.includes(key)) return h(url, init);
-    }
-    return new Response("not mocked", { status: 500 });
+function setupHappyApi() {
+  apiGet.mockImplementation(async (path: string) => {
+    if (path === "/api/areas") return { data: AREAS };
+    if (path === "/api/users/search") return { data: [] };
+    return { error: { detail: "not mocked" } };
   });
 }
 
-function jsonResp(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
+function mockUpload(handler: (url: string) => Response) {
+  return vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+    const url = typeof input === "string" ? input : (input as Request).url;
+    return handler(url);
   });
 }
 
@@ -89,7 +90,9 @@ async function fillRequiredFields() {
 describe("/mis-trabajos/nuevo page", () => {
   beforeEach(() => {
     replace.mockReset();
-    vi.spyOn(global, "fetch").mockReset();
+    apiGet.mockReset();
+    apiPost.mockReset();
+    setupHappyApi();
   });
   afterEach(() => {
     cleanup();
@@ -97,14 +100,12 @@ describe("/mis-trabajos/nuevo page", () => {
   });
 
   it("submits the draft + upload and navigates to /editar/{id}", async () => {
-    const spy = setupFetch({
-      "/api/areas": () => jsonResp(AREAS),
-      "/api/users/search": () => jsonResp([]),
-      "/api/documents/42/upload": () => new Response("", { status: 202 }),
-      "/api/documents": (url, init) => {
-        if (init?.method === "POST") return jsonResp({ id: 42 }, 201);
-        return new Response("", { status: 404 });
-      },
+    apiPost.mockResolvedValue({ data: { id: 42 } });
+    mockUpload((url) => {
+      if (url.endsWith("/api/documents/42/upload")) {
+        return new Response("", { status: 202 });
+      }
+      return new Response("", { status: 404 });
     });
 
     wrap(<NuevoPage />);
@@ -114,36 +115,31 @@ describe("/mis-trabajos/nuevo page", () => {
 
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/mis-trabajos/42/editar"));
 
-    const createCall = spy.mock.calls.find(([u, i]) => {
-      const url = typeof u === "string" ? u : (u as Request).url;
-      return url.endsWith("/api/documents") && (i as RequestInit | undefined)?.method === "POST";
-    });
+    const createCall = apiPost.mock.calls.find(([p]) => p === "/api/documents");
     expect(createCall).toBeTruthy();
-    const body = JSON.parse((createCall![1] as RequestInit).body as string);
-    expect(body).toMatchObject({
-      title: "Mi tesis sobre BD",
-      area_path: "escuela_ciencia.carrera_informatica.materia_bd",
-      document_type: "tesis",
-      visibility: "publico",
+    expect(createCall![1]).toMatchObject({
+      body: {
+        title: "Mi tesis sobre BD",
+        area_path: "escuela_ciencia.carrera_informatica.materia_bd",
+        document_type: "tesis",
+        visibility: "publico",
+      },
     });
   });
 
   it("surfaces the 415 detail inline when the upload is rejected", async () => {
-    setupFetch({
-      "/api/areas": () => jsonResp(AREAS),
-      "/api/users/search": () => jsonResp([]),
-      "/api/documents/42/upload": () =>
-        jsonResp(
-          {
+    apiPost.mockResolvedValue({ data: { id: 42 } });
+    mockUpload((url) => {
+      if (url.endsWith("/api/documents/42/upload")) {
+        return new Response(
+          JSON.stringify({
             detail:
               "Este PDF está protegido por contraseña — quitá la protección y reintentá",
-          },
-          415,
-        ),
-      "/api/documents": (url, init) => {
-        if (init?.method === "POST") return jsonResp({ id: 42 }, 201);
-        return new Response("", { status: 404 });
-      },
+          }),
+          { status: 415, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response("", { status: 404 });
     });
 
     wrap(<NuevoPage />);
@@ -157,15 +153,15 @@ describe("/mis-trabajos/nuevo page", () => {
   });
 
   it("surfaces a 413 inline error when the file is too large", async () => {
-    setupFetch({
-      "/api/areas": () => jsonResp(AREAS),
-      "/api/users/search": () => jsonResp([]),
-      "/api/documents/42/upload": () =>
-        jsonResp({ detail: "El archivo supera los 50 MB" }, 413),
-      "/api/documents": (url, init) => {
-        if (init?.method === "POST") return jsonResp({ id: 42 }, 201);
-        return new Response("", { status: 404 });
-      },
+    apiPost.mockResolvedValue({ data: { id: 42 } });
+    mockUpload((url) => {
+      if (url.endsWith("/api/documents/42/upload")) {
+        return new Response(JSON.stringify({ detail: "El archivo supera los 50 MB" }), {
+          status: 413,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response("", { status: 404 });
     });
 
     wrap(<NuevoPage />);
@@ -177,21 +173,30 @@ describe("/mis-trabajos/nuevo page", () => {
   });
 
   it("surfaces the 422 detail inline when create_draft fails (e.g. unknown coauthor)", async () => {
-    setupFetch({
-      "/api/areas": () => jsonResp(AREAS),
-      "/api/users/search": () => jsonResp([]),
-      "/api/documents": (url, init) => {
-        if (init?.method === "POST")
-          return jsonResp({ detail: "Unknown coauthor user_id(s): [99]" }, 422);
-        return new Response("", { status: 404 });
-      },
+    apiPost.mockResolvedValue({
+      error: { detail: "Unknown coauthor user_id(s): [99]" },
     });
+    mockUpload(() => new Response("", { status: 404 }));
 
     wrap(<NuevoPage />);
     const user = await fillRequiredFields();
     await user.click(screen.getByRole("button", { name: /subir/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/coauthor/i);
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a generic error when the network is unreachable", async () => {
+    apiPost.mockRejectedValue(new TypeError("Failed to fetch"));
+    mockUpload(() => new Response("", { status: 404 }));
+
+    wrap(<NuevoPage />);
+    const user = await fillRequiredFields();
+    await user.click(screen.getByRole("button", { name: /subir/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /No se pudo conectar con el servidor/,
+    );
     expect(replace).not.toHaveBeenCalled();
   });
 
@@ -202,7 +207,6 @@ describe("/mis-trabajos/nuevo page", () => {
       isLoading: false,
       isError: false,
     });
-    setupFetch({});
 
     wrap(<NuevoPage />);
 

@@ -1,14 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-type Area = { area_path: string; display_name: string };
+import { api } from "@/api/client";
+import type { components } from "@/api/schema";
+
+type Area = components["schemas"]["AreaDTO"];
 
 async function fetchAreas(): Promise<Area[]> {
-  const r = await fetch("/api/areas", { credentials: "same-origin" });
-  if (!r.ok) throw new Error(`/api/areas ${r.status}`);
-  return (await r.json()) as Area[];
+  const { data, error } = await api.GET("/api/areas");
+  if (error) throw error;
+  return data ?? [];
 }
 
 function levelOf(area_path: string): number {
@@ -32,13 +35,13 @@ export function AreasCascader({ onChange, requireLeaf }: AreasCascaderProps) {
   const [carrera, setCarrera] = useState<string>("");
   const [materia, setMateria] = useState<string>("");
 
-  useEffect(() => {
+  function emit(nextEscuela: string, nextCarrera: string, nextMateria: string) {
     if (requireLeaf) {
-      onChange(materia || null);
+      onChange(nextMateria || null);
       return;
     }
-    onChange(materia || carrera || escuela || null);
-  }, [escuela, carrera, materia, requireLeaf, onChange]);
+    onChange(nextMateria || nextCarrera || nextEscuela || null);
+  }
 
   const rows = data ?? [];
   const escuelas = rows.filter((a) => levelOf(a.area_path) === 1);
@@ -54,12 +57,12 @@ export function AreasCascader({ onChange, requireLeaf }: AreasCascaderProps) {
       <label className="flex flex-col gap-1 text-sm">
         <span>Escuela</span>
         <select
-          aria-label="Escuela"
           value={escuela}
           onChange={(e) => {
             setEscuela(e.target.value);
             setCarrera("");
             setMateria("");
+            emit(e.target.value, "", "");
           }}
           className="border-input bg-background h-9 rounded-md border px-2"
         >
@@ -76,11 +79,11 @@ export function AreasCascader({ onChange, requireLeaf }: AreasCascaderProps) {
         <label className="flex flex-col gap-1 text-sm">
           <span>Carrera</span>
           <select
-            aria-label="Carrera"
             value={carrera}
             onChange={(e) => {
               setCarrera(e.target.value);
               setMateria("");
+              emit(escuela, e.target.value, "");
             }}
             className="border-input bg-background h-9 rounded-md border px-2"
           >
@@ -98,9 +101,11 @@ export function AreasCascader({ onChange, requireLeaf }: AreasCascaderProps) {
         <label className="flex flex-col gap-1 text-sm">
           <span>Materia</span>
           <select
-            aria-label="Materia"
             value={materia}
-            onChange={(e) => setMateria(e.target.value)}
+            onChange={(e) => {
+              setMateria(e.target.value);
+              emit(escuela, carrera, e.target.value);
+            }}
             className="border-input bg-background h-9 rounded-md border px-2"
           >
             <option value="">Elegí una materia…</option>
