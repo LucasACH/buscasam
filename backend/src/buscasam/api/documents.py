@@ -1,7 +1,7 @@
 """HTTP surface for document management endpoints."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -14,11 +14,13 @@ from buscasam.core.documents import (
     UNSET,
     DocumentNotFound,
     InvalidCoauthorId,
+    PublishConflict,
     assert_manageable,
     attach_main_version,
     create_draft,
     get_draft_state,
     list_own_documents,
+    publish,
     update_draft_metadata,
 )
 from buscasam.core.extract import PDFEncryptionError, probe_encrypted
@@ -47,6 +49,7 @@ class OwnDocDTO(BaseModel):
     title: str
     publication_status: str
     visibility: str
+    published_at: datetime | None
 
 
 class CreateDraftRequest(BaseModel):
@@ -145,6 +148,7 @@ class DraftStateDTO(BaseModel):
     staged_fecha: date | None
     index_error: str | None
     publish_gate_reason: str | None
+    is_owner: bool
 
 
 class UpdateDraftRequest(BaseModel):
@@ -175,6 +179,7 @@ async def get_draft(
         staged_fecha=state.staged_fecha,
         index_error=state.index_error,
         publish_gate_reason=state.publish_gate_reason,
+        is_owner=state.is_owner,
     )
 
 
@@ -205,6 +210,21 @@ async def patch_draft(
     return Response(status_code=204)
 
 
+@router.post("/documents/{doc_id}/publish", status_code=204)
+async def publish_document(
+    doc_id: int,
+    user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    try:
+        await publish(session, user_ctx, doc_id)
+    except DocumentNotFound:
+        raise HTTPException(status_code=404)
+    except PublishConflict:
+        raise HTTPException(status_code=409)
+    return Response(status_code=204)
+
+
 @router.get("/me/documents", response_model=list[OwnDocDTO])
 async def get_own_documents(
     user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
@@ -217,6 +237,7 @@ async def get_own_documents(
             title=d.title,
             publication_status=d.publication_status,
             visibility=d.visibility,
+            published_at=d.published_at,
         )
         for d in docs
     ]

@@ -242,6 +242,104 @@ async def test_patch_draft_invalid_enum_or_path_returns_422(client, session, bod
     assert r.status_code == 422
 
 
+async def test_publish_returns_204_and_publishes(client, session):
+    uid = await make_user(session)
+    sid = await _seed_session(session, uid)
+    doc_id, version_id = await _seed_candidate(session, owner_id=uid)
+    await session.commit()
+
+    r = await client.post(
+        f"/api/documents/{doc_id}/publish",
+        headers={"origin": settings.base_url},
+        cookies={auth.SID_COOKIE: _sid_cookie(sid)},
+    )
+
+    assert r.status_code == 204
+    status = (
+        await session.execute(
+            text("SELECT publication_status FROM documents WHERE id = :id"),
+            {"id": doc_id},
+        )
+    ).scalar_one()
+    assert status == "published"
+
+
+async def test_publish_then_list_returns_published_at(client, session):
+    uid = await make_user(session)
+    sid = await _seed_session(session, uid)
+    doc_id, _ = await _seed_candidate(session, owner_id=uid)
+    await session.commit()
+
+    await client.post(
+        f"/api/documents/{doc_id}/publish",
+        headers={"origin": settings.base_url},
+        cookies={auth.SID_COOKIE: _sid_cookie(sid)},
+    )
+    r = await client.get(
+        "/api/me/documents", cookies={auth.SID_COOKIE: _sid_cookie(sid)}
+    )
+
+    assert r.status_code == 200
+    doc = next(d for d in r.json() if d["id"] == doc_id)
+    assert doc["publication_status"] == "published"
+    assert doc["published_at"] is not None
+
+
+async def test_get_draft_reports_is_owner(client, session):
+    owner = await make_user(session)
+    coauthor = await make_user(session)
+    doc_id, _ = await _seed_candidate(session, owner_id=owner)
+    await make_document_author(
+        session, doc_id, user_id=coauthor, status="accepted"
+    )
+    owner_sid = await _seed_session(session, owner)
+    coauthor_sid = await _seed_session(session, coauthor)
+    await session.commit()
+
+    r_owner = await client.get(
+        f"/api/documents/{doc_id}/draft",
+        cookies={auth.SID_COOKIE: _sid_cookie(owner_sid)},
+    )
+    r_coauthor = await client.get(
+        f"/api/documents/{doc_id}/draft",
+        cookies={auth.SID_COOKIE: _sid_cookie(coauthor_sid)},
+    )
+
+    assert r_owner.json()["is_owner"] is True
+    assert r_coauthor.json()["is_owner"] is False
+
+
+async def test_publish_processing_candidate_returns_409(client, session):
+    uid = await make_user(session)
+    sid = await _seed_session(session, uid)
+    doc_id, _ = await _seed_candidate(session, owner_id=uid, index_status="processing")
+    await session.commit()
+
+    r = await client.post(
+        f"/api/documents/{doc_id}/publish",
+        headers={"origin": settings.base_url},
+        cookies={auth.SID_COOKIE: _sid_cookie(sid)},
+    )
+
+    assert r.status_code == 409
+
+
+async def test_publish_cross_user_returns_404(client, session):
+    owner = await make_user(session)
+    other = await make_user(session)
+    sid = await _seed_session(session, other)
+    doc_id, _ = await _seed_candidate(session, owner_id=owner)
+    await session.commit()
+
+    r = await client.post(
+        f"/api/documents/{doc_id}/publish",
+        headers={"origin": settings.base_url},
+        cookies={auth.SID_COOKIE: _sid_cookie(sid)},
+    )
+
+    assert r.status_code == 404
+
+
 async def test_patch_draft_cross_user_returns_404(client, session):
     owner = await make_user(session)
     other = await make_user(session)

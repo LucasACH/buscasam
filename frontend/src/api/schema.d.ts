@@ -259,6 +259,23 @@ export interface paths {
         patch: operations["patch_draft_api_documents__doc_id__patch"];
         trace?: never;
     };
+    "/api/documents/{doc_id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish Document */
+        post: operations["publish_document_api_documents__doc_id__publish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/documents": {
         parameters: {
             query?: never;
@@ -340,6 +357,8 @@ export interface components {
             index_error: string | null;
             /** Publish Gate Reason */
             publish_gate_reason: string | null;
+            /** Is Owner */
+            is_owner: boolean;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -410,6 +429,8 @@ export interface components {
             publication_status: string;
             /** Visibility */
             visibility: string;
+            /** Published At */
+            published_at: string | null;
         };
         /** ResultDTO */
         ResultDTO: {
@@ -904,6 +925,35 @@ export interface operations {
                 "application/json": components["schemas"]["UpdateDraftRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    publish_document_api_documents__doc_id__publish_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             204: {

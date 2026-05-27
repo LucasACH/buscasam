@@ -287,3 +287,15 @@ async def enqueue_refresh_headline(session: AsyncSession, version_id: int) -> No
         session=session,
         version_id=version_id,
     )
+
+
+async def enqueue_fan_out_coauthor_invites(
+    session: AsyncSession, doc_id: int
+) -> None:
+    """No-op stub at this PRD's window (ADR-0008 §3, module map §core/jobs).
+
+    `core/documents.publish` calls this to fan out invites for any `pending`
+    coauthor rows. PRD #5 fills the task body and the send; until then publish
+    must still call it so the seam exists.
+    """
+    return

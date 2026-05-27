@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -52,6 +52,11 @@ class InvalidCoauthorId(Exception):
         self.ids = ids
 
 
+class PublishConflict(Exception):
+    """The candidate is not indexed, or its stored headline fingerprint no
+    longer matches current title + staged_abstract (→ 409)."""
+
+
 @dataclass(frozen=True)
 class DraftState:
     doc_id: int
@@ -63,6 +68,7 @@ class DraftState:
     staged_fecha: date | None
     index_error: str | None
     publish_gate_reason: str | None
+    is_owner: bool
 
 
 def _publish_gate_reason(index_status: str, fingerprint_matches: bool) -> str | None:
@@ -83,6 +89,7 @@ class OwnDocSummary:
     title: str
     publication_status: str
     visibility: str
+    published_at: datetime | None
 
 
 async def create_draft(
@@ -520,6 +527,85 @@ async def update_draft_metadata(
         await jobs.enqueue_refresh_headline(session, version_id)
 
 
+async def publish(session: AsyncSession, user_ctx: UserCtx, doc_id: int) -> None:
+    """Atomic staged → current flip (ADR-0006 §6). Owner-only: cross-user and
+    non-owner coauthors raise DocumentNotFound. Raises PublishConflict if the
+    candidate is not indexed or its stored headline_fingerprint no longer
+    matches current title + staged_abstract (module map §core/documents)."""
+    # FOR UPDATE OF v, d serializes against concurrent update_draft_metadata:
+    # without it, a PATCH committing between this SELECT and the UPDATEs below
+    # could change títuto/staged_abstract while we still copy the pre-edit
+    # staged_abstract into documents.abstract — yielding a published row with
+    # mismatched títuto/abstract and a stale headline_fingerprint.
+    row = (
+        await session.execute(
+            text(
+                "SELECT v.id AS version_id, v.index_status, v.staged_abstract, "
+                "       v.staged_keywords, v.staged_fecha, v.headline_fingerprint, "
+                "       d.titulo, "
+                "       (SELECT a.user_id FROM document_authors a "
+                "         WHERE a.doc_id = d.id AND a.status = 'owner' LIMIT 1) "
+                "         AS owner_user_id "
+                "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
+                "WHERE v.doc_id = :doc_id ORDER BY v.version_no DESC LIMIT 1 "
+                "FOR UPDATE OF v, d"
+            ),
+            {"doc_id": doc_id},
+        )
+    ).mappings().one_or_none()
+    if row is None or row["owner_user_id"] != user_ctx.user_id:
+        raise DocumentNotFound
+
+    from buscasam.core.chunk import headline_fingerprint
+
+    matches = row["headline_fingerprint"] == headline_fingerprint(
+        row["titulo"], row["staged_abstract"] or ""
+    )
+    if row["index_status"] != "indexed" or not matches:
+        raise PublishConflict
+
+    version_id = row["version_id"]
+    # ADR-0006 §6: flip the previously-current version + its chunks off, the
+    # candidate on. First publish has no prior current version (no-op flip).
+    await session.execute(
+        text("UPDATE chunks SET is_current = false WHERE doc_id = :doc_id AND is_current"),
+        {"doc_id": doc_id},
+    )
+    await session.execute(
+        text(
+            "UPDATE document_versions SET is_current = false "
+            "WHERE doc_id = :doc_id AND is_current"
+        ),
+        {"doc_id": doc_id},
+    )
+    await session.execute(
+        text("UPDATE chunks SET is_current = true WHERE version_id = :v"),
+        {"v": version_id},
+    )
+    await session.execute(
+        text("UPDATE document_versions SET is_current = true WHERE id = :v"),
+        {"v": version_id},
+    )
+    await session.execute(
+        text(
+            "UPDATE documents SET publication_status = 'published', "
+            "  published_at = now(), abstract = :abs, keywords = :kw, "
+            "  fecha = COALESCE(:fec, fecha) WHERE id = :doc_id"
+        ),
+        {
+            "abs": row["staged_abstract"],
+            "kw": row["staged_keywords"],
+            "fec": row["staged_fecha"],
+            "doc_id": doc_id,
+        },
+    )
+
+    # No-op stub at this PRD's window; PRD #5 fills the fan-out (module map).
+    from buscasam.core import jobs
+
+    await jobs.enqueue_fan_out_coauthor_invites(session, doc_id)
+
+
 async def get_draft_state(
     session: AsyncSession, user_ctx: UserCtx, doc_id: int
 ) -> DraftState:
@@ -529,7 +615,10 @@ async def get_draft_state(
             text(
                 "SELECT v.id AS version_id, v.index_status, v.staged_abstract, "
                 "       v.staged_keywords, v.staged_fecha, v.index_error, "
-                "       v.headline_fingerprint, d.titulo "
+                "       v.headline_fingerprint, d.titulo, "
+                "       (SELECT a.user_id FROM document_authors a "
+                "         WHERE a.doc_id = d.id AND a.status = 'owner' LIMIT 1) "
+                "         AS owner_user_id "
                 "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
                 "WHERE v.doc_id = :doc_id ORDER BY v.version_no DESC LIMIT 1"
             ),
@@ -556,6 +645,7 @@ async def get_draft_state(
         publish_gate_reason=_publish_gate_reason(
             row["index_status"], matches
         ),
+        is_owner=row["owner_user_id"] == user_ctx.user_id,
     )
 
 
@@ -566,7 +656,8 @@ async def list_own_documents(
     rows = (
         await session.execute(
             text(
-                f"SELECT d.id, d.titulo, d.publication_status, d.visibility "
+                f"SELECT d.id, d.titulo, d.publication_status, d.visibility, "
+                f"       d.published_at "
                 f"FROM documents d WHERE {where} ORDER BY d.id"
             ),
             params,
@@ -578,6 +669,7 @@ async def list_own_documents(
             title=r["titulo"],
             publication_status=r["publication_status"],
             visibility=r["visibility"],
+            published_at=r["published_at"],
         )
         for r in rows
     ]

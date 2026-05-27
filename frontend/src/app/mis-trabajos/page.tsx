@@ -82,6 +82,11 @@ function Section({
                 className="block px-4 py-3 text-sm hover:bg-muted"
               >
                 {d.title}
+                {d.published_at && (
+                  <span className="text-muted-foreground ml-2 text-xs">
+                    Publicado el {new Date(d.published_at).toLocaleDateString("es-AR")}
+                  </span>
+                )}
               </Link>
             </li>
           ))}
