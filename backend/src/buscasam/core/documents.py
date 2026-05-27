@@ -446,12 +446,20 @@ async def write_headline(
 async def mark_failed(
     session: AsyncSession, version_id: int, error: str
 ) -> None:
-    """ADR-0010 §9: insert a unique-keyed processing_failed notification."""
+    """Candidate terminal-state writer (ADR-0008 §5, ADR-0010 §9).
+
+    Single seam called by every fatal indexing path — recognized parse/OCR
+    failures and exhausted transient failures (`core/jobs._run_attempt`). The
+    UPDATE is first-write-wins so a later `exhausted retries:` reason cannot
+    overwrite an earlier, more specific `corrupted:` cause. The notification
+    insert is deduped at the unique (user_id, event_key) index.
+    """
     cv = await load_candidate(session, version_id)
     await session.execute(
         text(
             "UPDATE document_versions SET index_status = 'failed', "
-            "  index_error = :err WHERE id = :id"
+            "  index_error = :err "
+            "WHERE id = :id AND index_status <> 'failed'"
         ),
         {"err": error, "id": version_id},
     )
@@ -472,6 +480,38 @@ async def mark_failed(
             "doc_id": cv.doc_id,
             "vid": version_id,
             "err": error,
+        },
+    )
+
+
+async def mark_headline_refresh_failed(
+    session: AsyncSession, version_id: int, *, reason: str
+) -> None:
+    """ADR-0008 §5 row 3: refresh_headline exhausted retries.
+
+    Leaves `index_status` alone (published headline stays current; draft
+    publish stays blocked by the fingerprint mismatch) and inserts a deduped
+    notification keyed on `headline_refresh_failed:{vid}`. Same `kind` as
+    indexing failures so the consumer list does not need a new branch.
+    """
+    cv = await load_candidate(session, version_id)
+    if cv.owner_user_id is None:
+        return
+    await session.execute(
+        text(
+            "INSERT INTO notifications (user_id, event_key, kind, payload_json) "
+            "VALUES (:uid, :ek, 'processing_failed', "
+            "        jsonb_build_object('doc_id', cast(:doc_id as bigint), "
+            "                           'version_id', cast(:vid as bigint), "
+            "                           'error', cast(:err as text))) "
+            "ON CONFLICT (user_id, event_key) DO NOTHING"
+        ),
+        {
+            "uid": cv.owner_user_id,
+            "ek": f"headline_refresh_failed:{version_id}",
+            "doc_id": cv.doc_id,
+            "vid": version_id,
+            "err": reason,
         },
     )
 

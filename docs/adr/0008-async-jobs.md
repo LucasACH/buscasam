@@ -52,6 +52,8 @@ Durable asynchronous work runs on **procrastinate**, backed by the application P
 
    For candidates, permanent parsing failures abort without retry and set `index_error='corrupted: <short reason>'`; exhausted transient failures set `index_error='exhausted retries: <exception class>'`. Current-version reindex failures keep existing public index rows/status and emit structured operator failure instead of mutating reader-visible state.
 
+   Every fatal indexing path — recognized parse/OCR errors inside `_run_index_document` / `_run_ocr_index_document` *and* exhausted transient failures detected by `_run_attempt` — converges on `core/documents.mark_failed`. `mark_failed` is first-write-wins so the more specific `corrupted:` reason wins over a later `exhausted retries:` reason for the same row. The headline equivalent is `core/documents.mark_headline_refresh_failed`: it leaves `index_status` alone (so the published headline stays current and the draft publish gate keeps blocking on the fingerprint mismatch) and only writes the owner notification.
+
 6. Reindex. Operator CLI `python -m buscasam reindex --reason=embedding|extract` selects published current versions and active unpublished candidates, not historical inactive versions, and enqueues `index_document`. Reindex preserves author-approved published metadata. Published replacements remain current until newly indexed output is explicitly published; administrative full reindex of an unchanged current version swaps index rows only after success.
 
 7. Locks and idempotency:
