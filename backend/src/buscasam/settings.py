@@ -23,6 +23,7 @@ class Settings(BaseSettings):
 
     base_url: str = "http://localhost:3000"
     blob_root: Path = Path("/var/lib/buscasam/blobs")
+    serve_blobs_inline: bool = False
     secret_key: str = DEV_SECRET_KEY
     oidc_client_id: str = "dev-client-id"
     oidc_client_secret: str = DEV_OIDC_CLIENT_SECRET

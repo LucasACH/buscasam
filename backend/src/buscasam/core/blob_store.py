@@ -1,7 +1,7 @@
 """Sole owner of all filesystem IO under BLOB_ROOT (ADR-0006 §3).
 
 Public surface (ADR-0006 §3):
-    put_stream, open_for_send, internal_path, exists, delete
+    put_stream, open_for_send, internal_path, local_path, exists, delete
 """
 from __future__ import annotations
 
@@ -88,6 +88,10 @@ async def open_for_send(sha256: str) -> AsyncIterator[bytes]:
 
 def internal_path(sha256: str) -> str:
     return f"/_blobs/{sha256[:2]}/{sha256[2:4]}/{sha256}"
+
+
+def local_path(sha256: str) -> Path:
+    return _sharded_path(sha256)
 
 
 async def exists(sha256: str) -> bool:

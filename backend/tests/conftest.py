@@ -4,6 +4,10 @@ import sys
 import uuid
 from pathlib import Path
 
+# Tests assert the X-Accel-Redirect headers and empty body shipped to nginx;
+# force the inline-streaming dev shim off regardless of the developer's .env.
+os.environ["BUSCASAM_SERVE_BLOBS_INLINE"] = "0"
+
 import pytest
 import pytest_asyncio
 from alembic import command
