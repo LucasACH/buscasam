@@ -471,13 +471,13 @@ export interface paths {
             cookie?: never;
         };
         /** Download Version */
-        get: operations["download_version_api_docs__doc_id__versions__n__download_head"];
+        get: operations["download_version_api_docs__doc_id__versions__n__download_get"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         /** Download Version */
-        head: operations["download_version_api_docs__doc_id__versions__n__download_head"];
+        head: operations["download_version_api_docs__doc_id__versions__n__download_get"];
         patch?: never;
         trace?: never;
     };
@@ -528,6 +528,10 @@ export interface components {
             display_name: string;
             /** Email Local */
             email_local: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
             status: "owner" | "pending" | "accepted" | "declined" | "external";
         };
         /** CreateDraftRequest */
@@ -672,15 +676,15 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
-        /** InviteCoauthorRequest */
-        InviteCoauthorRequest: {
-            /** User Id */
-            user_id: number;
-        };
         /** InvitationBannerDTO */
         InvitationBannerDTO: {
             /** Inviter Display Name */
             inviter_display_name: string;
+        };
+        /** InviteCoauthorRequest */
+        InviteCoauthorRequest: {
+            /** User Id */
+            user_id: number;
         };
         /** MainFileDTO */
         MainFileDTO: {
@@ -1659,7 +1663,39 @@ export interface operations {
             };
         };
     };
-    download_version_api_docs__doc_id__versions__n__download_head: {
+    download_version_api_docs__doc_id__versions__n__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
+                n: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_version_api_docs__doc_id__versions__n__download_get: {
         parameters: {
             query?: never;
             header?: never;
