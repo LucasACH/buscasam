@@ -298,10 +298,16 @@ export interface components {
             title: string;
             /** Area Path */
             area_path: string;
-            /** Document Type */
-            document_type: string;
-            /** Visibility */
-            visibility: string;
+            /**
+             * Document Type
+             * @enum {string}
+             */
+            document_type: "tesis" | "paper" | "trabajo_practico" | "proyecto_investigacion" | "monografia" | "ponencia_poster" | "apunte_resumen" | "informe_catedra";
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "publico" | "interno" | "privado";
             /**
              * External Authors
              * @default []
@@ -464,11 +470,11 @@ export interface components {
             /** Fecha */
             fecha?: string | null;
             /** Visibility */
-            visibility?: string | null;
+            visibility?: ("publico" | "interno" | "privado") | null;
             /** Area Path */
             area_path?: string | null;
             /** Document Type */
-            document_type?: string | null;
+            document_type?: ("tesis" | "paper" | "trabajo_practico" | "proyecto_investigacion" | "monografia" | "ponencia_poster" | "apunte_resumen" | "informe_catedra") | null;
         };
         /** UserSearchResult */
         UserSearchResult: {

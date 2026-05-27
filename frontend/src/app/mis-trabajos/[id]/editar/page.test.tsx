@@ -1,14 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-const { useDraftStateMock, apiPatch, toastError } = vi.hoisted(() => ({
+const { useDraftStateMock, apiPatch, toastError, invalidateQueries } = vi.hoisted(() => ({
   useDraftStateMock: vi.fn(),
   apiPatch: vi.fn(),
   toastError: vi.fn(),
+  invalidateQueries: vi.fn(),
 }));
-vi.mock("../../useDraftState", () => ({ useDraftState: () => useDraftStateMock() }));
+vi.mock("../../useDraftState", () => ({
+  useDraftState: () => useDraftStateMock(),
+  draftQueryKey: (docId: number) => ["draft", docId],
+}));
 vi.mock("@/api/client", () => ({ api: { PATCH: apiPatch } }));
 vi.mock("sonner", () => ({ toast: { error: toastError } }));
+vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ invalidateQueries }) }));
 vi.mock("@/lib/useUser", () => ({
   useUser: () => ({ user: { user_id: 1 }, isInvitado: false, isLoading: false, isError: false }),
 }));
@@ -43,6 +48,7 @@ describe("editar page", () => {
     apiPatch.mockReset();
     apiPatch.mockResolvedValue({ error: undefined });
     toastError.mockReset();
+    invalidateQueries.mockReset();
   });
   afterEach(() => cleanup());
 
@@ -130,6 +136,18 @@ describe("editar page", () => {
     fireEvent.change(input, { target: { value: "Nuevo" } });
     fireEvent.blur(input);
     await waitFor(() => expect(toastError).toHaveBeenCalled());
+    expect(invalidateQueries).not.toHaveBeenCalled();
+  });
+
+  it("refetches draft state after a successful save so a new gate is observed", async () => {
+    useDraftStateMock.mockReturnValue(draft({ title: "Viejo", publish_gate_reason: null }));
+    render(<EditarPage />);
+    const input = screen.getByLabelText("Título");
+    fireEvent.change(input, { target: { value: "Nuevo título" } });
+    fireEvent.blur(input);
+    await waitFor(() =>
+      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["draft", 7] }),
+    );
   });
 
   it("PATCHes keywords as an array on blur", async () => {

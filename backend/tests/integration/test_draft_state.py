@@ -5,6 +5,7 @@ import json
 from datetime import date
 
 import httpx
+import numpy as np
 from sqlalchemy import text
 
 from buscasam.core import chunk as chunkmod
@@ -206,6 +207,46 @@ async def test_update_on_failed_candidate_persists_and_stays_failed(session):
 
     state = await documents.get_draft_state(session, ctx, doc_id)
     assert state.publish_gate_reason == "processing_failed"
+
+
+async def test_title_edited_during_processing_self_enqueues_reindex(session):
+    """R006: a título PATCH inside the index window leaves write_indexed_candidate
+    stamping a fingerprint from the pre-edit title. It must detect the drift and
+    enqueue a refresh, or the publish gate sticks on reindexing_headline forever."""
+    from buscasam.core.extract import IndexableMetadata
+
+    uid, doc_id, version_id = await _seed_candidate(
+        session,
+        titulo="Título editado",  # the racing PATCH already committed this
+        index_status="processing",
+        staged_abstract=None,
+    )
+    ctx = _ctx(uid)
+
+    # The indexer embedded its headline against the pre-edit title.
+    old_title = "Título original"
+    await documents.write_indexed_candidate(
+        session,
+        version_id,
+        body=[],
+        headline=chunkmod.headline_chunk(old_title, "abs"),
+        embeds=[np.zeros(1024)],
+        meta=IndexableMetadata(abstract="abs", keywords=[], fecha=None),
+        headline_fingerprint=chunkmod.headline_fingerprint(old_title, "abs"),
+    )
+
+    names = await _enqueued_task_names(session, version_id)
+    assert any(n.endswith("refresh_headline") for n in names)
+
+    mid = await documents.get_draft_state(session, ctx, doc_id)
+    assert mid.publish_gate_reason == "reindexing_headline"
+
+    tei = _tei_mock()
+    await jobs._run_refresh_headline(session, tei, version_id)
+    await tei.aclose()
+
+    after = await documents.get_draft_state(session, ctx, doc_id)
+    assert after.publish_gate_reason is None
 
 
 async def test_reindex_round_trip_clears_the_gate(session):

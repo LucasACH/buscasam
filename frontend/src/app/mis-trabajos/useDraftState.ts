@@ -9,6 +9,8 @@ export type DraftStateDTO = components["schemas"]["DraftStateDTO"];
 
 export const POLL_INTERVAL_MS = 3000;
 
+export const draftQueryKey = (docId: number) => ["draft", docId] as const;
+
 function shouldPoll(state: DraftStateDTO | undefined): boolean {
   return (
     state?.index_status === "processing" ||
@@ -18,7 +20,7 @@ function shouldPoll(state: DraftStateDTO | undefined): boolean {
 
 export function useDraftState(docId: number) {
   const query = useQuery<DraftStateDTO>({
-    queryKey: ["draft", docId],
+    queryKey: draftQueryKey(docId),
     refetchInterval: (q) => (shouldPoll(q.state.data) ? POLL_INTERVAL_MS : false),
     queryFn: async () => {
       const { data, error } = await api.GET("/api/documents/{doc_id}/draft", {

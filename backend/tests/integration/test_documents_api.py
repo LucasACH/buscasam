@@ -159,6 +159,30 @@ async def test_patch_draft_persists_metadata(client, session):
     assert staged == ["redes", "grafos"]
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"visibility": "secreto"},
+        {"document_type": "blogpost"},
+        {"area_path": "Escuela.Física"},
+    ],
+)
+async def test_patch_draft_invalid_enum_or_path_returns_422(client, session, body):
+    uid = await make_user(session)
+    sid = await _seed_session(session, uid)
+    doc_id, version_id = await _seed_candidate(session, owner_id=uid)
+    await session.commit()
+
+    r = await client.patch(
+        f"/api/documents/{doc_id}",
+        json=body,
+        headers={"origin": settings.base_url},
+        cookies={auth.SID_COOKIE: _sid_cookie(sid)},
+    )
+
+    assert r.status_code == 422
+
+
 async def test_patch_draft_cross_user_returns_404(client, session):
     owner = await make_user(session)
     other = await make_user(session)
