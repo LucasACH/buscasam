@@ -1,12 +1,13 @@
 """Reader-facing document endpoints (issues #43, #44, #45; module map §api/docs).
 
 Five endpoints share one UserCtx dep (cookie → invitado on absent), and one
-uniform 404 envelope across every denial path. Slice 2 adds the manager
-affordances on top of the slice-1 reader surface: the `versions`/`manageable`
-detail fields and the historical-version download (`download_version`), both
-gated on `manageable_where`. Slice 3 wires `core/related.fetch_related` through
-`settings.min_semantic_similarity`, returning `RelatedDTO[]` or the uniform
-404 envelope.
+uniform 404 envelope across every denial path. Download handlers delegate
+access-gated row lookup to `core/documents` (`get_readable_main_file`,
+`get_readable_attachment`, `get_manageable_version_file`) and keep only
+transport: headers, `None → 404` mapping, `X-Accel-Redirect` vs `FileResponse`
+projection, `n` parsing, and the attachment `mime` fallback. Slice 3 wires
+`core/related.fetch_related` through `settings.min_semantic_similarity`,
+returning `RelatedDTO[]` or the uniform 404 envelope.
 """
 from __future__ import annotations
 
@@ -15,13 +16,16 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, model_serializer
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from buscasam.api.deps import get_session
 from buscasam.core import auth, blob_store
-from buscasam.core.document_access import manageable_where, readable_where
-from buscasam.core.documents import get_detail
+from buscasam.core.documents import (
+    get_detail,
+    get_manageable_version_file,
+    get_readable_attachment,
+    get_readable_main_file,
+)
 from buscasam.core.related import fetch_related
 from buscasam.settings import settings
 
@@ -211,24 +215,11 @@ async def download_main_file(
     user_ctx: auth.UserCtx = Depends(auth.current_user),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
-    where, params = readable_where("d", user_ctx)
-    row = (
-        await session.execute(
-            text(
-                "SELECT encode(dv.sha256, 'hex') AS sha, "
-                "       dv.original_filename, dv.mime "
-                "FROM documents d "
-                "JOIN document_versions dv "
-                "  ON dv.doc_id = d.id AND dv.is_current "
-                f"WHERE d.id = :doc_id AND ({where})"
-            ),
-            {"doc_id": doc_id, **params},
-        )
-    ).first()
-    if row is None:
+    file = await get_readable_main_file(session, doc_id, user_ctx)
+    if file is None:
         raise _not_found()
     return _download_response(
-        sha_hex=row.sha, original_filename=row.original_filename, mime=row.mime
+        sha_hex=file.sha_hex, original_filename=file.original_filename, mime=file.mime
     )
 
 
@@ -239,28 +230,15 @@ async def download_attachment(
     user_ctx: auth.UserCtx = Depends(auth.current_user),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
-    where, params = readable_where("d", user_ctx)
-    row = (
-        await session.execute(
-            text(
-                "SELECT encode(a.sha256, 'hex') AS sha, "
-                "       a.original_filename, a.mime "
-                "FROM documents d "
-                "JOIN document_attachments a "
-                "  ON a.doc_id = d.id "
-                f"WHERE d.id = :doc_id AND a.id = :att_id AND ({where})"
-            ),
-            {"doc_id": doc_id, "att_id": att_id, **params},
-        )
-    ).first()
-    if row is None:
+    file = await get_readable_attachment(session, doc_id, att_id, user_ctx)
+    if file is None:
         raise _not_found()
     return _download_response(
-        sha_hex=row.sha,
-        original_filename=row.original_filename,
+        sha_hex=file.sha_hex,
+        original_filename=file.original_filename,
         # Attachments can have NULL mime per migration 0010; fall back to a
         # generic stream type so Content-Type is always present.
-        mime=row.mime or "application/octet-stream",
+        mime=file.mime or "application/octet-stream",
     )
 
 
@@ -271,10 +249,9 @@ async def download_version(
     user_ctx: auth.UserCtx = Depends(auth.current_user),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
-    # Historical versions are author-only (story 26), so this route gates on
-    # manageable_where, not readable_where. `n` is the 1-based row_number
-    # ordering shared with get_detail; any non-integer / out-of-range value is
-    # the same uniform 404 — never a 400/422 (module map §api/docs).
+    # `n` is the 1-based row_number ordering shared with get_detail; any
+    # non-integer / out-of-range value is the same uniform 404 — never a
+    # 400/422 (module map §api/docs).
     try:
         version_n = int(n)
     except ValueError:
@@ -282,25 +259,9 @@ async def download_version(
     if version_n < 1:
         raise _not_found()
 
-    where, params = manageable_where("d", user_ctx)
-    row = (
-        await session.execute(
-            text(
-                "SELECT encode(v.sha256, 'hex') AS sha, "
-                "       v.original_filename, v.mime "
-                "FROM documents d "
-                "JOIN ("
-                "  SELECT doc_id, sha256, original_filename, mime, "
-                "         row_number() OVER (PARTITION BY doc_id ORDER BY id) AS n "
-                "  FROM document_versions WHERE doc_id = :doc_id"
-                ") v ON v.doc_id = d.id "
-                f"WHERE d.id = :doc_id AND v.n = :n AND ({where})"
-            ),
-            {"doc_id": doc_id, "n": version_n, **params},
-        )
-    ).first()
-    if row is None:
+    file = await get_manageable_version_file(session, doc_id, version_n, user_ctx)
+    if file is None:
         raise _not_found()
     return _download_response(
-        sha_hex=row.sha, original_filename=row.original_filename, mime=row.mime
+        sha_hex=file.sha_hex, original_filename=file.original_filename, mime=file.mime
     )
