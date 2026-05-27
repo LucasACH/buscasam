@@ -1,7 +1,8 @@
 """Sole owner of all filesystem IO under BLOB_ROOT (ADR-0006 §3).
 
 Public surface (ADR-0006 §3):
-    put_stream, open_for_send, internal_path, local_path, exists, delete
+    put_stream, open_for_send, internal_path, local_path, exists,
+    discard_if_unreferenced, delete
 """
 from __future__ import annotations
 
@@ -13,6 +14,8 @@ from pathlib import Path
 from typing import AsyncIterator
 
 import magic
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from buscasam.settings import settings
 
@@ -98,5 +101,32 @@ async def exists(sha256: str) -> bool:
     return _sharded_path(sha256).exists()
 
 
+async def discard_if_unreferenced(session: AsyncSession, sha256: str) -> None:
+    """Delete the blob iff no row references it. Per-sha form of the §12
+    orphan sweep — callers abandoning a content-addressed blob (rejected
+    upload, scratch artifact) use this so a dedup hit against a still-
+    referenced row stays safe.
+    """
+    row = (
+        await session.execute(
+            text(
+                "SELECT 1 FROM document_versions "
+                "WHERE sha256 = decode(:sha, 'hex') "
+                "UNION ALL "
+                "SELECT 1 FROM document_attachments "
+                "WHERE sha256 = decode(:sha, 'hex') "
+                "LIMIT 1"
+            ),
+            {"sha": sha256},
+        )
+    ).first()
+    if row is None:
+        _sharded_path(sha256).unlink(missing_ok=True)
+
+
 async def delete(sha256: str) -> None:
+    """GC entry point (ADR-0006 §3, §12). Application code should call
+    `discard_if_unreferenced` instead — only the orphan sweep knows the blob
+    is safe to delete unconditionally.
+    """
     _sharded_path(sha256).unlink(missing_ok=True)

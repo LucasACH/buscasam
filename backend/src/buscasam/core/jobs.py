@@ -147,7 +147,7 @@ async def _run_ocr_index_document(
         doc = await extractmod.extract(put.sha256, "application/pdf")
         await _complete_indexing(session, tei, cv, doc)
     finally:
-        await blob_store.delete(put.sha256)
+        await blob_store.discard_if_unreferenced(session, put.sha256)
 
 
 async def _run_refresh_headline(
