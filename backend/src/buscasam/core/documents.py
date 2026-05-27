@@ -57,6 +57,18 @@ class PublishConflict(Exception):
     longer matches current title + staged_abstract (→ 409)."""
 
 
+class AttachmentCapExceeded(Exception):
+    """The document already holds the maximum of 5 attachments (→ 409)."""
+
+
+@dataclass(frozen=True)
+class AttachmentInfo:
+    id: int
+    original_filename: str
+    size_bytes: int
+    mime: str | None
+
+
 @dataclass(frozen=True)
 class DraftState:
     doc_id: int
@@ -69,6 +81,7 @@ class DraftState:
     index_error: str | None
     publish_gate_reason: str | None
     is_owner: bool
+    attachments: list[AttachmentInfo]
 
 
 def _publish_gate_reason(index_status: str, fingerprint_matches: bool) -> str | None:
@@ -606,6 +619,77 @@ async def publish(session: AsyncSession, user_ctx: UserCtx, doc_id: int) -> None
     await jobs.enqueue_fan_out_coauthor_invites(session, doc_id)
 
 
+async def add_attachment(
+    session: AsyncSession,
+    user_ctx: UserCtx,
+    doc_id: int,
+    blob: BlobPutResult,
+    *,
+    original_filename: str,
+) -> int:
+    where, params = manageable_where("d", user_ctx)
+    # FOR UPDATE OF d serializes concurrent attachment inserts for this document
+    # so the 5-cap below cannot be raced (ADR-0006 §7): a second uploader blocks
+    # here until the first commits, then re-counts against the committed rows.
+    locked = (
+        await session.execute(
+            text(
+                f"SELECT 1 FROM documents d WHERE d.id = :doc_id AND ({where}) "
+                "FOR UPDATE OF d"
+            ),
+            {"doc_id": doc_id, **params},
+        )
+    ).scalar_one_or_none()
+    if locked is None:
+        raise DocumentNotFound
+
+    count = (
+        await session.execute(
+            text("SELECT count(*) FROM document_attachments WHERE doc_id = :doc_id"),
+            {"doc_id": doc_id},
+        )
+    ).scalar_one()
+    if count >= 5:
+        raise AttachmentCapExceeded
+
+    return (
+        await session.execute(
+            text(
+                "INSERT INTO document_attachments "
+                "(doc_id, sha256, original_filename, bytes, mime, uploaded_by) "
+                "VALUES (:doc_id, decode(:sha, 'hex'), :fn, :bytes, :mime, :uid) "
+                "RETURNING id"
+            ),
+            {
+                "doc_id": doc_id,
+                "sha": blob.sha256,
+                "fn": original_filename,
+                "bytes": blob.bytes,
+                "mime": blob.sniffed_mime,
+                "uid": user_ctx.user_id,
+            },
+        )
+    ).scalar_one()
+
+
+async def remove_attachment(
+    session: AsyncSession, user_ctx: UserCtx, doc_id: int, att_id: int
+) -> None:
+    """Manageable-scoped delete of one attachment row. The underlying blob is
+    left for the orphan sweep (dedup-safe). Cross-user docs and missing rows
+    both raise DocumentNotFound (→ 404)."""
+    await assert_manageable(session, user_ctx, doc_id)
+    result = await session.execute(
+        text(
+            "DELETE FROM document_attachments "
+            "WHERE id = :att_id AND doc_id = :doc_id"
+        ),
+        {"att_id": att_id, "doc_id": doc_id},
+    )
+    if result.rowcount == 0:
+        raise DocumentNotFound
+
+
 async def get_draft_state(
     session: AsyncSession, user_ctx: UserCtx, doc_id: int
 ) -> DraftState:
@@ -633,6 +717,15 @@ async def get_draft_state(
     matches = row["headline_fingerprint"] == headline_fingerprint(
         row["titulo"], row["staged_abstract"] or ""
     )
+    att_rows = (
+        await session.execute(
+            text(
+                "SELECT id, original_filename, bytes, mime "
+                "FROM document_attachments WHERE doc_id = :doc_id ORDER BY id"
+            ),
+            {"doc_id": doc_id},
+        )
+    ).mappings().all()
     return DraftState(
         doc_id=doc_id,
         version_id=row["version_id"],
@@ -646,6 +739,15 @@ async def get_draft_state(
             row["index_status"], matches
         ),
         is_owner=row["owner_user_id"] == user_ctx.user_id,
+        attachments=[
+            AttachmentInfo(
+                id=a["id"],
+                original_filename=a["original_filename"],
+                size_bytes=a["bytes"],
+                mime=a["mime"],
+            )
+            for a in att_rows
+        ],
     )
 
 

@@ -276,6 +276,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/documents/{doc_id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Attachment */
+        post: operations["post_attachment_api_documents__doc_id__attachments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{doc_id}/attachments/{att_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Attachment */
+        delete: operations["delete_attachment_api_documents__doc_id__attachments__att_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/documents": {
         parameters: {
             query?: never;
@@ -303,6 +337,22 @@ export interface components {
             area_path: string;
             /** Display Name */
             display_name: string;
+        };
+        /** AttachmentDTO */
+        AttachmentDTO: {
+            /** Id */
+            id: number;
+            /** Original Filename */
+            original_filename: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Mime */
+            mime: string | null;
+        };
+        /** Body_post_attachment_api_documents__doc_id__attachments_post */
+        Body_post_attachment_api_documents__doc_id__attachments_post: {
+            /** File */
+            file: string;
         };
         /** Body_upload_main_file_api_documents__doc_id__upload_post */
         Body_upload_main_file_api_documents__doc_id__upload_post: {
@@ -359,6 +409,8 @@ export interface components {
             publish_gate_reason: string | null;
             /** Is Owner */
             is_owner: boolean;
+            /** Attachments */
+            attachments: components["schemas"]["AttachmentDTO"][];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -950,6 +1002,71 @@ export interface operations {
             header?: never;
             path: {
                 doc_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_attachment_api_documents__doc_id__attachments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_post_attachment_api_documents__doc_id__attachments_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_attachment_api_documents__doc_id__attachments__att_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
+                att_id: number;
             };
             cookie?: never;
         };

@@ -11,7 +11,7 @@ from sqlalchemy import text
 
 from buscasam.api.app import create_app
 from buscasam.api.deps import get_session
-from buscasam.core import auth
+from buscasam.core import auth, blob_store
 from buscasam.core.chunk import headline_fingerprint
 from buscasam.settings import settings
 from tests.factories import make_document, make_document_author, make_user
@@ -361,3 +361,203 @@ async def test_patch_draft_cross_user_returns_404(client, session):
         )
     ).scalar_one()
     assert titulo == "Tesis"
+
+
+@pytest.fixture
+def blob_root(tmp_path, monkeypatch):
+    root = tmp_path / "blobs"
+    monkeypatch.setattr(blob_store, "BLOB_ROOT", root)
+    return root
+
+
+async def _att_count(session, doc_id: int) -> int:
+    return (
+        await session.execute(
+            text("SELECT count(*) FROM document_attachments WHERE doc_id = :d"),
+            {"d": doc_id},
+        )
+    ).scalar_one()
+
+
+async def test_post_attachment_returns_201(client, session, blob_root):
+    uid = await make_user(session)
+    sid = await _seed_session(session, uid)
+    doc_id, _ = await _seed_candidate(session, owner_id=uid)
+    await session.commit()
+
+    r = await client.post(
+        f"/api/documents/{doc_id}/attachments",
+        files={"file": ("data.csv", b"a,b\n1,2\n", "text/csv")},
+        headers={"origin": settings.base_url},
+        cookies={auth.SID_COOKIE: _sid_cookie(sid)},
+    )
+
+    assert r.status_code == 201
+    body = r.json()
+    assert body["original_filename"] == "data.csv"
+    assert body["size_bytes"] == len(b"a,b\n1,2\n")
+    assert await _att_count(session, doc_id) == 1
+
+
+async def test_post_attachment_over_20mb_returns_413(client, session, blob_root):
+    uid = await make_user(session)
+    sid = await _seed_session(session, uid)
+    doc_id, _ = await _seed_candidate(session, owner_id=uid)
+    await session.commit()
+
+    oversized = b"x" * (20_000_000 + 1)
+    r = await client.post(
+        f"/api/documents/{doc_id}/attachments",
+        files={"file": ("big.txt", oversized, "text/plain")},
+        headers={"origin": settings.base_url},
+        cookies={auth.SID_COOKIE: _sid_cookie(sid)},
+    )
+
+    assert r.status_code == 413
+    assert await _att_count(session, doc_id) == 0
+    # No blob committed: put_stream unlinks its temp on overflow.
+    assert [p for p in blob_root.rglob("*") if p.is_file()] == []
+
+
+async def test_post_attachment_disallowed_extension_returns_415(client, session, blob_root):
+    uid = await make_user(session)
+    sid = await _seed_session(session, uid)
+    doc_id, _ = await _seed_candidate(session, owner_id=uid)
+    await session.commit()
+
+    r = await client.post(
+        f"/api/documents/{doc_id}/attachments",
+        files={"file": ("evil.exe", b"MZ\x90\x00", "application/octet-stream")},
+        headers={"origin": settings.base_url},
+        cookies={auth.SID_COOKIE: _sid_cookie(sid)},
+    )
+
+    assert r.status_code == 415
+    assert await _att_count(session, doc_id) == 0
+
+
+async def test_post_attachment_over_cap_returns_409(client, session, blob_root):
+    uid = await make_user(session)
+    sid = await _seed_session(session, uid)
+    doc_id, _ = await _seed_candidate(session, owner_id=uid)
+    for i in range(5):
+        await session.execute(
+            text(
+                "INSERT INTO document_attachments "
+                "(doc_id, sha256, original_filename, bytes, mime) "
+                "VALUES (:d, decode(:sha, 'hex'), :fn, 1, 'text/csv')"
+            ),
+            {"d": doc_id, "sha": f"{i:02d}" * 32, "fn": f"f{i}.csv"},
+        )
+    await session.commit()
+
+    r = await client.post(
+        f"/api/documents/{doc_id}/attachments",
+        files={"file": ("sixth.csv", b"a,b\n", "text/csv")},
+        headers={"origin": settings.base_url},
+        cookies={auth.SID_COOKIE: _sid_cookie(sid)},
+    )
+
+    assert r.status_code == 409
+    assert r.json()["detail"]["reason"] == "attachment_cap_exceeded"
+    assert await _att_count(session, doc_id) == 5
+
+
+async def test_post_attachment_cross_user_returns_404(client, session, blob_root):
+    owner = await make_user(session)
+    other = await make_user(session)
+    sid = await _seed_session(session, other)
+    doc_id, _ = await _seed_candidate(session, owner_id=owner)
+    await session.commit()
+
+    r = await client.post(
+        f"/api/documents/{doc_id}/attachments",
+        files={"file": ("data.csv", b"a,b\n", "text/csv")},
+        headers={"origin": settings.base_url},
+        cookies={auth.SID_COOKIE: _sid_cookie(sid)},
+    )
+
+    assert r.status_code == 404
+    assert await _att_count(session, doc_id) == 0
+
+
+async def test_delete_attachment_removes_row_keeps_blob(client, session, blob_root):
+    uid = await make_user(session)
+    sid = await _seed_session(session, uid)
+    doc_id, _ = await _seed_candidate(session, owner_id=uid)
+    await session.commit()
+
+    post = await client.post(
+        f"/api/documents/{doc_id}/attachments",
+        files={"file": ("data.csv", b"a,b\n1,2\n", "text/csv")},
+        headers={"origin": settings.base_url},
+        cookies={auth.SID_COOKIE: _sid_cookie(sid)},
+    )
+    att_id = post.json()["id"]
+    sha = (
+        await session.execute(
+            text("SELECT encode(sha256, 'hex') FROM document_attachments WHERE id = :i"),
+            {"i": att_id},
+        )
+    ).scalar_one()
+
+    r = await client.delete(
+        f"/api/documents/{doc_id}/attachments/{att_id}",
+        headers={"origin": settings.base_url},
+        cookies={auth.SID_COOKIE: _sid_cookie(sid)},
+    )
+
+    assert r.status_code == 204
+    assert await _att_count(session, doc_id) == 0
+    assert await blob_store.exists(sha) is True
+
+
+async def test_delete_attachment_cross_user_returns_404(client, session, blob_root):
+    owner = await make_user(session)
+    other = await make_user(session)
+    owner_sid = await _seed_session(session, owner)
+    other_sid = await _seed_session(session, other)
+    doc_id, _ = await _seed_candidate(session, owner_id=owner)
+    await session.commit()
+
+    post = await client.post(
+        f"/api/documents/{doc_id}/attachments",
+        files={"file": ("data.csv", b"a,b\n", "text/csv")},
+        headers={"origin": settings.base_url},
+        cookies={auth.SID_COOKIE: _sid_cookie(owner_sid)},
+    )
+    att_id = post.json()["id"]
+
+    r = await client.delete(
+        f"/api/documents/{doc_id}/attachments/{att_id}",
+        headers={"origin": settings.base_url},
+        cookies={auth.SID_COOKIE: _sid_cookie(other_sid)},
+    )
+
+    assert r.status_code == 404
+    assert await _att_count(session, doc_id) == 1
+
+
+async def test_get_draft_includes_attachments(client, session, blob_root):
+    uid = await make_user(session)
+    sid = await _seed_session(session, uid)
+    doc_id, _ = await _seed_candidate(session, owner_id=uid)
+    await session.commit()
+
+    await client.post(
+        f"/api/documents/{doc_id}/attachments",
+        files={"file": ("data.csv", b"a,b\n1,2\n", "text/csv")},
+        headers={"origin": settings.base_url},
+        cookies={auth.SID_COOKIE: _sid_cookie(sid)},
+    )
+
+    r = await client.get(
+        f"/api/documents/{doc_id}/draft",
+        cookies={auth.SID_COOKIE: _sid_cookie(sid)},
+    )
+
+    assert r.status_code == 200
+    atts = r.json()["attachments"]
+    assert len(atts) == 1
+    assert atts[0]["original_filename"] == "data.csv"
+    assert atts[0]["size_bytes"] == len(b"a,b\n1,2\n")

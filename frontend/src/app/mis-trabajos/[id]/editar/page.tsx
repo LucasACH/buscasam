@@ -11,6 +11,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
+import { AttachmentsPanel } from "@/components/AttachmentsPanel";
 import { useUser } from "@/lib/useUser";
 import { useDraftState, draftQueryKey, type DraftStateDTO } from "../../useDraftState";
 
@@ -196,6 +197,12 @@ function EditarForm({ docId, state }: { docId: number; state: DraftStateDTO }) {
             </Suggestion>
           </dl>
         </section>
+      </div>
+
+      <div className="mt-8">
+        {/* The draft state only loads for manageable users (owner + accepted
+            coauthors); reaching this page means the user can manage attachments. */}
+        <AttachmentsPanel docId={docId} canManage />
       </div>
 
       <div className="mt-8">
