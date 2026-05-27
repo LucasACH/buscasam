@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 
+import { api } from "@/api/client";
 import { NOTIFICATIONS_QUERY_KEY } from "@/lib/useNotifications";
 import { ME_QUERY_KEY, useUser, type User } from "@/lib/useUser";
 
@@ -37,10 +38,7 @@ export function AuthNav() {
   if (!user) return null;
 
   async function onLogout() {
-    await fetch("/api/auth/logout", {
-      method: "POST",
-      credentials: "same-origin",
-    });
+    await api.POST("/api/auth/logout");
     qc.setQueryData(ME_QUERY_KEY, null);
     // Drop the prior user's notifications so a next login can't flash them
     // (the count key is a prefix of NOTIFICATIONS_QUERY_KEY, removed too).

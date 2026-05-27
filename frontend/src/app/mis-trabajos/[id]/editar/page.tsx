@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { AttachmentsPanel } from "@/components/AttachmentsPanel";
+import { CoauthorsPanel } from "@/components/CoauthorsPanel";
 import { useUser } from "@/lib/useUser";
 import { useDraftState, type DraftState } from "../../useDraftState";
 
@@ -212,6 +213,10 @@ function EditarForm({
         {/* The draft state only loads for manageable users (owner + accepted
             coauthors); reaching this page means the user can manage attachments. */}
         <AttachmentsPanel docId={docId} canManage />
+      </div>
+
+      <div className="mt-8">
+        <CoauthorsPanel docId={docId} />
       </div>
 
       <div className="mt-8">

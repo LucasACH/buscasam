@@ -23,6 +23,9 @@ vi.mock("sonner", () => ({ toast: { error: toastError } }));
 vi.mock("@/components/AttachmentsPanel", () => ({
   AttachmentsPanel: () => null,
 }));
+vi.mock("@/components/CoauthorsPanel", () => ({
+  CoauthorsPanel: () => null,
+}));
 vi.mock("@/lib/useUser", () => ({
   useUser: () => ({
     user: { user_id: 1 },

@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+const { apiGet } = vi.hoisted(() => ({ apiGet: vi.fn() }));
+vi.mock("@/api/client", () => ({ api: { GET: apiGet } }));
+
 import { useUser } from "./useUser";
 
 function wrapper() {
@@ -15,9 +18,13 @@ function wrapper() {
   return Wrapper;
 }
 
+function fakeResponse(status: number): Response {
+  return { status, ok: status >= 200 && status < 300 } as Response;
+}
+
 describe("useUser", () => {
   beforeEach(() => {
-    vi.spyOn(global, "fetch").mockReset();
+    apiGet.mockReset();
   });
   afterEach(() => {
     cleanup();
@@ -25,9 +32,11 @@ describe("useUser", () => {
   });
 
   it("returns invitado on 401", async () => {
-    vi.spyOn(global, "fetch").mockResolvedValue(
-      new Response(null, { status: 401 }),
-    );
+    apiGet.mockResolvedValue({
+      data: undefined,
+      error: undefined,
+      response: fakeResponse(401),
+    });
 
     const { result } = renderHook(() => useUser(), { wrapper: wrapper() });
 
@@ -44,12 +53,11 @@ describe("useUser", () => {
       picture_url: "https://example.test/a.png",
       hd: "unsam.edu.ar",
     };
-    vi.spyOn(global, "fetch").mockResolvedValue(
-      new Response(JSON.stringify(body), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
+    apiGet.mockResolvedValue({
+      data: body,
+      error: undefined,
+      response: fakeResponse(200),
+    });
 
     const { result } = renderHook(() => useUser(), { wrapper: wrapper() });
 
@@ -59,7 +67,7 @@ describe("useUser", () => {
   });
 
   it("throws (isError) on network failure", async () => {
-    vi.spyOn(global, "fetch").mockRejectedValue(new Error("network down"));
+    apiGet.mockRejectedValue(new Error("network down"));
 
     const { result } = renderHook(() => useUser(), { wrapper: wrapper() });
 
@@ -68,7 +76,7 @@ describe("useUser", () => {
   });
 
   it("does NOT treat a network error as invitado", async () => {
-    vi.spyOn(global, "fetch").mockRejectedValue(new Error("network down"));
+    apiGet.mockRejectedValue(new Error("network down"));
 
     const { result } = renderHook(() => useUser(), { wrapper: wrapper() });
 

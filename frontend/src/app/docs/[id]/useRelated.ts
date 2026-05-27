@@ -2,16 +2,10 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import type { AuthorDisplay } from "./types";
+import { api } from "@/api/client";
+import type { components } from "@/api/schema";
 
-export type Related = {
-  doc_id: number;
-  titulo: string;
-  autores: AuthorDisplay[];
-  area_path: string;
-  tipo: string;
-  fecha: string | null;
-};
+export type Related = components["schemas"]["RelatedDTO"];
 
 class HttpError extends Error {
   status: number;
@@ -22,11 +16,11 @@ class HttpError extends Error {
 }
 
 async function fetchRelated(docId: number): Promise<Related[]> {
-  const r = await fetch(`/api/docs/${docId}/related`, {
-    credentials: "same-origin",
+  const { data, response } = await api.GET("/api/docs/{doc_id}/related", {
+    params: { path: { doc_id: docId } },
   });
-  if (!r.ok) throw new HttpError(r.status);
-  return (await r.json()) as Related[];
+  if (!response.ok) throw new HttpError(response.status);
+  return data ?? [];
 }
 
 export function useRelated(docId: number) {

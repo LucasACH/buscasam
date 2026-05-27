@@ -15,17 +15,23 @@ from buscasam.core.blob_store import BlobTooLarge
 from buscasam.core.documents import (
     UNSET,
     AttachmentCapExceeded,
+    CoauthorAlreadyListed,
+    CoauthorNotPending,
+    CoauthorStatus,
     DocumentNotFound,
     InvalidCoauthorId,
+    NotOwner,
     PublishConflict,
     add_attachment,
     assert_manageable,
     attach_main_version,
     create_draft,
     get_draft_state,
+    invite_coauthor,
     list_own_documents,
     publish,
     remove_attachment,
+    revoke_invitation,
     update_draft_metadata,
 )
 from buscasam.core.extract import PDFEncryptionError, probe_encrypted
@@ -157,6 +163,13 @@ class AttachmentDTO(BaseModel):
     mime: str | None
 
 
+class CoauthorRowDTO(BaseModel):
+    user_id: int | None
+    display_name: str
+    email_local: str | None
+    status: CoauthorStatus
+
+
 class DraftStateDTO(BaseModel):
     title: str
     index_status: str
@@ -167,6 +180,11 @@ class DraftStateDTO(BaseModel):
     publish_gate_reason: str | None
     is_owner: bool
     attachments: list[AttachmentDTO]
+    coauthors: list[CoauthorRowDTO]
+
+
+class InviteCoauthorRequest(BaseModel):
+    user_id: int
 
 
 class UpdateDraftRequest(BaseModel):
@@ -207,7 +225,50 @@ async def get_draft(
             )
             for a in state.attachments
         ],
+        coauthors=[
+            CoauthorRowDTO(
+                user_id=c.user_id,
+                display_name=c.display_name,
+                email_local=c.email_local,
+                status=c.status,
+            )
+            for c in state.coauthors
+        ],
     )
+
+
+@router.post("/documents/{doc_id}/coauthors", status_code=204)
+async def post_coauthor(
+    doc_id: int,
+    body: InviteCoauthorRequest,
+    user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    try:
+        await invite_coauthor(session, user_ctx, doc_id, body.user_id)
+    except NotOwner:
+        raise HTTPException(status_code=403)
+    except CoauthorAlreadyListed:
+        raise HTTPException(status_code=409)
+    except InvalidCoauthorId:
+        raise HTTPException(status_code=422, detail="Unknown user_id")
+    return Response(status_code=204)
+
+
+@router.delete("/documents/{doc_id}/coauthors/{user_id}", status_code=204)
+async def delete_coauthor(
+    doc_id: int,
+    user_id: int,
+    user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    try:
+        await revoke_invitation(session, user_ctx, doc_id, user_id)
+    except NotOwner:
+        raise HTTPException(status_code=403)
+    except CoauthorNotPending:
+        raise HTTPException(status_code=404)
+    return Response(status_code=204)
 
 
 @router.patch("/documents/{doc_id}", status_code=204)

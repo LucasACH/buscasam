@@ -3,8 +3,6 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import { AuthNav } from "./AuthNav";
-
 const replace = vi.fn();
 const pathname = vi.fn(() => "/buscar");
 
@@ -12,6 +10,16 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace }),
   usePathname: () => pathname(),
 }));
+
+const { useUserMock, apiPost } = vi.hoisted(() => ({
+  useUserMock: vi.fn(),
+  apiPost: vi.fn(),
+}));
+vi.mock("@/lib/useUser", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("@/lib/useUser")>();
+  return { ...mod, useUser: () => useUserMock() };
+});
+vi.mock("@/api/client", () => ({ api: { POST: apiPost } }));
 
 // The mounted NotificationBell pulls these; stub them so AuthNav tests stay
 // hermetic and don't reach the network through the typed client.
@@ -26,8 +34,9 @@ vi.mock("@/lib/useNotifications", () => ({
   }),
 }));
 
-function renderWith(fetchImpl: typeof fetch) {
-  vi.spyOn(global, "fetch").mockImplementation(fetchImpl);
+import { AuthNav } from "./AuthNav";
+
+function renderAuthNav() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -38,10 +47,37 @@ function renderWith(fetchImpl: typeof fetch) {
   );
 }
 
+function asInvitado() {
+  useUserMock.mockReturnValue({
+    user: null,
+    isInvitado: true,
+    isLoading: false,
+    isError: false,
+  });
+}
+
+function asAuthenticated(user: {
+  user_id: number;
+  role: "estudiante" | "docente";
+  name: string;
+  picture_url: string | null;
+  hd: string;
+}) {
+  useUserMock.mockReturnValue({
+    user,
+    isInvitado: false,
+    isLoading: false,
+    isError: false,
+  });
+}
+
 describe("AuthNav", () => {
   beforeEach(() => {
     replace.mockReset();
     pathname.mockReturnValue("/buscar");
+    useUserMock.mockReset();
+    apiPost.mockReset();
+    apiPost.mockResolvedValue({ data: undefined, error: undefined });
   });
   afterEach(() => {
     cleanup();
@@ -49,7 +85,8 @@ describe("AuthNav", () => {
   });
 
   it("invitado: shows login link with encoded next", async () => {
-    renderWith(async () => new Response(null, { status: 401 }));
+    asInvitado();
+    renderAuthNav();
 
     const link = await screen.findByRole("link", {
       name: /Iniciar sesión con UNSAM/i,
@@ -60,22 +97,14 @@ describe("AuthNav", () => {
   });
 
   it("authenticated: shows avatar + role label + logout", async () => {
-    const user = {
+    asAuthenticated({
       user_id: 7,
       role: "docente",
       name: "Ada Lovelace",
       picture_url: "https://example.test/a.png",
       hd: "unsam.edu.ar",
-    };
-    renderWith(async (input) => {
-      const url = typeof input === "string" ? input : input.toString();
-      if (url.endsWith("/api/me"))
-        return new Response(JSON.stringify(user), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      return new Response(null, { status: 204 });
     });
+    renderAuthNav();
 
     expect(
       await screen.findByText("Docente", { exact: false }),
@@ -87,56 +116,33 @@ describe("AuthNav", () => {
   });
 
   it("logout POSTs /api/auth/logout then router.replace('/')", async () => {
-    const user = {
+    asAuthenticated({
       user_id: 7,
       role: "estudiante",
       name: "Ada Lovelace",
       picture_url: null,
       hd: "estudiantes.unsam.edu.ar",
-    };
-    const logout = vi.fn(
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      async (_input: RequestInfo | URL, _init?: RequestInit) =>
-        new Response(null, { status: 204 }),
-    );
-    renderWith(async (input, init) => {
-      const url = typeof input === "string" ? input : input.toString();
-      if (url.endsWith("/api/auth/logout")) return logout(input, init);
-      if (url.endsWith("/api/me"))
-        return new Response(JSON.stringify(user), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      return new Response(null, { status: 204 });
     });
+    renderAuthNav();
 
     const btn = await screen.findByRole("button", { name: /Cerrar sesión/i });
     await userEvent.click(btn);
 
-    expect(logout).toHaveBeenCalledTimes(1);
-    const init = logout.mock.calls[0]![1];
-    expect(init?.method).toBe("POST");
+    expect(apiPost).toHaveBeenCalledTimes(1);
+    expect(apiPost).toHaveBeenCalledWith("/api/auth/logout");
     expect(replace).toHaveBeenCalledWith("/");
   });
 
   it("logout evicts the notifications cache", async () => {
     const removeQueries = vi.spyOn(QueryClient.prototype, "removeQueries");
-    const user = {
+    asAuthenticated({
       user_id: 7,
       role: "estudiante",
       name: "Ada Lovelace",
       picture_url: null,
       hd: "estudiantes.unsam.edu.ar",
-    };
-    renderWith(async (input) => {
-      const url = typeof input === "string" ? input : input.toString();
-      if (url.endsWith("/api/me"))
-        return new Response(JSON.stringify(user), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      return new Response(null, { status: 204 });
     });
+    renderAuthNav();
 
     const btn = await screen.findByRole("button", { name: /Cerrar sesión/i });
     await userEvent.click(btn);

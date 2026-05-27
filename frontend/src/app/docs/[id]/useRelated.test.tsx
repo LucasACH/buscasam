@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+const { apiGet } = vi.hoisted(() => ({ apiGet: vi.fn() }));
+vi.mock("@/api/client", () => ({ api: { GET: apiGet } }));
+
 import { useRelated } from "./useRelated";
 
 const RELATED_BODY = [
@@ -27,9 +30,13 @@ function wrapper() {
   return Wrapper;
 }
 
+function fakeResponse(status: number): Response {
+  return { status, ok: status >= 200 && status < 300 } as Response;
+}
+
 describe("useRelated", () => {
   beforeEach(() => {
-    vi.spyOn(global, "fetch").mockReset();
+    apiGet.mockReset();
   });
   afterEach(() => {
     cleanup();
@@ -37,12 +44,11 @@ describe("useRelated", () => {
   });
 
   it("returns related rows on 200", async () => {
-    vi.spyOn(global, "fetch").mockResolvedValue(
-      new Response(JSON.stringify(RELATED_BODY), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
+    apiGet.mockResolvedValue({
+      data: RELATED_BODY,
+      error: undefined,
+      response: fakeResponse(200),
+    });
 
     const { result } = renderHook(() => useRelated(42), { wrapper: wrapper() });
 
@@ -52,12 +58,11 @@ describe("useRelated", () => {
   });
 
   it("returns empty array when the source has no neighbours", async () => {
-    vi.spyOn(global, "fetch").mockResolvedValue(
-      new Response(JSON.stringify([]), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
+    apiGet.mockResolvedValue({
+      data: [],
+      error: undefined,
+      response: fakeResponse(200),
+    });
 
     const { result } = renderHook(() => useRelated(42), { wrapper: wrapper() });
 
@@ -66,9 +71,11 @@ describe("useRelated", () => {
   });
 
   it("sets isError on 404 (degenerate path; page already handled it)", async () => {
-    vi.spyOn(global, "fetch").mockResolvedValue(
-      new Response("", { status: 404 }),
-    );
+    apiGet.mockResolvedValue({
+      data: undefined,
+      error: undefined,
+      response: fakeResponse(404),
+    });
 
     const { result } = renderHook(() => useRelated(99), { wrapper: wrapper() });
 
@@ -76,24 +83,20 @@ describe("useRelated", () => {
     expect(result.current.related).toBeUndefined();
   });
 
-  it("hits /api/docs/{id}/related with the docId in the key", async () => {
-    const fetchSpy = vi
-      .spyOn(global, "fetch")
-      .mockResolvedValue(
-        new Response("[]", {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      );
+  it("hits /api/docs/{doc_id}/related with the docId in the path params", async () => {
+    apiGet.mockResolvedValue({
+      data: [],
+      error: undefined,
+      response: fakeResponse(200),
+    });
 
     const { result } = renderHook(() => useRelated(123), {
       wrapper: wrapper(),
     });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(fetchSpy).toHaveBeenCalledWith(
-      "/api/docs/123/related",
-      expect.objectContaining({ credentials: "same-origin" }),
-    );
+    expect(apiGet).toHaveBeenCalledWith("/api/docs/{doc_id}/related", {
+      params: { path: { doc_id: 123 } },
+    });
   });
 });
