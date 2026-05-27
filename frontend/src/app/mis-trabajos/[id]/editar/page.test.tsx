@@ -1,22 +1,35 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 
-const { useDraftStateMock, apiPatch, apiPost, toastError, invalidateQueries } = vi.hoisted(() => ({
-  useDraftStateMock: vi.fn(),
-  apiPatch: vi.fn(),
-  apiPost: vi.fn(),
-  toastError: vi.fn(),
-  invalidateQueries: vi.fn(),
-}));
+const { useDraftStateMock, apiPatch, apiPost, toastError, refreshDraft } =
+  vi.hoisted(() => ({
+    useDraftStateMock: vi.fn(),
+    apiPatch: vi.fn(),
+    apiPost: vi.fn(),
+    toastError: vi.fn(),
+    refreshDraft: vi.fn(),
+  }));
 vi.mock("../../useDraftState", () => ({
   useDraftState: () => useDraftStateMock(),
-  draftQueryKey: (docId: number) => ["draft", docId],
 }));
 vi.mock("@/api/client", () => ({ api: { PATCH: apiPatch, POST: apiPost } }));
 vi.mock("sonner", () => ({ toast: { error: toastError } }));
-vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ invalidateQueries }) }));
+vi.mock("@/components/AttachmentsPanel", () => ({
+  AttachmentsPanel: () => null,
+}));
 vi.mock("@/lib/useUser", () => ({
-  useUser: () => ({ user: { user_id: 1 }, isInvitado: false, isLoading: false, isError: false }),
+  useUser: () => ({
+    user: { user_id: 1 },
+    isInvitado: false,
+    isLoading: false,
+    isError: false,
+  }),
 }));
 const replace = vi.fn();
 const push = vi.fn();
@@ -27,21 +40,29 @@ vi.mock("next/navigation", () => ({
 
 import EditarPage from "./page";
 
-function draft(over: Record<string, unknown>) {
+function draft(
+  over: Record<string, unknown> = {},
+  lifecycle: Record<string, unknown> = {},
+) {
   return {
     state: {
       title: "Mi tesis",
-      index_status: "indexed",
       staged_abstract: "resumen extraído",
       staged_keywords: ["redes", "grafos"],
       staged_fecha: "2024-03-01",
-      index_error: null,
-      publish_gate_reason: null,
-      is_owner: true,
       ...over,
+      lifecycle: {
+        formSeedKey: "indexed",
+        statusLabel: "Listo para publicar",
+        showSuggestionsSpinner: false,
+        gateMessage: null,
+        canPublish: true,
+        ...lifecycle,
+      },
     },
     isLoading: false,
     isError: false,
+    refresh: refreshDraft,
   };
 }
 
@@ -53,20 +74,23 @@ describe("editar page", () => {
     apiPost.mockReset();
     apiPost.mockResolvedValue({ error: undefined, response: { status: 204 } });
     toastError.mockReset();
-    invalidateQueries.mockReset();
+    refreshDraft.mockReset();
+    refreshDraft.mockResolvedValue(undefined);
     push.mockReset();
   });
   afterEach(() => cleanup());
 
   it("shows 'Listo para publicar' pill when indexed", () => {
-    useDraftStateMock.mockReturnValue(draft({ index_status: "indexed" }));
+    useDraftStateMock.mockReturnValue(draft());
     render(<EditarPage />);
-    expect(screen.getByTestId("status-pill")).toHaveTextContent("Listo para publicar");
+    expect(screen.getByTestId("status-pill")).toHaveTextContent(
+      "Listo para publicar",
+    );
   });
 
   it("shows 'Procesando…' pill while processing", () => {
     useDraftStateMock.mockReturnValue(
-      draft({ index_status: "processing", publish_gate_reason: "processing" }),
+      draft({}, { statusLabel: "Procesando…", showSuggestionsSpinner: true }),
     );
     render(<EditarPage />);
     expect(screen.getByTestId("status-pill")).toHaveTextContent("Procesando…");
@@ -74,33 +98,39 @@ describe("editar page", () => {
 
   it("shows 'Falló el procesamiento' pill when failed", () => {
     useDraftStateMock.mockReturnValue(
-      draft({ index_status: "failed", publish_gate_reason: "processing_failed" }),
+      draft({}, { statusLabel: "Falló el procesamiento", canPublish: false }),
     );
     render(<EditarPage />);
-    expect(screen.getByTestId("status-pill")).toHaveTextContent("Falló el procesamiento");
+    expect(screen.getByTestId("status-pill")).toHaveTextContent(
+      "Falló el procesamiento",
+    );
   });
 
   it("publish button is disabled and echoes the gate reason", () => {
-    useDraftStateMock.mockReturnValue(draft({ publish_gate_reason: "reindexing_headline" }));
+    useDraftStateMock.mockReturnValue(
+      draft({}, { gateMessage: "Reindexando título…", canPublish: false }),
+    );
     render(<EditarPage />);
     expect(screen.getByRole("button", { name: /publicar/i })).toBeDisabled();
-    expect(screen.getByTestId("gate-reason")).toHaveTextContent("Reindexando título…");
+    expect(screen.getByTestId("gate-reason")).toHaveTextContent(
+      "Reindexando título…",
+    );
   });
 
   it("publish button is enabled when publishable and the user is the owner", () => {
-    useDraftStateMock.mockReturnValue(draft({ publish_gate_reason: null, is_owner: true }));
+    useDraftStateMock.mockReturnValue(draft());
     render(<EditarPage />);
     expect(screen.getByRole("button", { name: /publicar/i })).toBeEnabled();
   });
 
   it("publish button is disabled for a non-owner even when publishable", () => {
-    useDraftStateMock.mockReturnValue(draft({ publish_gate_reason: null, is_owner: false }));
+    useDraftStateMock.mockReturnValue(draft({}, { canPublish: false }));
     render(<EditarPage />);
     expect(screen.getByRole("button", { name: /publicar/i })).toBeDisabled();
   });
 
   it("publishes and navigates to /mis-trabajos on success", async () => {
-    useDraftStateMock.mockReturnValue(draft({ publish_gate_reason: null, is_owner: true }));
+    useDraftStateMock.mockReturnValue(draft());
     render(<EditarPage />);
     fireEvent.click(screen.getByRole("button", { name: /publicar/i }));
     await waitFor(() => expect(apiPost).toHaveBeenCalled());
@@ -111,19 +141,20 @@ describe("editar page", () => {
   });
 
   it("on a 409 race, refetches the draft instead of navigating", async () => {
-    apiPost.mockResolvedValue({ error: { detail: "conflict" }, response: { status: 409 } });
-    useDraftStateMock.mockReturnValue(draft({ publish_gate_reason: null, is_owner: true }));
+    apiPost.mockResolvedValue({
+      error: { detail: "conflict" },
+      response: { status: 409 },
+    });
+    useDraftStateMock.mockReturnValue(draft());
     render(<EditarPage />);
     fireEvent.click(screen.getByRole("button", { name: /publicar/i }));
-    await waitFor(() =>
-      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["draft", 7] }),
-    );
+    await waitFor(() => expect(refreshDraft).toHaveBeenCalled());
     expect(push).not.toHaveBeenCalled();
   });
 
   it("toasts and re-enables the Publicar button if the publish request rejects", async () => {
     apiPost.mockRejectedValue(new Error("network down"));
-    useDraftStateMock.mockReturnValue(draft({ publish_gate_reason: null, is_owner: true }));
+    useDraftStateMock.mockReturnValue(draft());
     render(<EditarPage />);
     const btn = screen.getByRole("button", { name: /publicar/i });
     fireEvent.click(btn);
@@ -135,14 +166,23 @@ describe("editar page", () => {
   it("renders the staged suggestions", () => {
     useDraftStateMock.mockReturnValue(draft({}));
     render(<EditarPage />);
-    expect(screen.getByTestId("suggestion-abstract")).toHaveTextContent("resumen extraído");
-    expect(screen.getByTestId("suggestion-keywords")).toHaveTextContent("redes");
-    expect(screen.getByTestId("suggestion-fecha")).toHaveTextContent("2024-03-01");
+    expect(screen.getByTestId("suggestion-abstract")).toHaveTextContent(
+      "resumen extraído",
+    );
+    expect(screen.getByTestId("suggestion-keywords")).toHaveTextContent(
+      "redes",
+    );
+    expect(screen.getByTestId("suggestion-fecha")).toHaveTextContent(
+      "2024-03-01",
+    );
   });
 
   it("shows a spinner over the suggestions while processing", () => {
     useDraftStateMock.mockReturnValue(
-      draft({ index_status: "processing", staged_abstract: null, staged_keywords: [], staged_fecha: null }),
+      draft(
+        { staged_abstract: null, staged_keywords: [], staged_fecha: null },
+        { showSuggestionsSpinner: true, canPublish: false },
+      ),
     );
     render(<EditarPage />);
     expect(screen.getByTestId("suggestions-spinner")).toBeInTheDocument();
@@ -161,13 +201,13 @@ describe("editar page", () => {
 
   it("re-seeds editable inputs when processing finishes", () => {
     useDraftStateMock.mockReturnValue(
-      draft({ index_status: "processing", staged_abstract: null }),
+      draft({ staged_abstract: null }, { formSeedKey: "processing" }),
     );
     const { rerender } = render(<EditarPage />);
     expect(screen.getByLabelText("Resumen")).toHaveValue("");
 
     useDraftStateMock.mockReturnValue(
-      draft({ index_status: "indexed", staged_abstract: "resumen extraído" }),
+      draft({ staged_abstract: "resumen extraído" }),
     );
     rerender(<EditarPage />);
     expect(screen.getByLabelText("Resumen")).toHaveValue("resumen extraído");
@@ -181,18 +221,16 @@ describe("editar page", () => {
     fireEvent.change(input, { target: { value: "Nuevo" } });
     fireEvent.blur(input);
     await waitFor(() => expect(toastError).toHaveBeenCalled());
-    expect(invalidateQueries).not.toHaveBeenCalled();
+    expect(refreshDraft).not.toHaveBeenCalled();
   });
 
   it("refetches draft state after a successful save so a new gate is observed", async () => {
-    useDraftStateMock.mockReturnValue(draft({ title: "Viejo", publish_gate_reason: null }));
+    useDraftStateMock.mockReturnValue(draft({ title: "Viejo" }));
     render(<EditarPage />);
     const input = screen.getByLabelText("Título");
     fireEvent.change(input, { target: { value: "Nuevo título" } });
     fireEvent.blur(input);
-    await waitFor(() =>
-      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["draft", 7] }),
-    );
+    await waitFor(() => expect(refreshDraft).toHaveBeenCalled());
   });
 
   it("does not PATCH when a field is blurred without changes", async () => {
