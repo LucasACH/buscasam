@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -57,7 +57,9 @@ export default function EditarPage() {
 }
 
 function EditarForm({ docId, state }: { docId: number; state: DraftStateDTO }) {
+  const router = useRouter();
   const queryClient = useQueryClient();
+  const [publishing, setPublishing] = useState(false);
   const { register, getValues, formState } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     mode: "onBlur",
@@ -97,8 +99,28 @@ function EditarForm({ docId, state }: { docId: number; state: DraftStateDTO }) {
     await queryClient.invalidateQueries({ queryKey: draftQueryKey(docId) });
   }
 
+  async function onPublish() {
+    setPublishing(true);
+    const { error, response } = await api.POST("/api/documents/{doc_id}/publish", {
+      params: { path: { doc_id: docId } },
+    });
+    setPublishing(false);
+    if (error) {
+      // A 409 is a publish-gate race: refetch so the next poll re-renders the
+      // gate reason (server is source of truth). Other errors are surfaced.
+      if (response?.status === 409) {
+        await queryClient.invalidateQueries({ queryKey: draftQueryKey(docId) });
+        return;
+      }
+      toast.error("No se pudo publicar");
+      return;
+    }
+    router.push("/mis-trabajos");
+  }
+
   const processing = state.index_status === "processing";
   const gateReason = state.publish_gate_reason;
+  const canPublish = gateReason === null && state.is_owner;
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8">
@@ -169,7 +191,9 @@ function EditarForm({ docId, state }: { docId: number; state: DraftStateDTO }) {
       </div>
 
       <div className="mt-8">
-        <Button disabled>Publicar</Button>
+        <Button disabled={!canPublish || publishing} onClick={onPublish}>
+          Publicar
+        </Button>
         {gateReason && (
           <p data-testid="gate-reason" className="mt-2 text-sm text-muted-foreground">
             {GATE_COPY[gateReason] ?? gateReason}

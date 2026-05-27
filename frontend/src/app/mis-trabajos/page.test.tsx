@@ -75,6 +75,25 @@ describe("/mis-trabajos page", () => {
     expect(bor.closest("section")).toHaveTextContent(/Borradores/);
   });
 
+  it("shows the publish timestamp on a Publicados row", async () => {
+    apiGet.mockResolvedValue({
+      data: [
+        {
+          id: 8,
+          title: "Publicado Y",
+          publication_status: "published",
+          visibility: "publico",
+          published_at: "2024-03-01T12:00:00Z",
+        },
+      ],
+    });
+
+    wrap(<MisTrabajosPage />);
+
+    const pub = await screen.findByRole("link", { name: /Publicado Y/ });
+    expect(pub).toHaveTextContent(/2024/);
+  });
+
   it("renders the empty-state copy in each section when the user has no documents", async () => {
     apiGet.mockResolvedValue({ data: [] });
 

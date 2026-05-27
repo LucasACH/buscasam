@@ -73,6 +73,10 @@ test("authenticated: avatar + role label + logout returns to invitado", async ({
   await expect(page.getByText("Ada Lovelace")).toBeVisible();
   await expect(page.getByText("Docente")).toBeVisible();
 
+  const misTrabajos = page.getByRole("link", { name: /Mis trabajos/i });
+  await expect(misTrabajos).toBeVisible();
+  await expect(misTrabajos).toHaveAttribute("href", "/mis-trabajos");
+
   const logoutBtn = page.getByRole("button", { name: /Cerrar sesión/i });
   await expect(logoutBtn).toBeVisible();
   await logoutBtn.click();

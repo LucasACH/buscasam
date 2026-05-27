@@ -50,6 +50,12 @@ export function AuthNav() {
 
   return (
     <nav className="flex items-center gap-3">
+      <Link
+        href="/mis-trabajos"
+        className="text-sm font-medium underline-offset-4 hover:underline"
+      >
+        Mis trabajos
+      </Link>
       <NotificationBell />
       {user.picture_url ? (
         <Image
