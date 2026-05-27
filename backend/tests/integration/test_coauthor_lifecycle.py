@@ -1,10 +1,12 @@
 """Integration tests for core/documents.accept_invitation / decline_invitation
 (issue #50, module map §core/documents). Each does an atomic status flip plus a
-matching notifications.read_at mark; a non-pending miss returns False. The
-readable-lifecycle guard collapses transitions on hidden/soft-deleted docs.
+matching notifications.read_at mark; a non-pending miss raises
+InvitationNotPending. The readable-lifecycle guard collapses transitions on
+hidden/soft-deleted docs.
 """
 from __future__ import annotations
 
+import pytest
 from sqlalchemy import text
 
 from buscasam.core import documents
@@ -64,9 +66,8 @@ async def _read_at(session, nid):
 async def test_accept_flips_status_and_marks_notification_read(session):
     doc_id, invitee, nid = await _seed(session)
 
-    ok = await documents.accept_invitation(session, _ctx(invitee), doc_id)
+    await documents.accept_invitation(session, _ctx(invitee), doc_id)
 
-    assert ok is True
     assert await _status(session, doc_id, invitee) == "accepted"
     assert await _read_at(session, nid) is not None
 
@@ -74,25 +75,26 @@ async def test_accept_flips_status_and_marks_notification_read(session):
 async def test_decline_flips_status_and_marks_notification_read(session):
     doc_id, invitee, nid = await _seed(session)
 
-    ok = await documents.decline_invitation(session, _ctx(invitee), doc_id)
+    await documents.decline_invitation(session, _ctx(invitee), doc_id)
 
-    assert ok is True
     assert await _status(session, doc_id, invitee) == "declined"
     assert await _read_at(session, nid) is not None
 
 
-async def test_resubmit_on_already_transitioned_returns_false(session):
+async def test_resubmit_on_already_transitioned_raises_not_pending(session):
     """A second accept (or decline) no longer matches status='pending'."""
     doc_id, invitee, _ = await _seed(session)
-    assert await documents.accept_invitation(session, _ctx(invitee), doc_id) is True
+    await documents.accept_invitation(session, _ctx(invitee), doc_id)
 
-    assert await documents.accept_invitation(session, _ctx(invitee), doc_id) is False
-    assert await documents.decline_invitation(session, _ctx(invitee), doc_id) is False
+    with pytest.raises(documents.InvitationNotPending):
+        await documents.accept_invitation(session, _ctx(invitee), doc_id)
+    with pytest.raises(documents.InvitationNotPending):
+        await documents.decline_invitation(session, _ctx(invitee), doc_id)
     # the first transition stands, untouched
     assert await _status(session, doc_id, invitee) == "accepted"
 
 
-async def test_accept_on_deleted_row_returns_false(session):
+async def test_accept_on_deleted_row_raises_not_pending(session):
     """Revoke-while-deciding: the row is gone, so the transition is a 0-row miss."""
     doc_id, invitee, _ = await _seed(session)
     await session.execute(
@@ -100,19 +102,22 @@ async def test_accept_on_deleted_row_returns_false(session):
         {"d": doc_id, "u": invitee},
     )
 
-    assert await documents.accept_invitation(session, _ctx(invitee), doc_id) is False
+    with pytest.raises(documents.InvitationNotPending):
+        await documents.accept_invitation(session, _ctx(invitee), doc_id)
 
 
-async def test_accept_on_moderation_hidden_doc_returns_false(session):
+async def test_accept_on_moderation_hidden_doc_raises_not_pending(session):
     """Readable-lifecycle guard: a hidden doc cannot have an acceptance ratified."""
     doc_id, invitee, _ = await _seed(session, moderation_hidden=True)
 
-    assert await documents.accept_invitation(session, _ctx(invitee), doc_id) is False
+    with pytest.raises(documents.InvitationNotPending):
+        await documents.accept_invitation(session, _ctx(invitee), doc_id)
     assert await _status(session, doc_id, invitee) == "pending"
 
 
-async def test_accept_on_soft_deleted_doc_returns_false(session):
+async def test_accept_on_soft_deleted_doc_raises_not_pending(session):
     doc_id, invitee, _ = await _seed(session, soft_deleted=True)
 
-    assert await documents.accept_invitation(session, _ctx(invitee), doc_id) is False
+    with pytest.raises(documents.InvitationNotPending):
+        await documents.accept_invitation(session, _ctx(invitee), doc_id)
     assert await _status(session, doc_id, invitee) == "pending"

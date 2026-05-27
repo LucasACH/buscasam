@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 from sqlalchemy import text
@@ -59,6 +59,12 @@ class PublishConflict(Exception):
 
 class AttachmentCapExceeded(Exception):
     """The document already holds the maximum of 5 attachments (→ 409)."""
+
+
+class InvitationNotPending(Exception):
+    """No `pending` row for `(doc_id, user_id)` on a readable document (→ 404):
+    already-transitioned, revoked, never-invited, or the document
+    soft-deleted / moderation-hidden / unpublished (PRD stories 20-22, 32-33)."""
 
 
 @dataclass(frozen=True)
@@ -646,26 +652,30 @@ async def publish(session: AsyncSession, user_ctx: UserCtx, doc_id: int) -> None
 
 async def accept_invitation(
     session: AsyncSession, user_ctx: UserCtx, doc_id: int
-) -> bool:
+) -> None:
     """Invitee flips their own pending row to accepted and marks the matching
-    invite notification read, atomically (module map §core/documents). Returns
-    False for any miss — already-transitioned, revoked, never-invited, or the
-    document soft-deleted / moderation-hidden / unpublished — which the router
-    maps to a uniform 404 (PRD stories 20-22, 32-33)."""
-    return await _transition_invitation(session, user_ctx, doc_id, "accepted")
+    invite notification read, atomically (module map §core/documents). Raises
+    InvitationNotPending for any miss — already-transitioned, revoked,
+    never-invited, or the document soft-deleted / moderation-hidden /
+    unpublished — which the router maps to a uniform 404 (PRD stories 20-22,
+    32-33)."""
+    await _transition_invitation(session, user_ctx, doc_id, "accepted")
 
 
 async def decline_invitation(
     session: AsyncSession, user_ctx: UserCtx, doc_id: int
-) -> bool:
+) -> None:
     """Sticky terminal decline; same atomicity and miss semantics as
     accept_invitation (ADR-0010 §5)."""
-    return await _transition_invitation(session, user_ctx, doc_id, "declined")
+    await _transition_invitation(session, user_ctx, doc_id, "declined")
 
 
 async def _transition_invitation(
-    session: AsyncSession, user_ctx: UserCtx, doc_id: int, new_status: str
-) -> bool:
+    session: AsyncSession,
+    user_ctx: UserCtx,
+    doc_id: int,
+    new_status: Literal["accepted", "declined"],
+) -> None:
     # Idempotency lives at the row level: the status='pending' predicate stops
     # matching after the first transition, so a re-submit is a 0-row UPDATE. The
     # readable-lifecycle guards mean a hidden/soft-deleted doc cannot ratify.
@@ -681,7 +691,7 @@ async def _transition_invitation(
         {"new_status": new_status, "doc_id": doc_id, "uid": user_ctx.user_id},
     )
     if flipped.rowcount == 0:
-        return False
+        raise InvitationNotPending
 
     from buscasam.core.jobs import coauthor_invite_event_key
 
@@ -695,7 +705,6 @@ async def _transition_invitation(
             "ek": coauthor_invite_event_key(doc_id, user_ctx.user_id),
         },
     )
-    return True
 
 
 async def add_attachment(
