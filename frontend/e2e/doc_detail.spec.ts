@@ -14,6 +14,7 @@ const DOC_ID = 42;
 const TITULO = "Búsqueda híbrida en repositorios académicos";
 
 const PUBLICO_DETAIL = {
+  view: "detail",
   doc_id: DOC_ID,
   titulo: TITULO,
   autores: [{ display_name: "Ada Lovelace", user_id: 7 }],
@@ -34,6 +35,19 @@ const PUBLICO_DETAIL = {
   manageable: false,
 };
 
+const PENDING_MINIMAL = {
+  view: "minimal",
+  doc_id: DOC_ID,
+  titulo: TITULO,
+  inviter_display_name: "Ada Lovelace",
+};
+
+const DETAIL_WITH_INVITATION = {
+  ...PUBLICO_DETAIL,
+  view: "detail_with_invitation",
+  invitation: { inviter_display_name: "Ada Lovelace" },
+};
+
 const USER = {
   user_id: 7,
   role: "estudiante",
@@ -44,6 +58,7 @@ const USER = {
 
 const MANAGEABLE_DETAIL = {
   ...PUBLICO_DETAIL,
+  view: "detail",
   visibility: "privado",
   manageable: true,
   versions: [
@@ -220,5 +235,51 @@ test.describe("/docs/[id] reader page (SSR)", () => {
     await expect(page.getByRole("heading", { name: TITULO })).toBeVisible();
     await expect(page.getByRole("link", { name: /editar/i })).toHaveCount(0);
     await expect(page.getByText("Versiones anteriores")).toHaveCount(0);
+  });
+
+  test("pending invitee on privado: minimal disclosure block only", async ({
+    page,
+  }) => {
+    await page.unroute("**/api/me");
+    await page.route("**/api/me", (route) => route.fulfill(json(USER)));
+    await setMockRoute({
+      path: `/api/docs/${DOC_ID}`,
+      status: 200,
+      body: PENDING_MINIMAL,
+    });
+
+    await page.goto(`/docs/${DOC_ID}`);
+
+    // The invitation banner is the whole page body.
+    await expect(page.getByText(/te invitó como coautor/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /Aceptar/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Rechazar/i })).toBeVisible();
+    // No metadata, abstract, downloads, Editar CTA, or Versiones panel leak.
+    await expect(page.getByRole("heading", { name: TITULO })).toHaveCount(0);
+    await expect(page.getByText("Resumen del trabajo.")).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /descargar/i })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /editar/i })).toHaveCount(0);
+    await expect(page.getByText("Versiones anteriores")).toHaveCount(0);
+  });
+
+  test("pending invitee on readable doc: banner above the full detail", async ({
+    page,
+  }) => {
+    await page.unroute("**/api/me");
+    await page.route("**/api/me", (route) => route.fulfill(json(USER)));
+    await setMockRoute({
+      path: `/api/docs/${DOC_ID}`,
+      status: 200,
+      body: DETAIL_WITH_INVITATION,
+    });
+
+    await page.goto(`/docs/${DOC_ID}`);
+
+    await expect(page.getByText(/te invitó como coautor/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /Aceptar/i })).toBeVisible();
+    // The full reader view is still present below the banner.
+    await expect(page.getByRole("heading", { name: TITULO })).toBeVisible();
+    await expect(page.getByText("Resumen del trabajo.")).toBeVisible();
+    await expect(page.getByText("tesis.pdf")).toBeVisible();
   });
 });

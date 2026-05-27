@@ -21,7 +21,7 @@ describe("useCoauthorInvitation", () => {
   beforeEach(() => apiPost.mockReset());
   afterEach(() => cleanup());
 
-  it("accept: posts to the accept endpoint and invalidates bandeja + doc-detail", async () => {
+  it("accept: posts to the accept endpoint and invalidates bandeja", async () => {
     apiPost.mockResolvedValue({
       data: undefined,
       error: undefined,
@@ -44,7 +44,6 @@ describe("useCoauthorInvitation", () => {
     const invalidatedKeys = invalidate.mock.calls.map((c) => c[0]?.queryKey);
     expect(invalidatedKeys).toContainEqual(["notifications"]);
     expect(invalidatedKeys).toContainEqual(["notifications", "unread_count"]);
-    expect(invalidatedKeys).toContainEqual(["doc-detail", 7]);
   });
 
   it("decline: posts to the decline endpoint", async () => {

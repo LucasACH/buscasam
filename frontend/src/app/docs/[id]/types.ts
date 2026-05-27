@@ -25,7 +25,7 @@ export type DetailVersion = {
   is_current: boolean;
 };
 
-export type DocDetail = {
+type DetailFields = {
   doc_id: number;
   titulo: string;
   autores: AuthorDisplay[];
@@ -41,3 +41,22 @@ export type DocDetail = {
   versions?: DetailVersion[];
   manageable: boolean;
 };
+
+// GET /api/docs/{id} is a union discriminated on `view` (ADR-0010 §6):
+// a normal reader detail, the same detail with a pending-invitation banner, or
+// the minimal pre-acceptance block for a pending invitee on a privado doc.
+export type DetailDoc = DetailFields & { view: "detail" };
+
+export type DetailWithInvitationDoc = DetailFields & {
+  view: "detail_with_invitation";
+  invitation: { inviter_display_name: string };
+};
+
+export type MinimalInviteDoc = {
+  view: "minimal";
+  doc_id: number;
+  titulo: string;
+  inviter_display_name: string;
+};
+
+export type DocDetail = DetailDoc | DetailWithInvitationDoc | MinimalInviteDoc;

@@ -589,6 +589,11 @@ export interface components {
             versions?: components["schemas"]["DetailVersionDTO"][] | null;
             /** Manageable */
             manageable: boolean;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            view: "detail";
         };
         /** DetailVersionDTO */
         DetailVersionDTO: {
@@ -604,6 +609,40 @@ export interface components {
             indexed_at: string | null;
             /** Is Current */
             is_current: boolean;
+        };
+        /** DetailWithInvitationDTO */
+        DetailWithInvitationDTO: {
+            /** Doc Id */
+            doc_id: number;
+            /** Titulo */
+            titulo: string;
+            /** Autores */
+            autores: components["schemas"]["AuthorDisplayDTO"][];
+            /** Area Path */
+            area_path: string;
+            /** Tipo */
+            tipo: string;
+            /** Fecha */
+            fecha: string | null;
+            /** Visibility */
+            visibility: string;
+            /** Abstract */
+            abstract: string;
+            /** Palabras Clave */
+            palabras_clave: string[];
+            archivo_principal: components["schemas"]["MainFileDTO"];
+            /** Adjuntos */
+            adjuntos: components["schemas"]["AttachmentDTO"][];
+            /** Versions */
+            versions?: components["schemas"]["DetailVersionDTO"][] | null;
+            /** Manageable */
+            manageable: boolean;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            view: "detail_with_invitation";
+            invitation: components["schemas"]["InvitationBannerDTO"];
         };
         /** DraftStateDTO */
         DraftStateDTO: {
@@ -637,6 +676,11 @@ export interface components {
         InviteCoauthorRequest: {
             /** User Id */
             user_id: number;
+        };
+        /** InvitationBannerDTO */
+        InvitationBannerDTO: {
+            /** Inviter Display Name */
+            inviter_display_name: string;
         };
         /** MainFileDTO */
         MainFileDTO: {
@@ -677,6 +721,20 @@ export interface components {
             picture_url: string | null;
             /** Hd */
             hd: string;
+        };
+        /** MinimalInviteDTO */
+        MinimalInviteDTO: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            view: "minimal";
+            /** Doc Id */
+            doc_id: number;
+            /** Titulo */
+            titulo: string;
+            /** Inviter Display Name */
+            inviter_display_name: string;
         };
         /** NotificationDTO */
         NotificationDTO: {
@@ -1493,7 +1551,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DetailDTO"];
+                    "application/json": components["schemas"]["DetailDTO"] | components["schemas"]["MinimalInviteDTO"] | components["schemas"]["DetailWithInvitationDTO"];
                 };
             };
             /** @description Validation Error */
@@ -1576,38 +1634,6 @@ export interface operations {
             path: {
                 doc_id: number;
                 att_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    download_version_api_docs__doc_id__versions__n__download_head: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                doc_id: number;
-                n: string;
             };
             cookie?: never;
         };
