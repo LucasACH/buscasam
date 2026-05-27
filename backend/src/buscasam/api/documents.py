@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from pathlib import Path
-from typing import Literal
+from typing import AsyncIterator, Literal
 
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
@@ -256,7 +256,7 @@ _ALLOWED_ATTACHMENT_EXTS = {
 _MAX_ATTACHMENT_BYTES = 20_000_000
 
 
-async def _file_chunks(file: UploadFile):
+async def _file_chunks(file: UploadFile) -> AsyncIterator[bytes]:
     while True:
         chunk = await file.read(1 << 20)
         if not chunk:
@@ -292,6 +292,10 @@ async def post_attachment(
     except BlobTooLarge:
         raise HTTPException(status_code=413, detail="El adjunto supera los 20 MB")
 
+    # Both reject paths below leave the just-written blob for the dedup-safe
+    # orphan sweep (ADR-0006 §12). We deliberately don't delete it inline the
+    # way /upload's 415 path does: the blob is content-addressed and may already
+    # be shared with another row, so an unconditional delete could orphan that.
     try:
         att_id = await add_attachment(
             session, user_ctx, doc_id, result, original_filename=filename
