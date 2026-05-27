@@ -528,8 +528,7 @@ export interface components {
             display_name: string;
             /** Email Local */
             email_local: string | null;
-            /** Status */
-            status: string;
+            status: "owner" | "pending" | "accepted" | "declined" | "external";
         };
         /** CreateDraftRequest */
         CreateDraftRequest: {

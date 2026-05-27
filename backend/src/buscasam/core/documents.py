@@ -91,12 +91,15 @@ class AttachmentInfo:
     mime: str | None
 
 
+CoauthorStatus = Literal["owner", "pending", "accepted", "declined", "external"]
+
+
 @dataclass(frozen=True)
 class CoauthorRow:
     user_id: int | None
     display_name: str
     email_local: str | None
-    status: str
+    status: CoauthorStatus
 
 
 @dataclass(frozen=True)
@@ -748,18 +751,6 @@ async def invite_coauthor(
     immediately. On a draft, the row sits silent until publish picks it up."""
     await _assert_owner(session, user_ctx, doc_id)
 
-    existing = (
-        await session.execute(
-            text(
-                "SELECT 1 FROM document_authors "
-                "WHERE doc_id = :doc_id AND user_id = :uid"
-            ),
-            {"doc_id": doc_id, "uid": invitee_user_id},
-        )
-    ).scalar_one_or_none()
-    if existing is not None:
-        raise CoauthorAlreadyListed
-
     name = (
         await session.execute(
             text("SELECT name FROM users WHERE id = :uid"),
@@ -769,13 +760,22 @@ async def invite_coauthor(
     if name is None:
         raise InvalidCoauthorId({invitee_user_id})
 
-    await session.execute(
-        text(
-            "INSERT INTO document_authors (doc_id, user_id, display_name, status) "
-            "VALUES (:doc_id, :uid, :name, 'pending')"
-        ),
-        {"doc_id": doc_id, "uid": invitee_user_id, "name": name},
-    )
+    # ON CONFLICT against the partial unique index is the race-safe gate: a
+    # concurrent invite for the same (doc, user) loses here and we raise the
+    # documented 409 instead of an IntegrityError-as-500.
+    inserted = (
+        await session.execute(
+            text(
+                "INSERT INTO document_authors (doc_id, user_id, display_name, status) "
+                "VALUES (:doc_id, :uid, :name, 'pending') "
+                "ON CONFLICT (doc_id, user_id) WHERE user_id IS NOT NULL DO NOTHING "
+                "RETURNING id"
+            ),
+            {"doc_id": doc_id, "uid": invitee_user_id, "name": name},
+        )
+    ).scalar_one_or_none()
+    if inserted is None:
+        raise CoauthorAlreadyListed
 
     publication_status = (
         await session.execute(

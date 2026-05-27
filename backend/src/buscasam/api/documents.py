@@ -17,6 +17,7 @@ from buscasam.core.documents import (
     AttachmentCapExceeded,
     CoauthorAlreadyListed,
     CoauthorNotPending,
+    CoauthorStatus,
     DocumentNotFound,
     InvalidCoauthorId,
     NotOwner,
@@ -166,7 +167,7 @@ class CoauthorRowDTO(BaseModel):
     user_id: int | None
     display_name: str
     email_local: str | None
-    status: str
+    status: CoauthorStatus
 
 
 class DraftStateDTO(BaseModel):

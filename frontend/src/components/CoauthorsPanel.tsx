@@ -8,7 +8,7 @@ import {
 } from "@/app/mis-trabajos/[id]/editar/useCoauthors";
 import { CoauthorPicker } from "./CoauthorPicker";
 
-const STATUS_PILL: Record<string, string> = {
+const STATUS_PILL: Record<"pending" | "accepted" | "declined", string> = {
   pending: "Pendiente",
   accepted: "Aceptado",
   declined: "Rechazado",
@@ -68,7 +68,7 @@ export function CoauthorsPanel({ docId }: { docId: number }) {
                   className="bg-muted rounded-full px-2 py-0.5 text-xs"
                   data-testid={`status-${row.user_id}`}
                 >
-                  {STATUS_PILL[row.status] ?? row.status}
+                  {STATUS_PILL[row.status]}
                 </span>
               )}
               {row.status === "pending" && (
