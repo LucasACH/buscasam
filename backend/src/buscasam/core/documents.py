@@ -9,7 +9,7 @@ import numpy as np
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from buscasam.core.document_access import manageable_where
+from buscasam.core.document_access import manageable_where, readable_where
 from buscasam.settings import settings
 
 if TYPE_CHECKING:
@@ -799,3 +799,124 @@ async def list_own_documents(
         )
         for r in rows
     ]
+
+
+@dataclass(frozen=True)
+class AuthorDisplay:
+    display_name: str
+    user_id: int | None
+
+
+@dataclass(frozen=True)
+class MainFile:
+    original_filename: str
+    size_bytes: int
+    mime: str
+
+
+@dataclass(frozen=True)
+class Attachment:
+    id: int
+    original_filename: str
+    size_bytes: int
+    mime: str | None
+
+
+@dataclass(frozen=True)
+class DetailRow:
+    doc_id: int
+    titulo: str
+    autores: list[AuthorDisplay]
+    area_path: str
+    tipo: str
+    fecha: date | None
+    visibility: str
+    abstract: str
+    palabras_clave: list[str]
+    archivo_principal: MainFile
+    adjuntos: list[Attachment]
+    manageable: bool
+
+
+async def get_detail(
+    session: AsyncSession,
+    doc_id: int,
+    user_ctx: UserCtx,
+) -> DetailRow | None:
+    """Reader DTO for `/docs/{id}` (module map §core/documents).
+
+    Returns `None` when the document fails `readable_where(user_ctx)` — the
+    router maps `None → 404` uniformly. `archivo_principal` and `adjuntos`
+    reflect the published current version's rows (`document_versions.is_current`)
+    and `document_attachments` respectively. `manageable=False` and `versions`
+    are owned by a later slice; this branch is reader-only (issue #43).
+    """
+    where, params = readable_where("d", user_ctx)
+    row = (
+        await session.execute(
+            text(
+                "SELECT d.id, d.titulo, d.area_path::text AS area_path, d.tipo, "
+                "       d.fecha, d.visibility, d.abstract, "
+                "       COALESCE(d.keywords, ARRAY[]::text[]) AS keywords, "
+                "       dv.original_filename AS main_filename, "
+                "       dv.bytes AS main_bytes, "
+                "       dv.mime AS main_mime "
+                "FROM documents d "
+                "JOIN document_versions dv "
+                "  ON dv.doc_id = d.id AND dv.is_current "
+                f"WHERE d.id = :doc_id AND ({where})"
+            ),
+            {"doc_id": doc_id, **params},
+        )
+    ).mappings().first()
+    if row is None:
+        return None
+
+    author_rows = (
+        await session.execute(
+            text(
+                "SELECT display_name, user_id "
+                "FROM document_authors WHERE doc_id = :d ORDER BY id"
+            ),
+            {"d": doc_id},
+        )
+    ).mappings().all()
+    attachment_rows = (
+        await session.execute(
+            text(
+                "SELECT id, original_filename, bytes, mime "
+                "FROM document_attachments WHERE doc_id = :d ORDER BY id"
+            ),
+            {"d": doc_id},
+        )
+    ).mappings().all()
+
+    return DetailRow(
+        doc_id=row["id"],
+        titulo=row["titulo"],
+        autores=[
+            AuthorDisplay(display_name=a["display_name"], user_id=a["user_id"])
+            for a in author_rows
+        ],
+        area_path=row["area_path"],
+        tipo=row["tipo"],
+        fecha=row["fecha"],
+        visibility=row["visibility"],
+        abstract=row["abstract"] or "",
+        palabras_clave=list(row["keywords"]),
+        archivo_principal=MainFile(
+            original_filename=row["main_filename"],
+            size_bytes=row["main_bytes"],
+            mime=row["main_mime"],
+        ),
+        adjuntos=[
+            Attachment(
+                id=a["id"],
+                original_filename=a["original_filename"],
+                size_bytes=a["bytes"],
+                mime=a["mime"],
+            )
+            for a in attachment_rows
+        ],
+        manageable=False,
+    )
