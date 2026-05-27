@@ -111,48 +111,68 @@ All five endpoints accept invitado and authenticated requests; the route depende
 
 ---
 
-### `app/docs/[id]/page.tsx` (Next.js client page)
+### `app/docs/[id]/page.tsx` (Next.js Server Component)
 
-**Interface:** Renders at `/docs/{id}`. Reads `id` from `useParams`. On `is404` from `useDocDetail`, renders the Spanish empty state (`"No encontramos este documento"`) and stops — does not call `useRelated`. Otherwise composes:
+**Interface:** Renders at `/docs/{id}`. Async Server Component. Awaits `params`, validates `id` is a positive integer (otherwise `notFound()`), then in parallel awaits `fetchDocDetail(docId)` (server-side, cookie-forwarded, `cache: 'no-store'`) and `fetchAreas()`. On `fetchDocDetail` returning `null` → `notFound()`, which renders `not-found.tsx`. `generateMetadata` shares the same `cache()`-wrapped fetch so the tab title (`detail.titulo`) is set without a second round-trip (PRD story 31). Composes server-side:
 
-- Metadata block: título, autores (with external attributions rendered as plain text, registered authors as the display-name only at MVP — no profile links yet), área (display name via the áreas tree from `/api/areas`), tipo, fecha, visibilidad badge.
+- Metadata block: título, autores (with external attributions rendered as plain text, registered authors as the display-name only at MVP — no profile links yet), área (display name resolved from the áreas tree fetched in the same render pass), tipo, fecha, visibilidad badge.
 - Abstract and palabras clave.
 - Archivo principal row: `<a href="/api/docs/{id}/download" download>` "Descargar".
 - Adjuntos list (up to 5): each row `<a href="/api/docs/{id}/attachments/{att_id}" download>` "Descargar".
 - "Editar" CTA linking to `/mis-trabajos/{id}/editar` — rendered only when `detail.manageable === true`.
-- `<VersionsPanel docId={id} versions={detail.versions} canManage={detail.manageable} />` — the panel itself returns `null` if not `canManage` or if `versions` is absent; the page passes the props unconditionally.
-- Trabajos relacionados rail: `useRelated(id).data` mapped onto `ResultCard` (snippet-optional variant — see "Touched, not new"). Rail is hidden entirely when the list is empty (PRD story 19); no header rendered.
+- `<VersionsPanel>` client island — the panel itself returns `null` if not `canManage` or if `versions` is absent; the page passes the props unconditionally.
+- `<RelatedRail docId={id} />` client island — see below. Rail is hidden entirely when the list is empty (PRD story 19); no header rendered.
 
-The page sets `document.title = detail.titulo` in a `useEffect` (PRD story 31) and reverts on unmount. No SSR (ADR-0004 §3). Mobile reflow: metadata + adjuntos + rail stack vertically below the `md` breakpoint (PRD story 30).
+SSR is locked here (ADR-0004 §3) so invitados on `interno`/`privado` get an access-aware first response — the HTML never contains the metadata they cannot read, and a crawler sees the published title. Mobile reflow: metadata + adjuntos + rail stack vertically below the `md` breakpoint (PRD story 30).
 
-**Responsibilities:** URL → component tree binding. Tab title side-effect. 404 short-circuit. Reflow tokens.
+**Responsibilities:** URL → component tree binding. Tab title via `generateMetadata`. 404 short-circuit via `notFound()`. Server-side áreas resolution. Reflow tokens.
 
 **Seams:** None.
 
-**Depth note:** The single concentration point for the detail page layout and the manager-vs-reader branching. Deletion test: scattering the four conditional panels (Editar, Versions, Related, 404) across child components would lose the page-level guarantee that a non-manager never sees a manager-only affordance.
+**Depth note:** The single concentration point for the detail page layout and the manager-vs-reader branching. The two conditional surfaces resolved on the server (Editar, Versions props) are co-located with the metadata block so a non-manager's HTML cannot accidentally contain manager-only affordances or version rows. Deletion test: scattering Editar / Versions / Related / 404 across child components would lose the page-level guarantee and force the SSR-vs-client split (the rail is the only intentional client island) to re-cross files.
 
 ---
 
-### `app/docs/[id]/useDocDetail.ts` (hook)
+### `app/docs/[id]/fetchDetail.ts` (server helper)
 
 **Interface:**
 
 ```ts
-useDocDetail(docId: number) -> {
-  detail: DetailDTO | undefined;
-  isLoading: boolean;
-  isError: boolean;
-  is404: boolean;
-}
+fetchDocDetail(docId: number) -> Promise<DocDetail | null>
+fetchAreas() -> Promise<AreaRow[]>
 ```
 
-TanStack Query against `GET /api/docs/{id}`. Query key is `["doc-detail", docId]`. `404` responses set `is404=true` and do **not** retry (TanStack Query `retry: (failureCount, err) => err.status !== 404`). All other errors set `isError=true`. `detail.manageable` and `detail.versions` are passed through opaquely — interpretation lives in the page and `VersionsPanel`.
+`import "server-only"`. Reads `BUSCASAM_INTERNAL_API_URL` (ADR-0004 §4, ADR-0009 §85), falling back to `${BUSCASAM_API_URL}/api` for local dev (the same var `next.config.ts` already uses for the browser rewrite). `fetchDocDetail` forwards the request's `cookie` header from `next/headers` so FastAPI applies ADR-0010 access; uses `cache: 'no-store'`; returns `null` on 404, throws on other non-2xx. Both functions are wrapped in React `cache()` so `generateMetadata` and the page body share a single round-trip per request.
 
-**Responsibilities:** Request shape, query-key derivation, 404 detection without retry.
+**Responsibilities:** Container-safe SSR fetch shape, cookie forwarding, 404→null mapping, request-scoped dedup.
 
 **Seams:** None.
 
-**Depth note:** Keeps the page a layout. Without it, the 404 retry policy would inline into the page (a common bug surface: the no-retry-on-404 rule is what prevents probing-style refetch loops).
+**Depth note:** Concentrates the SSR fetch invariants (internal URL, cookie forwarding, no-store, 404→null) so the page stays a layout. Deletion test: inlining into `page.tsx` and `generateMetadata` would either double-fetch the detail or risk dropping the `cookie` header on one of the two call sites — an access leak waiting to happen.
+
+---
+
+### `app/docs/[id]/not-found.tsx`
+
+**Interface:** Renders the Spanish empty state (`"No encontramos este documento"`) inside the same `<main>` shell as the detail page; HTTP response carries status `404` automatically because `notFound()` triggered it.
+
+**Responsibilities:** 404 envelope copy.
+
+**Seams:** None.
+
+**Depth note:** One-line component. Co-located with the page so the empty-state copy is one file edit away from the route that triggers it; satisfies ADR-0004 §4's `notFound()` requirement without scattering Spanish copy.
+
+---
+
+### `app/docs/[id]/RelatedRail.tsx` (client island)
+
+**Interface:** `<RelatedRail docId={number} />`. Client component (`"use client"`). Wraps `useRelated(docId)` and maps each row onto `ResultCard` (snippet-optional variant). Returns `null` when the list is empty or undefined — the rail hides without ceremony.
+
+**Responsibilities:** Independent-skeleton rail rendering. Keeps the rail's TanStack Query (CSR) decoupled from the SSR detail fetch so a slow related-cosine query never delays the detail HTML.
+
+**Seams:** None.
+
+**Depth note:** Earns its own file because it is the page's only interactive island below `VersionsPanel`. Co-locating with `useRelated` keeps the "rail-is-client, detail-is-SSR" boundary visible at the import graph. Deletion test: inlining into `page.tsx` would force `"use client"` on the whole page and re-collapse the SSR/CSR split the PRD locks.
 
 ---
 
@@ -229,20 +249,23 @@ Returns `null` if `!canManage || versions == null`. Otherwise renders a header "
 ## Dependency graph
 
 ```
-                              app/docs/[id]/page.tsx
-                            /         |          |           \
-              useDocDetail     useRelated    VersionsPanel    ResultCard (snippet-optional)
-                  |                |              |                ↑
-                  |                |              └─── useVersionDownload
-                  |                |                          |
-              GET /api/docs/{id}   GET /api/docs/{id}/related   GET /api/docs/{id}/versions/{n}/download
-                  |                |                          |
-                  |                |               GET /api/docs/{id}/download
-                  |                |               GET /api/docs/{id}/attachments/{att_id}
-                  |                |                          |
-                  └────────────────┴──────────────────────────┘
-                                         |
-                                      api/docs
+                              app/docs/[id]/page.tsx  (Server Component)
+                            /            |              |              \
+                  fetchDetail      RelatedRail    VersionsPanel    not-found.tsx
+                (server-only)      (client)       (client)              |
+                  /        \           |              |               (rendered by notFound())
+        fetchDocDetail  fetchAreas  useRelated     useVersionDownload
+                  \        \           |              |
+                   \        \          |        GET /api/docs/{id}/versions/{n}/download
+                    \        \         |        GET /api/docs/{id}/download
+                     \        \        |        GET /api/docs/{id}/attachments/{att_id}
+                      \        \       |              |
+                       \        GET /api/areas         |
+                        GET ${INTERNAL}/docs/{id}      |
+                            (cookie-forwarded)         |
+                              \         |              /
+                               \        |             /
+                                       api/docs
                                     /     |      \
                   core/documents.get_detail    core/related.fetch_related    core/blob_store.internal_path
                                     \     |      /
@@ -253,7 +276,7 @@ Returns `null` if `!canManage || versions == null`. Otherwise renders a header "
                              document_authors, document_attachments, chunks)
 ```
 
-No cycles. Frontend talks to FastAPI only through the typed OpenAPI client (ADR-0004 §6); no Server Components on `/docs/[id]` (ADR-0004 §3, PRD §"Implementation Decisions"). Downloads stream via nginx `X-Accel-Redirect` (ADR-0006 §9), so FastAPI workers are not held by byte streams.
+No cycles. The detail page is the SSR surface locked by ADR-0004 §3; the rail + versions panel are client islands so their TanStack queries do not block the SSR response. Server-side fetches use `BUSCASAM_INTERNAL_API_URL` directly (ADR-0004 §5 — no BFF route handler); browser fetches go through the reverse proxy. Downloads stream via nginx `X-Accel-Redirect` (ADR-0006 §9), so FastAPI workers are not held by byte streams.
 
 ## Out of scope
 
@@ -262,12 +285,12 @@ No cycles. Frontend talks to FastAPI only through the typed OpenAPI client (ADR-
 - **Main-file replace, promote/demote historical versions, version comparison UI** — PRD #6. This PRD ships read + per-version download for managers only.
 - **Moderation report button on the detail page, hide/unhide, moderation inspection of hidden documents** — PRD #8.
 - **Sitemap (`/sitemap.xml`)** — deferred to its own slice; ADR-0010 §7 already locks the access predicate.
-- **SSR / Open Graph / link-preview meta tags / server-rendered detail for SEO** — deferred. CSR is the explicit decision; revisit if marketing requires social previews.
+- **Open Graph / link-preview meta tags** — deferred. The page is now SSR'd, so the hook exists (`generateMetadata`), but social-preview tags wait for a marketing ask.
 - **"Compartir" or copy-permalink button** — deferred; URL is the share artifact at MVP.
 - **Login nudge on `404` for invitado on interno/privado** — explicitly rejected to preserve the no-leak rule (ADR-0010 §7).
 - **Author / área / tipo browse landing pages separate from search** — deferred per `docs/SPEC.md` MVP exclusions.
 - **`components/RelatedCard.tsx` as a new component** — rejected. `ResultCard` is reused with snippet optional, honoring search-mvp.md's existing commitment. PRD #42's mention of a new component was overruled by the single-visual-contract rule.
-- **A combined `useDetailAndRelated` hook** — rejected. PRD locks two independent TanStack keys so the rail can render its own skeleton.
+- **A combined `useDetailAndRelated` hook** — rejected. PRD locks two independent TanStack keys so the rail can render its own skeleton. SSR of the page does not change this: the detail is SSR'd, the rail is a client island with its own TanStack query.
 - **Separate `api/downloads` router** — rejected. The five reader endpoints share predicate set + 404 envelope + X-Accel-Redirect projection; splitting would force those to re-cross files.
 - **`core/related` rolled into `core/documents`** — rejected. The source-after-access ordering (ADR-0010 §6, PRD story 33) is security-load-bearing; concentrating it in a dedicated chokepoint keeps the audit surface auditable even with one caller.
 - **A separate `MIN_RELATED_SIMILARITY` knob** — rejected per PRD §"Further Notes" to keep one calibration.
@@ -277,7 +300,7 @@ No cycles. Frontend talks to FastAPI only through the typed OpenAPI client (ADR-
 
 ## Further Notes
 
-- The 404 envelope is one Spanish string ("No encontramos este documento") served by both the frontend empty state and the backend's response body. The backend can return any small body — the frontend renders its own copy based on the route, not on the response payload.
+- The 404 envelope is one Spanish string ("No encontramos este documento") served by both the frontend `not-found.tsx` (rendered when the SSR fetch returns 404) and the backend's response body. The backend can return any small body — the frontend renders its own copy based on the route, not on the response payload.
 - `core/related.fetch_related` reads from the same `chunks` rows that `core/search_query` reads (`is_headline=true AND is_current=true`); no schema change. Both modules independently apply `readable_where`, so an HNSW index used by search incidentally accelerates related — but related is not a calibrated retrieval path, just a top-k cosine; no separate index tuning.
 - The historical-version download is the first endpoint that consumes a non-current `document_versions` row. The `n` parameter is the 1-based sequence (`row_number()` over `document_versions` ordered by `id` per `doc_id`). The router treats any non-integer or out-of-range `n` as `404` (no 400 — uniform denial).
 - `Content-Disposition` filename comes from `document_versions.original_filename` for historical downloads and from the current version's row for `GET /api/docs/{id}/download`; attachments use `document_attachments.original_filename`. The browser sees the human filename even though the on-disk path is the sha256 (PRD story 27, ADR-0006 §3).

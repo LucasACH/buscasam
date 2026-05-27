@@ -1,19 +1,11 @@
-"use client";
-
-import { useEffect } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { notFound } from "next/navigation";
 
-import { api } from "@/api/client";
-import type { components } from "@/api/schema";
-import { ResultCard } from "@/app/buscar/ResultCard";
 import { VersionsPanel } from "@/components/VersionsPanel";
 
-import { useDocDetail, type DocDetail } from "./useDocDetail";
-import { useRelated } from "./useRelated";
-
-type Area = components["schemas"]["AreaDTO"];
+import { fetchAreas, fetchDocDetail } from "./fetchDetail";
+import { RelatedRail } from "./RelatedRail";
+import type { DocDetail } from "./types";
 
 const TIPO_LABEL: Record<string, string> = {
   tesis: "Tesis",
@@ -31,51 +23,44 @@ const VISIBILITY_LABEL: Record<string, string> = {
   privado: "Privado",
 };
 
-function useAreaDisplayName(area_path: string | undefined): string | undefined {
-  const { data } = useQuery<Area[]>({
-    queryKey: ["areas"],
-    queryFn: async () => {
-      const { data, error } = await api.GET("/api/areas");
-      if (error) throw error;
-      return data ?? [];
-    },
-    enabled: area_path !== undefined,
-    staleTime: 5 * 60_000,
-  });
-  return data?.find((a) => a.area_path === area_path)?.display_name;
+type PageProps = { params: Promise<{ id: string }> };
+
+function parseDocId(raw: string): number | null {
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : null;
 }
 
-export default function DocDetailPage() {
-  const params = useParams<{ id: string }>();
-  const docId = Number(params.id);
-  const { detail, is404, isLoading } = useDocDetail(docId);
-
-  useEffect(() => {
-    if (!detail) return;
-    const previous = document.title;
-    document.title = detail.titulo;
-    return () => {
-      document.title = previous;
-    };
-  }, [detail]);
-
-  if (is404) {
-    return (
-      <main className="mx-auto w-full max-w-3xl px-4 py-8">
-        <p className="text-muted-foreground text-sm">
-          No encontramos este documento
-        </p>
-      </main>
-    );
-  }
-
-  if (isLoading || !detail) return null;
-
-  return <DetailView detail={detail} docId={docId} />;
+export async function generateMetadata({ params }: PageProps) {
+  const docId = parseDocId((await params).id);
+  if (docId === null) return {};
+  const detail = await fetchDocDetail(docId);
+  if (!detail) return {};
+  return { title: detail.titulo };
 }
 
-function DetailView({ detail, docId }: { detail: DocDetail; docId: number }) {
-  const areaName = useAreaDisplayName(detail.area_path);
+export default async function DocDetailPage({ params }: PageProps) {
+  const docId = parseDocId((await params).id);
+  if (docId === null) notFound();
+  const [detail, areas] = await Promise.all([
+    fetchDocDetail(docId),
+    fetchAreas(),
+  ]);
+  if (!detail) notFound();
+  const areaName =
+    areas.find((a) => a.area_path === detail.area_path)?.display_name ??
+    detail.area_path;
+  return <DetailView detail={detail} docId={docId} areaName={areaName} />;
+}
+
+function DetailView({
+  detail,
+  docId,
+  areaName,
+}: {
+  detail: DocDetail;
+  docId: number;
+  areaName: string;
+}) {
   const tipo = TIPO_LABEL[detail.tipo] ?? detail.tipo;
   const visibilityBadge =
     detail.visibility !== "publico" ? VISIBILITY_LABEL[detail.visibility] : null;
@@ -92,7 +77,7 @@ function DetailView({ detail, docId }: { detail: DocDetail; docId: number }) {
             <dt className="font-medium">Autores</dt>
             <dd>{autores}</dd>
             <dt className="font-medium">Área</dt>
-            <dd>{areaName ?? detail.area_path}</dd>
+            <dd>{areaName}</dd>
             <dt className="font-medium">Tipo</dt>
             <dd>{tipo}</dd>
             {detail.fecha && (
@@ -204,30 +189,5 @@ function DetailView({ detail, docId }: { detail: DocDetail; docId: number }) {
 
       <RelatedRail docId={docId} />
     </main>
-  );
-}
-
-function RelatedRail({ docId }: { docId: number }) {
-  const { related } = useRelated(docId);
-  if (!related || related.length === 0) return null;
-  return (
-    <section className="mt-10">
-      <h2 className="text-sm font-medium">Trabajos relacionados</h2>
-      <div className="mt-3 flex flex-col gap-3">
-        {related.map((r) => (
-          <ResultCard
-            key={r.doc_id}
-            result={{
-              doc_id: r.doc_id,
-              titulo: r.titulo,
-              fecha: r.fecha,
-              area_path: r.area_path,
-              tipo: r.tipo,
-              autores: r.autores,
-            }}
-          />
-        ))}
-      </div>
-    </section>
   );
 }

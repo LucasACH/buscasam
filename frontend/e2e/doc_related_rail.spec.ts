@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { setMockRoute } from "./mock-helpers";
+
 const AREAS = [
   { area_path: "escuela_ciencia", display_name: "Escuela de Ciencia y Tecnología" },
   {
@@ -8,7 +10,9 @@ const AREAS = [
   },
 ];
 
-const DOC_ID = 42;
+// This file owns DOC_ID 43 + neighbour 200 in the shared mock-backend registry.
+const DOC_ID = 43;
+const NEIGHBOUR_ID = 200;
 const TITULO = "Búsqueda híbrida en repositorios académicos";
 
 const PUBLICO_DETAIL = {
@@ -32,13 +36,13 @@ const PUBLICO_DETAIL = {
 
 const NEIGHBOUR_DETAIL = {
   ...PUBLICO_DETAIL,
-  doc_id: 100,
+  doc_id: NEIGHBOUR_ID,
   titulo: "Vecino A",
 };
 
 const RELATED_FIVE = [
   {
-    doc_id: 100,
+    doc_id: NEIGHBOUR_ID,
     titulo: "Vecino A",
     autores: [{ display_name: "Ada", user_id: 1 }],
     area_path: "escuela_ciencia.carrera_informatica",
@@ -47,7 +51,7 @@ const RELATED_FIVE = [
     similarity: 0.95,
   },
   {
-    doc_id: 101,
+    doc_id: 201,
     titulo: "Vecino B",
     autores: [{ display_name: "Bob", user_id: 2 }],
     area_path: "escuela_ciencia.carrera_informatica",
@@ -56,7 +60,7 @@ const RELATED_FIVE = [
     similarity: 0.91,
   },
   {
-    doc_id: 102,
+    doc_id: 202,
     titulo: "Vecino C",
     autores: [{ display_name: "Cleo", user_id: 3 }],
     area_path: "escuela_ciencia",
@@ -65,7 +69,7 @@ const RELATED_FIVE = [
     similarity: 0.88,
   },
   {
-    doc_id: 103,
+    doc_id: 203,
     titulo: "Vecino D",
     autores: [{ display_name: "Dan", user_id: 4 }],
     area_path: "escuela_ciencia",
@@ -74,7 +78,7 @@ const RELATED_FIVE = [
     similarity: 0.84,
   },
   {
-    doc_id: 104,
+    doc_id: 204,
     titulo: "Vecino E",
     autores: [{ display_name: "Eli", user_id: 5 }],
     area_path: "escuela_ciencia",
@@ -92,12 +96,15 @@ function json(body: unknown, status = 200) {
   };
 }
 
+// Serial: later tests overwrite the registry slot for /api/docs/43.
+test.describe.configure({ mode: "serial" });
+
 test.describe("/docs/[id] trabajos relacionados rail", () => {
   test.beforeEach(async ({ page }) => {
+    await setMockRoute({ path: "/api/areas", status: 200, body: AREAS });
     await page.route("**/api/me", (route) =>
       route.fulfill({ status: 401, body: "" }),
     );
-    await page.route("**/api/areas", (route) => route.fulfill(json(AREAS)));
     await page.route("**/api/notifications**", (route) =>
       route.fulfill(json({ items: [] })),
     );
@@ -106,17 +113,21 @@ test.describe("/docs/[id] trabajos relacionados rail", () => {
   test("invitado on publico with neighbours: rail shows up to 5 cards and links navigate", async ({
     page,
   }) => {
+    await setMockRoute({
+      path: `/api/docs/${DOC_ID}`,
+      status: 200,
+      body: PUBLICO_DETAIL,
+    });
+    await setMockRoute({
+      path: `/api/docs/${NEIGHBOUR_ID}`,
+      status: 200,
+      body: NEIGHBOUR_DETAIL,
+    });
     await page.route(`**/api/docs/${DOC_ID}/related`, (route) =>
       route.fulfill(json(RELATED_FIVE)),
     );
-    await page.route(`**/api/docs/${DOC_ID}`, (route) =>
-      route.fulfill(json(PUBLICO_DETAIL)),
-    );
-    await page.route("**/api/docs/100/related", (route) =>
+    await page.route(`**/api/docs/${NEIGHBOUR_ID}/related`, (route) =>
       route.fulfill(json([])),
-    );
-    await page.route("**/api/docs/100", (route) =>
-      route.fulfill(json(NEIGHBOUR_DETAIL)),
     );
 
     await page.goto(`/docs/${DOC_ID}`);
@@ -134,18 +145,20 @@ test.describe("/docs/[id] trabajos relacionados rail", () => {
 
     // Click navigates to the card's /docs/{id}.
     await page.getByRole("link", { name: "Vecino A" }).click();
-    await expect(page).toHaveURL("/docs/100");
+    await expect(page).toHaveURL(`/docs/${NEIGHBOUR_ID}`);
     await expect(page.getByRole("heading", { name: "Vecino A" })).toBeVisible();
   });
 
   test("invitado on publico with no neighbours: rail header is not rendered", async ({
     page,
   }) => {
+    await setMockRoute({
+      path: `/api/docs/${DOC_ID}`,
+      status: 200,
+      body: PUBLICO_DETAIL,
+    });
     await page.route(`**/api/docs/${DOC_ID}/related`, (route) =>
       route.fulfill(json([])),
-    );
-    await page.route(`**/api/docs/${DOC_ID}`, (route) =>
-      route.fulfill(json(PUBLICO_DETAIL)),
     );
 
     await page.goto(`/docs/${DOC_ID}`);
