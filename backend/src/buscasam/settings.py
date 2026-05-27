@@ -9,7 +9,7 @@ DEV_OIDC_CLIENT_SECRET = "dev-client-secret"
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="BUSCASAM_")
+    model_config = SettingsConfigDict(env_prefix="BUSCASAM_", env_file=".env", extra="ignore")
 
     env: Literal["dev", "test", "prod"] = "dev"
 
