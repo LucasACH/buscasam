@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from buscasam.api.deps import get_session
 from buscasam.core import auth, blob_store
 from buscasam.core.documents import (
+    DetailRow,
     get_detail,
     get_manageable_version_file,
     get_pending_invitation,
@@ -152,7 +153,7 @@ def _download_response(*, sha_hex: str, original_filename: str, mime: str) -> Re
     )
 
 
-def _detail_fields(detail) -> dict:
+def _detail_fields(detail: DetailRow) -> dict:
     return dict(
         doc_id=detail.doc_id,
         titulo=detail.titulo,
@@ -208,13 +209,17 @@ async def get_doc_detail(
     session: AsyncSession = Depends(get_session),
 ) -> DetailDTO | MinimalInviteDTO | DetailWithInvitationDTO:
     # Second-try composition (module map §api/docs / ADR-0010 §6): detail first
-    # (the hot path for accepted readers), then the recipient-scoped disclosure
-    # only when authenticated — invitados cannot be invitees, so the anonymous
-    # read skips the second SELECT entirely.
+    # (the hot path for accepted readers), then the recipient-scoped disclosure.
+    # The second SELECT is skipped unless it could change the response: invitados
+    # cannot be invitees, and a present detail on a privado doc means owner/
+    # accepted (readable_where excludes pending), so no banner is ever owed there.
     detail = await get_detail(session, doc_id, user_ctx)
+    needs_disclosure = user_ctx.user_id is not None and (
+        detail is None or detail.visibility in ("interno", "publico")
+    )
     invite = (
         await get_pending_invitation(session, doc_id, user_ctx)
-        if user_ctx.user_id is not None
+        if needs_disclosure
         else None
     )
     if detail is not None:
