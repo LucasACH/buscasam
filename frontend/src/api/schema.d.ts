@@ -327,6 +327,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/docs/{doc_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Doc Detail */
+        get: operations["get_doc_detail_api_docs__doc_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/docs/{doc_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Main File */
+        get: operations["download_main_file_api_docs__doc_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/docs/{doc_id}/attachments/{att_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Attachment */
+        get: operations["download_attachment_api_docs__doc_id__attachments__att_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/docs/{doc_id}/versions/{n}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Version */
+        get: operations["download_version_api_docs__doc_id__versions__n__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -348,6 +416,13 @@ export interface components {
             size_bytes: number;
             /** Mime */
             mime: string | null;
+        };
+        /** AuthorDisplayDTO */
+        AuthorDisplayDTO: {
+            /** Display Name */
+            display_name: string;
+            /** User Id */
+            user_id: number | null;
         };
         /** Body_post_attachment_api_documents__doc_id__attachments_post */
         Body_post_attachment_api_documents__doc_id__attachments_post: {
@@ -391,6 +466,49 @@ export interface components {
             /** Id */
             id: number;
         };
+        /** DetailDTO */
+        DetailDTO: {
+            /** Doc Id */
+            doc_id: number;
+            /** Titulo */
+            titulo: string;
+            /** Autores */
+            autores: components["schemas"]["AuthorDisplayDTO"][];
+            /** Area Path */
+            area_path: string;
+            /** Tipo */
+            tipo: string;
+            /** Fecha */
+            fecha: string | null;
+            /** Visibility */
+            visibility: string;
+            /** Abstract */
+            abstract: string;
+            /** Palabras Clave */
+            palabras_clave: string[];
+            archivo_principal: components["schemas"]["MainFileDTO"];
+            /** Adjuntos */
+            adjuntos: components["schemas"]["AttachmentDTO"][];
+            /** Versions */
+            versions?: components["schemas"]["DetailVersionDTO"][] | null;
+            /** Manageable */
+            manageable: boolean;
+        };
+        /** DetailVersionDTO */
+        DetailVersionDTO: {
+            /** N */
+            n: number;
+            /** Original Filename */
+            original_filename: string;
+            /** Mime */
+            mime: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Indexed At */
+            indexed_at: string | null;
+            /** Is Current */
+            is_current: boolean;
+        };
         /** DraftStateDTO */
         DraftStateDTO: {
             /** Title */
@@ -416,6 +534,15 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** MainFileDTO */
+        MainFileDTO: {
+            /** Original Filename */
+            original_filename: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Mime */
+            mime: string;
         };
         /** MarkAllReadResponse */
         MarkAllReadResponse: {
@@ -1106,6 +1233,132 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OwnDocDTO"][];
+                };
+            };
+        };
+    };
+    get_doc_detail_api_docs__doc_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DetailDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_main_file_api_docs__doc_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_attachment_api_docs__doc_id__attachments__att_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
+                att_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_version_api_docs__doc_id__versions__n__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
+                n: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
