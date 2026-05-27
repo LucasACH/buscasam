@@ -52,14 +52,37 @@ def _headline_lock(version_id: int) -> str:
 # --- Plain async cores (callable by tests + by the task body wrapper). ---
 
 
+async def _complete_indexing(
+    session: AsyncSession,
+    tei: httpx.AsyncClient,
+    cv: documents.CandidateVersion,
+    doc: extractmod.ExtractedDoc,
+) -> None:
+    meta = extractmod.derive_metadata(doc)
+    body = chunkmod.chunk(doc)
+    headline = chunkmod.headline_chunk(cv.title, meta.abstract)
+    fp = chunkmod.headline_fingerprint(cv.title, meta.abstract)
+
+    texts = [c.body_text for c in [headline, *body]]
+    embeds = [await embedmod.embed(tei, t, kind="passage") for t in texts]
+
+    await documents.write_indexed_candidate(
+        session,
+        cv.version_id,
+        body=body,
+        headline=headline,
+        embeds=embeds,
+        meta=meta,
+        headline_fingerprint=fp,
+    )
+
+
 async def _run_index_document(
     session: AsyncSession, tei: httpx.AsyncClient, version_id: int
 ) -> None:
-    cv = await documents.load_candidate(session, version_id)
-    await session.execute(
-        text("UPDATE document_versions SET index_status = 'processing' WHERE id = :id"),
-        {"id": version_id},
-    )
+    cv = await documents._begin_indexing(session, version_id)
+    if cv is None:
+        return
     try:
         doc = await extractmod.extract(cv.sha256, cv.mime)
     except extractmod.OCRRequired:
@@ -71,30 +94,16 @@ async def _run_index_document(
         )
         return
 
-    meta = extractmod.derive_metadata(doc)
-    body = chunkmod.chunk(doc)
-    headline = chunkmod.headline_chunk(cv.title, meta.abstract)
-    fp = chunkmod.headline_fingerprint(cv.title, meta.abstract)
-
-    texts = [c.body_text for c in [headline, *body]]
-    embeds = [await embedmod.embed(tei, t, kind="passage") for t in texts]
-
-    await documents.write_indexed_candidate(
-        session,
-        version_id,
-        body=body,
-        headline=headline,
-        embeds=embeds,
-        meta=meta,
-        headline_fingerprint=fp,
-    )
+    await _complete_indexing(session, tei, cv, doc)
 
 
 async def _run_ocr_index_document(
     session: AsyncSession, tei: httpx.AsyncClient, version_id: int
 ) -> None:
     """Runs ocrmypdf to add a text layer, then re-extracts from the OCR'd bytes."""
-    cv = await documents.load_candidate(session, version_id)
+    cv = await documents._begin_indexing(session, version_id)
+    if cv is None:
+        return
     try:
         import ocrmypdf
         from ocrmypdf.exceptions import ExitCodeException
@@ -136,21 +145,7 @@ async def _run_ocr_index_document(
     put = await blob_store.put_stream(_one_chunk(), max_bytes=200_000_000)
     try:
         doc = await extractmod.extract(put.sha256, "application/pdf")
-        meta = extractmod.derive_metadata(doc)
-        body = chunkmod.chunk(doc)
-        headline = chunkmod.headline_chunk(cv.title, meta.abstract)
-        fp = chunkmod.headline_fingerprint(cv.title, meta.abstract)
-        texts = [c.body_text for c in [headline, *body]]
-        embeds = [await embedmod.embed(tei, t, kind="passage") for t in texts]
-        await documents.write_indexed_candidate(
-            session,
-            version_id,
-            body=body,
-            headline=headline,
-            embeds=embeds,
-            meta=meta,
-            headline_fingerprint=fp,
-        )
+        await _complete_indexing(session, tei, cv, doc)
     finally:
         await blob_store.delete(put.sha256)
 

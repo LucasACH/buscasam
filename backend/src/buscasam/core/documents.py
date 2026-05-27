@@ -272,6 +272,29 @@ async def load_candidate(
     )
 
 
+async def _begin_indexing(
+    session: AsyncSession, version_id: int
+) -> CandidateVersion | None:
+    status = (
+        await session.execute(
+            text(
+                "SELECT index_status FROM document_versions "
+                "WHERE id = :id FOR UPDATE"
+            ),
+            {"id": version_id},
+        )
+    ).scalar_one_or_none()
+    if status is None:
+        raise DocumentNotFound
+    if status == "indexed":
+        return None
+    await session.execute(
+        text("UPDATE document_versions SET index_status = 'processing' WHERE id = :id"),
+        {"id": version_id},
+    )
+    return await load_candidate(session, version_id)
+
+
 async def write_indexed_candidate(
     session: AsyncSession,
     version_id: int,

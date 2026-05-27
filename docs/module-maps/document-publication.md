@@ -122,7 +122,9 @@ Invariants: enqueues use `queueing_lock` keyed per ADR-0008 §7 (`index:v{id}`, 
 
 ```python
 async def index_document(version_id: int) -> None:
-    version = await documents.load_candidate(version_id)
+    version = await documents._begin_indexing(version_id)
+    if version is None:              # already completed retry
+        return
     try:
         doc = await extract(version.sha256, version.mime)
     except OCRRequired:
@@ -131,17 +133,10 @@ async def index_document(version_id: int) -> None:
     except (PDFSyntaxError, BadZipFile, ...) as e:
         await documents.mark_failed(version_id, f"corrupted: {type(e).__name__}")
         return
-    meta = derive_metadata(doc)
-    body = chunk(doc)
-    headline = headline_chunk(version.title, meta.abstract)
-    fp = headline_fingerprint(version.title, meta.abstract)
-    embeds = await embed_many([c.body_text for c in body + [headline]], kind="passage")
-    await documents.write_indexed_candidate(
-        version_id, body, headline, embeds, meta, fp,
-    )
+    await _complete_indexing(version, doc)
 ```
 
-`ocr_index_document` is identical except it runs `ocrmypdf` before `extract`. `refresh_headline` reads the candidate's persisted title/abstract, re-embeds the headline only, and calls `documents.write_headline(version_id, headline, embed, fp)`.
+`ocr_index_document` obtains the same locked start/no-op decision and calls the same private `_complete_indexing` helper after it runs `ocrmypdf` before `extract`. `refresh_headline` reads the candidate's persisted title/abstract, re-embeds the headline only, and calls `documents.write_headline(version_id, headline, embed, fp)`.
 
 **Responsibilities:** Defines every async edge (task names, queues, retry policy from ADR-0008 §5, locks, periodic defers). Owns side-effect orchestration: extract → chunk → embed → persist call. Owns the OCR re-enqueue branch. Never opens transactions or writes domain rows directly — every persist goes through a `core/documents` function so DB invariants stay in one place.
 
@@ -250,7 +245,9 @@ async def mark_failed(version_id: int, error: str) -> None
 # inserts notifications(kind='processing_failed', user_id=owner, ...) with unique event_key.
 ```
 
-Invariants: every author-facing function takes `user_ctx` and applies `document_access.manageable_where` (owner | accepted) before any mutation; cross-user attempts return 404 (ADR-0010 §7). `publish` is the only function that writes to `documents.publication_status` or makes replacement chunks searchable. Chunks are keyed by `(version_id, chunk_seq)`, so current and candidate versions can both hold headline/body sequences; exactly the current version's chunks carry `is_current=true`. The 5-attachment cap, the headline-fingerprint check, and the atomic publish SQL (ADR-0006 §6) are not exposed as building blocks. No worker function takes `user_ctx` — workers don't have one.
+Private worker collaboration: `_begin_indexing(version_id)` row-locks the version, returns `None` for an already `indexed` completion, and otherwise moves the task into `processing` before extraction/OCR side effects. It is shared by default and OCR task implementations, not an enqueue Interface.
+
+Invariants: every author-facing function takes `user_ctx` and applies `document_access.manageable_where` (owner | accepted) before any mutation; cross-user attempts return 404 (ADR-0010 §7). `publish` is the only function that writes to `documents.publication_status` or makes replacement chunks searchable. Chunks are keyed by `(version_id, chunk_seq)`, so current and candidate versions can both hold headline/body sequences; exactly the current version's chunks carry `is_current=true`. The 5-attachment cap, the headline-fingerprint check, the completed-indexing no-op transition, and the atomic publish SQL (ADR-0006 §6) are not exposed as building blocks. No worker function takes `user_ctx` — workers don't have one.
 
 **Responsibilities:** Owns every domain mutation across the four document tables and the version-scoped `chunks` rows. Owns the publish transaction's SQL exactly (ADR-0006 §6). Owns the `processing_failed` notification insert. Owns the "post-publish metadata edits persist immediately + enqueue headline reindex" rule (PRD story 28-29). Owns the `publish_gate_reason` projection — server is the source of truth (PRD §"Implementation Decisions").
 
