@@ -117,6 +117,28 @@ Open http://localhost:3000.
 4. Worker calls TEI for each chunk; `document_versions.index_status` goes `pending → processing → indexed`.
 5. http://localhost:3000/buscar → search returns the new doc.
 
+## Attachments
+
+The editor (`/mis-trabajos/[id]/editar`) exposes an `AttachmentsPanel` for sidecar files (datasets, slides, source). Backend routes:
+
+- `POST /api/documents/{doc_id}/attachments` (multipart `file`)
+- `DELETE /api/documents/{doc_id}/attachments/{att_id}`
+
+Constraints (`api/documents.py:250-256`):
+
+- ≤ 5 attachments per document → 409 `attachment_cap_exceeded`
+- ≤ 20 MB each → 413
+- Allowed extensions: `.csv .json .txt .py .ipynb .png .jpg .jpeg .gif .zip` → 415 otherwise
+
+Attachments share the same content-addressed `blob_store` as the main file, so the same `BUSCASAM_BLOB_ROOT` and writability rules apply. Allowed pre- and post-publish.
+
+Smoke check:
+
+1. Open a draft from `/mis-trabajos`.
+2. Add a `.csv` or `.zip` ≤ 20 MB via the attachments panel.
+3. Backend writes the blob under `backend/var/blobs/`; the row appears in `document_attachments`.
+4. Remove it; row is deleted (blob stays for the orphan sweep — content-addressed, may be shared).
+
 ## Resetting state
 
 `docker compose down -v` on macOS sometimes leaves the Postgres volume intact (Docker Desktop quirk). To genuinely wipe the database:
@@ -145,3 +167,4 @@ rm -rf backend/var/blobs
 - **Search returns 0 results for slight typos**: `BUSCASAM_EMBED_QUERY_TIMEOUT_S` too low → silent lexical fallback. Look for `"lexical_fallback": true` in the `/api/search` response.
 - **Login bounces to `/login?error=not_unsam`**: account isn't on a UNSAM Workspace domain (`hd` claim missing or not in `ROLE_BY_HD`).
 - **Failed Procrastinate job won't retry**: `UPDATE procrastinate_jobs SET status='todo', attempts=0 WHERE id=<n>` and the worker picks it back up.
+- **Attachment upload returns 415**: extension not in the allowlist (see Attachments). 413 → over 20 MB. 409 with `attachment_cap_exceeded` → doc already has 5 attachments.
