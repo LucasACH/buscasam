@@ -442,7 +442,8 @@ export interface paths {
         post?: never;
         delete?: never;
         options?: never;
-        head?: never;
+        /** Download Version */
+        head: operations["download_version_api_docs__doc_id__versions__n__download_get"];
         patch?: never;
         trace?: never;
     };
@@ -1461,6 +1462,38 @@ export interface operations {
             path: {
                 doc_id: number;
                 att_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_version_api_docs__doc_id__versions__n__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
+                n: string;
             };
             cookie?: never;
         };

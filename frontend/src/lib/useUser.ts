@@ -2,21 +2,20 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-export type User = {
-  user_id: number;
-  role: "estudiante" | "docente";
-  name: string;
-  picture_url: string | null;
-  hd: string;
-};
+import { api } from "@/api/client";
+import type { components } from "@/api/schema";
+
+export type User = components["schemas"]["MeResponse"];
 
 export const ME_QUERY_KEY = ["me"] as const;
 
 async function fetchMe(): Promise<User | null> {
-  const r = await fetch("/api/me", { credentials: "same-origin" });
-  if (r.status === 401) return null;
-  if (!r.ok) throw new Error(`/api/me ${r.status}`);
-  return (await r.json()) as User;
+  const { data, response } = await api.GET("/api/me");
+  // 401 is the documented unauthenticated state — surfaced as `null`
+  // (→ invitado), not an error. Any other non-2xx propagates.
+  if (response.status === 401) return null;
+  if (!response.ok) throw new Error(`/api/me ${response.status}`);
+  return data ?? null;
 }
 
 export function useUser() {
@@ -31,8 +30,7 @@ export function useUser() {
     // Only treat the user as invitado on a confirmed 401 (data === null).
     // Errors propagate via `isError` — the network being down is not the
     // same as the server saying "no session".
-    isInvitado:
-      !query.isLoading && !query.isError && query.data === null,
+    isInvitado: !query.isLoading && !query.isError && query.data === null,
     isLoading: query.isLoading,
     isError: query.isError,
   };
