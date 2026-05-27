@@ -3,8 +3,19 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 
+import { api } from "@/api/client";
+import type { components } from "@/api/schema";
 import { useUser } from "@/lib/useUser";
+
+type OwnDoc = components["schemas"]["OwnDocDTO"];
+
+async function fetchOwnDocs(): Promise<OwnDoc[]> {
+  const { data, error } = await api.GET("/api/me/documents");
+  if (error) throw error;
+  return data ?? [];
+}
 
 export default function MisTrabajosPage() {
   const { user, isInvitado, isLoading } = useUser();
@@ -16,8 +27,17 @@ export default function MisTrabajosPage() {
     }
   }, [isInvitado, router]);
 
+  const { data: docs, isPending: docsPending } = useQuery({
+    queryKey: ["me", "documents"],
+    queryFn: fetchOwnDocs,
+    enabled: !isInvitado && !isLoading,
+  });
+
   if (isLoading || isInvitado) return null;
   if (!user) return null;
+
+  const borradores = (docs ?? []).filter((d) => d.publication_status === "draft");
+  const publicados = (docs ?? []).filter((d) => d.publication_status === "published");
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8">
@@ -31,19 +51,42 @@ export default function MisTrabajosPage() {
         </Link>
       </div>
 
-      <Section title="Borradores" />
-      <Section title="Publicados" />
+      <Section title="Borradores" docs={borradores} pending={docsPending} />
+      <Section title="Publicados" docs={publicados} pending={docsPending} />
     </main>
   );
 }
 
-function Section({ title }: { title: string }) {
+function Section({
+  title,
+  docs,
+  pending,
+}: {
+  title: string;
+  docs: OwnDoc[];
+  pending: boolean;
+}) {
   return (
     <section className="mt-8">
       <h2 className="text-lg font-medium">{title}</h2>
-      <p className="text-muted-foreground mt-4 text-sm">
-        Aún no subiste ningún trabajo — empezá con Nuevo trabajo
-      </p>
+      {pending ? null : docs.length === 0 ? (
+        <p className="text-muted-foreground mt-4 text-sm">
+          Aún no subiste ningún trabajo — empezá con Nuevo trabajo
+        </p>
+      ) : (
+        <ul className="mt-4 divide-y rounded-md border">
+          {docs.map((d) => (
+            <li key={d.id}>
+              <Link
+                href={`/mis-trabajos/${d.id}/editar`}
+                className="block px-4 py-3 text-sm hover:bg-muted"
+              >
+                {d.title}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
