@@ -132,7 +132,7 @@ async def upload_main_file(
     result = await blob_store.put_stream(_stream_bytes(data), max_bytes=_MAX_MAIN_BYTES)
 
     if result.sniffed_mime not in _ALLOWED_MIMES:
-        await blob_store.delete(result.sha256)
+        await blob_store.discard_if_unreferenced(session, result.sha256)
         raise HTTPException(status_code=415, detail="Formato no permitido")
 
     await attach_main_version(

@@ -359,12 +359,12 @@ async def test_default_and_ocr_completion_share_retry_safe_indexed_result(
 
     deleted: list[str] = []
 
-    async def _delete(sha):
+    async def _discard(session, sha):
         deleted.append(sha)
 
     monkeypatch.setattr(jobs.blob_store, "open_for_send", _open_for_send)
     monkeypatch.setattr(jobs.blob_store, "put_stream", _put_stream)
-    monkeypatch.setattr(jobs.blob_store, "delete", _delete)
+    monkeypatch.setattr(jobs.blob_store, "discard_if_unreferenced", _discard)
 
     ocr_runs: list[bool] = []
 
