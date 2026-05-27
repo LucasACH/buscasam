@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -19,6 +20,13 @@ if TYPE_CHECKING:
 
 
 _EMBEDDING_MODEL_VERSION = "multilingual-e5-large@v1"
+
+
+class _Unset:
+    """Sentinel distinguishing an absent PATCH field from an explicit null."""
+
+
+UNSET = _Unset()
 
 
 def _halfvec_literal(values: np.ndarray) -> str:
@@ -42,6 +50,31 @@ class DocumentNotFound(Exception):
 class InvalidCoauthorId(Exception):
     def __init__(self, ids: set[int]) -> None:
         self.ids = ids
+
+
+@dataclass(frozen=True)
+class DraftState:
+    doc_id: int
+    version_id: int
+    title: str
+    index_status: str
+    staged_abstract: str | None
+    staged_keywords: list[str]
+    staged_fecha: date | None
+    index_error: str | None
+    publish_gate_reason: str | None
+
+
+def _publish_gate_reason(index_status: str, fingerprint_matches: bool) -> str | None:
+    """Server-owned publish gate. None iff the candidate is indexed and its
+    stored headline fingerprint matches current title + staged_abstract."""
+    if index_status in ("pending", "processing"):
+        return "processing"
+    if index_status == "failed":
+        return "processing_failed"
+    if index_status == "indexed" and fingerprint_matches:
+        return None
+    return "reindexing_headline"
 
 
 @dataclass(frozen=True)
@@ -256,13 +289,17 @@ async def write_indexed_candidate(
             },
         )
 
+    # Extraction is an initial fill, not an overwrite: a user who lands on the
+    # editar form while still `processing` can save their own staged_* via
+    # save-on-blur. COALESCE leaves any column they already wrote untouched
+    # (staged_* are NULL until first written), so the author edit always wins.
     await session.execute(
         text(
             "UPDATE document_versions SET "
             "  index_status = 'indexed', "
-            "  staged_abstract = :abstract, "
-            "  staged_keywords = :keywords, "
-            "  staged_fecha = :fecha, "
+            "  staged_abstract = COALESCE(staged_abstract, :abstract), "
+            "  staged_keywords = COALESCE(staged_keywords, :keywords), "
+            "  staged_fecha = COALESCE(staged_fecha, :fecha), "
             "  headline_fingerprint = :fp, "
             "  extract_pipeline_version = :pv, "
             "  indexed_at = now() "
@@ -277,6 +314,29 @@ async def write_indexed_candidate(
             "id": version_id,
         },
     )
+
+    # A título/abstract edit can land after this task embedded its headline (the
+    # index window spans minutes for OCR). The R001 guard suppresses the enqueue
+    # while processing, so the stamped fingerprint is now stale against the
+    # current título + preserved staged_abstract with no refresh queued — a
+    # permanently stuck `reindexing_headline` gate. Detect the drift here and
+    # enqueue the refresh ourselves so the headline catches up to the edit.
+    from buscasam.core.chunk import headline_fingerprint as _compute_fp
+
+    drift = (
+        await session.execute(
+            text(
+                "SELECT d.titulo, v.staged_abstract "
+                "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
+                "WHERE v.id = :id"
+            ),
+            {"id": version_id},
+        )
+    ).mappings().one()
+    if _compute_fp(drift["titulo"], drift["staged_abstract"] or "") != headline_fingerprint:
+        from buscasam.core import jobs
+
+        await jobs.enqueue_refresh_headline(session, version_id)
 
 
 async def write_headline(
@@ -369,6 +429,133 @@ async def mark_failed(
             "vid": version_id,
             "err": error,
         },
+    )
+
+
+async def update_draft_metadata(
+    session: AsyncSession,
+    user_ctx: UserCtx,
+    doc_id: int,
+    *,
+    title: str | None = None,
+    abstract: str | None = None,
+    keywords: list[str] | None = None,
+    fecha: date | None | _Unset = UNSET,
+    visibility: str | None = None,
+    area_path: str | None = None,
+    document_type: str | None = None,
+) -> None:
+    """Writes top-level fields to `documents`, staged_* to the candidate version,
+    and enqueues refresh_headline when title or abstract changed (module map
+    §core/documents). Manageable-scoped; cross-user → DocumentNotFound."""
+    await assert_manageable(session, user_ctx, doc_id)
+
+    # Pre-update candidate state: drives change-detection and the index_status
+    # guard on the headline reindex enqueue below.
+    current = (
+        await session.execute(
+            text(
+                "SELECT v.id AS version_id, v.index_status, v.staged_abstract, "
+                "       d.titulo "
+                "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
+                "WHERE v.doc_id = :doc_id ORDER BY v.version_no DESC LIMIT 1"
+            ),
+            {"doc_id": doc_id},
+        )
+    ).mappings().one_or_none()
+
+    doc_sets: list[str] = []
+    doc_params: dict = {"doc_id": doc_id}
+    if title is not None:
+        doc_sets.append("titulo = :titulo")
+        doc_params["titulo"] = title
+    if visibility is not None:
+        doc_sets.append("visibility = :visibility")
+        doc_params["visibility"] = visibility
+    if area_path is not None:
+        doc_sets.append("area_path = :area_path")
+        doc_params["area_path"] = area_path
+    if document_type is not None:
+        doc_sets.append("tipo = :tipo")
+        doc_params["tipo"] = document_type
+    if doc_sets:
+        await session.execute(
+            text(f"UPDATE documents SET {', '.join(doc_sets)} WHERE id = :doc_id"),
+            doc_params,
+        )
+
+    if current is None:
+        return
+    version_id = current["version_id"]
+
+    ver_sets: list[str] = []
+    ver_params: dict = {"vid": version_id}
+    if abstract is not None:
+        ver_sets.append("staged_abstract = :abstract")
+        ver_params["abstract"] = abstract
+    if keywords is not None:
+        ver_sets.append("staged_keywords = :keywords")
+        ver_params["keywords"] = keywords
+    if not isinstance(fecha, _Unset):
+        ver_sets.append("staged_fecha = :fecha")
+        ver_params["fecha"] = fecha
+    if ver_sets:
+        await session.execute(
+            text(
+                f"UPDATE document_versions SET {', '.join(ver_sets)} WHERE id = :vid"
+            ),
+            ver_params,
+        )
+
+    # Reindex only when a headline input actually changed AND the candidate is
+    # already indexed: while still processing, index_document builds the headline
+    # from the current title, so a concurrent refresh would duplicate it.
+    title_changed = title is not None and title != current["titulo"]
+    abstract_changed = abstract is not None and abstract != (
+        current["staged_abstract"] or ""
+    )
+    if current["index_status"] == "indexed" and (title_changed or abstract_changed):
+        from buscasam.core import jobs
+
+        await jobs.enqueue_refresh_headline(session, version_id)
+
+
+async def get_draft_state(
+    session: AsyncSession, user_ctx: UserCtx, doc_id: int
+) -> DraftState:
+    await assert_manageable(session, user_ctx, doc_id)
+    row = (
+        await session.execute(
+            text(
+                "SELECT v.id AS version_id, v.index_status, v.staged_abstract, "
+                "       v.staged_keywords, v.staged_fecha, v.index_error, "
+                "       v.headline_fingerprint, d.titulo "
+                "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
+                "WHERE v.doc_id = :doc_id ORDER BY v.version_no DESC LIMIT 1"
+            ),
+            {"doc_id": doc_id},
+        )
+    ).mappings().one_or_none()
+    if row is None:
+        raise DocumentNotFound
+
+    from buscasam.core.chunk import headline_fingerprint
+
+    matches = row["headline_fingerprint"] == headline_fingerprint(
+        row["titulo"], row["staged_abstract"] or ""
+    )
+    return DraftState(
+        doc_id=doc_id,
+        version_id=row["version_id"],
+        title=row["titulo"],
+        index_status=row["index_status"],
+        staged_abstract=row["staged_abstract"],
+        staged_keywords=row["staged_keywords"] or [],
+        staged_fecha=row["staged_fecha"],
+        index_error=row["index_error"],
+        publish_gate_reason=_publish_gate_reason(
+            row["index_status"], matches
+        ),
     )
 
 
