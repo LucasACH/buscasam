@@ -58,6 +58,37 @@ def readable_where(alias: str, user_ctx: UserCtx) -> tuple[str, dict]:
     return where, {"user_id": user_ctx.user_id, "is_unsam": user_ctx.is_unsam}
 
 
+def pending_invitation_disclosure_where(
+    alias: str, user_ctx: UserCtx
+) -> tuple[str, dict]:
+    """`WHERE`-clause body + bind params for the ADR-0010 §6 disclosure carve-out.
+
+    Recipient-scoped, **not** visibility-scoped: a `pending` invitee matches on a
+    privado, interno, or publico document alike (the visibility tier only governs
+    what the router composes around the banner). The source document must be
+    published, non-deleted, and non-hidden — a pending invitee gets no disclosure
+    for a soft-deleted or moderation-hidden document (PRD stories 32-33).
+
+    `user_ctx.user_id` is required by construction — invitados cannot be
+    invitees, so there is no row to match; callers must guard or use
+    `require_authenticated` upstream.
+    """
+    if user_ctx.user_id is None:
+        raise ValueError("pending_invitation_disclosure_where requires an authenticated user")
+    where = (
+        f"{alias}.publication_status = 'published' "
+        f"AND {alias}.soft_deleted_at IS NULL "
+        f"AND {alias}.moderation_hidden_at IS NULL "
+        f"AND EXISTS ("
+        f"SELECT 1 FROM document_authors da "
+        f"WHERE da.doc_id = {alias}.id "
+        f"AND da.user_id = :user_id "
+        f"AND da.status = 'pending'"
+        f")"
+    )
+    return where, {"user_id": user_ctx.user_id}
+
+
 def manageable_where(alias: str, user_ctx: UserCtx) -> tuple[str, dict]:
     """`WHERE`-clause body + bind params for the author-management predicate.
 

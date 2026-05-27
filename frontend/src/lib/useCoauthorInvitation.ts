@@ -13,12 +13,12 @@ export type InvitationMutationError = { kind: "gone" } | { kind: "network" };
 export function useCoauthorInvitation() {
   const qc = useQueryClient();
 
-  function invalidate(docId: number) {
-    // Bandeja item transitions to read state; /docs/{id} refetches (full
-    // reader view on accept, 404 envelope on decline).
+  function invalidate() {
+    // Bandeja item transitions to read state. The /docs/{id} surface is SSR
+    // (no TanStack query): CoauthorInvitationBanner triggers router.refresh()
+    // on its own after the mutation resolves.
     qc.invalidateQueries({ queryKey: NOTIFICATIONS_QUERY_KEY });
     qc.invalidateQueries({ queryKey: UNREAD_COUNT_QUERY_KEY });
-    qc.invalidateQueries({ queryKey: ["doc-detail", docId] });
   }
 
   async function accept(
@@ -30,9 +30,9 @@ export function useCoauthorInvitation() {
     );
     if (error && response?.status !== 404) return { kind: "network" };
     // Success or a 404 (row already transitioned / revoked) both mean the
-    // server truth moved: refetch so the stale invite leaves its actionable
+    // server truth moved: refresh so the stale invite leaves its actionable
     // state instead of dead-ending on repeat 404s.
-    invalidate(docId);
+    invalidate();
     return error ? { kind: "gone" } : undefined;
   }
 
@@ -44,7 +44,7 @@ export function useCoauthorInvitation() {
       { params: { path: { doc_id: docId } } },
     );
     if (error && response?.status !== 404) return { kind: "network" };
-    invalidate(docId);
+    invalidate();
     return error ? { kind: "gone" } : undefined;
   }
 

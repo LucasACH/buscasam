@@ -9,7 +9,11 @@ import numpy as np
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from buscasam.core.document_access import manageable_where, readable_where
+from buscasam.core.document_access import (
+    manageable_where,
+    pending_invitation_disclosure_where,
+    readable_where,
+)
 from buscasam.settings import settings
 
 if TYPE_CHECKING:
@@ -1229,6 +1233,47 @@ async def get_detail(
         ],
         versions=versions,
         manageable=manageable,
+    )
+
+
+@dataclass(frozen=True)
+class InvitationDisclosure:
+    doc_id: int
+    titulo: str
+    inviter_display_name: str
+
+
+async def get_pending_invitation(
+    session: AsyncSession, doc_id: int, user_ctx: UserCtx
+) -> InvitationDisclosure | None:
+    """Minimal-block payload for a pending invitee on `doc_id`, else `None`.
+
+    Composes `pending_invitation_disclosure_where` (ADR-0010 §6) — the sole
+    reader of `document_authors.status='pending'` for disclosure. Returns `None`
+    for guests (no `user_id`) without raising. `inviter_display_name` comes from
+    the document's `owner` author row, consistent with `get_detail`'s autores.
+    """
+    if user_ctx.user_id is None:
+        return None
+    where, params = pending_invitation_disclosure_where("d", user_ctx)
+    row = (
+        await session.execute(
+            text(
+                "SELECT d.titulo, "
+                "       (SELECT a.display_name FROM document_authors a "
+                "         WHERE a.doc_id = d.id AND a.status = 'owner' LIMIT 1) "
+                "         AS inviter "
+                f"FROM documents d WHERE d.id = :doc_id AND ({where})"
+            ),
+            {"doc_id": doc_id, **params},
+        )
+    ).mappings().first()
+    if row is None:
+        return None
+    return InvitationDisclosure(
+        doc_id=doc_id,
+        titulo=row["titulo"],
+        inviter_display_name=row["inviter"],
     )
 
 

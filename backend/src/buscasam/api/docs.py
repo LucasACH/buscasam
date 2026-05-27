@@ -11,11 +11,12 @@ returning `RelatedDTO[]` or the uniform 404 envelope.
 """
 from __future__ import annotations
 
+from typing import Annotated, Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, model_serializer
+from pydantic import BaseModel, Field, model_serializer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from buscasam.api.deps import get_session
@@ -23,6 +24,7 @@ from buscasam.core import auth, blob_store
 from buscasam.core.documents import (
     get_detail,
     get_manageable_version_file,
+    get_pending_invitation,
     get_readable_attachment,
     get_readable_main_file,
 )
@@ -68,7 +70,11 @@ class RelatedDTO(BaseModel):
     fecha: str | None  # ISO date; None when documents.fecha is NULL.
 
 
-class DetailDTO(BaseModel):
+class InvitationBannerDTO(BaseModel):
+    inviter_display_name: str
+
+
+class _DetailFields(BaseModel):
     doc_id: int
     titulo: str
     autores: list[AuthorDisplayDTO]
@@ -91,6 +97,30 @@ class DetailDTO(BaseModel):
         if self.versions is None:
             data.pop("versions", None)
         return data
+
+
+class DetailDTO(_DetailFields):
+    view: Literal["detail"] = "detail"
+
+
+class DetailWithInvitationDTO(_DetailFields):
+    view: Literal["detail_with_invitation"] = "detail_with_invitation"
+    invitation: InvitationBannerDTO
+
+
+class MinimalInviteDTO(BaseModel):
+    view: Literal["minimal"] = "minimal"
+    doc_id: int
+    titulo: str
+    inviter_display_name: str
+
+
+# Discriminated on `view` so the generated TS client narrows the three reader
+# shapes (module map §api/docs; ADR-0010 §6).
+DocDetailResponse = Annotated[
+    DetailDTO | MinimalInviteDTO | DetailWithInvitationDTO,
+    Field(discriminator="view"),
+]
 
 
 def _not_found() -> HTTPException:
@@ -122,16 +152,8 @@ def _download_response(*, sha_hex: str, original_filename: str, mime: str) -> Re
     )
 
 
-@router.get("/{doc_id}", response_model=DetailDTO)
-async def get_doc_detail(
-    doc_id: int,
-    user_ctx: auth.UserCtx = Depends(auth.current_user),
-    session: AsyncSession = Depends(get_session),
-) -> DetailDTO:
-    detail = await get_detail(session, doc_id, user_ctx)
-    if detail is None:
-        raise _not_found()
-    return DetailDTO(
+def _detail_fields(detail) -> dict:
+    return dict(
         doc_id=detail.doc_id,
         titulo=detail.titulo,
         autores=[
@@ -177,6 +199,41 @@ async def get_doc_detail(
         ),
         manageable=detail.manageable,
     )
+
+
+@router.get("/{doc_id}", response_model=DocDetailResponse)
+async def get_doc_detail(
+    doc_id: int,
+    user_ctx: auth.UserCtx = Depends(auth.current_user),
+    session: AsyncSession = Depends(get_session),
+) -> DetailDTO | MinimalInviteDTO | DetailWithInvitationDTO:
+    # Second-try composition (module map §api/docs / ADR-0010 §6): detail first
+    # (the hot path for accepted readers), then the recipient-scoped disclosure
+    # only when authenticated — invitados cannot be invitees, so the anonymous
+    # read skips the second SELECT entirely.
+    detail = await get_detail(session, doc_id, user_ctx)
+    invite = (
+        await get_pending_invitation(session, doc_id, user_ctx)
+        if user_ctx.user_id is not None
+        else None
+    )
+    if detail is not None:
+        fields = _detail_fields(detail)
+        if invite is not None:
+            return DetailWithInvitationDTO(
+                **fields,
+                invitation=InvitationBannerDTO(
+                    inviter_display_name=invite.inviter_display_name
+                ),
+            )
+        return DetailDTO(**fields)
+    if invite is not None:
+        return MinimalInviteDTO(
+            doc_id=invite.doc_id,
+            titulo=invite.titulo,
+            inviter_display_name=invite.inviter_display_name,
+        )
+    raise _not_found()
 
 
 @router.get("/{doc_id}/related", response_model=list[RelatedDTO])

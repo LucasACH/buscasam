@@ -158,14 +158,16 @@ async def _seed_current_version(session, doc_id: int) -> None:
 
 
 async def test_accept_then_invitee_can_read_privado_detail(client, session):
-    """End-to-end: accepting flips the invitee into readable_where, so the
-    privado detail GET goes 404 → 200 across the transition (AC7)."""
+    """End-to-end: accepting flips the invitee from the slice-2 minimal-disclosure
+    view into readable_where, so the privado detail GET widens from 'minimal' to
+    'detail' across the transition (AC7)."""
     doc_id, _invitee, _nid, cookie = await _seed(session, visibility="privado")
     await _seed_current_version(session, doc_id)
     headers = {"cookie": f"sid={cookie}", "origin": ORIGIN}
 
     before = await client.get(f"/api/docs/{doc_id}", cookies={"sid": cookie})
-    assert before.status_code == 404
+    assert before.status_code == 200
+    assert before.json()["view"] == "minimal"
 
     accepted = await client.post(
         f"/api/coauthor_invitations/{doc_id}/accept", headers=headers
@@ -174,6 +176,7 @@ async def test_accept_then_invitee_can_read_privado_detail(client, session):
 
     after = await client.get(f"/api/docs/{doc_id}", cookies={"sid": cookie})
     assert after.status_code == 200
+    assert after.json()["view"] == "detail"
     assert after.json()["doc_id"] == doc_id
 
 
