@@ -14,7 +14,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from buscasam.api.deps import get_session
 from buscasam.core import auth
-from buscasam.core.documents import accept_invitation, decline_invitation
+from buscasam.core.documents import (
+    InvitationNotPending,
+    accept_invitation,
+    decline_invitation,
+)
 
 router = APIRouter(prefix="/api/coauthor_invitations")
 
@@ -25,7 +29,9 @@ async def accept(
     user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
-    if not await accept_invitation(session, user_ctx, doc_id):
+    try:
+        await accept_invitation(session, user_ctx, doc_id)
+    except InvitationNotPending:
         raise HTTPException(status_code=404, detail="not_found")
     return Response(status_code=204)
 
@@ -36,6 +42,8 @@ async def decline(
     user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
-    if not await decline_invitation(session, user_ctx, doc_id):
+    try:
+        await decline_invitation(session, user_ctx, doc_id)
+    except InvitationNotPending:
         raise HTTPException(status_code=404, detail="not_found")
     return Response(status_code=204)
