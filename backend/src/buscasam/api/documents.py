@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +24,22 @@ from buscasam.core.extract import PDFEncryptionError, probe_encrypted
 
 router = APIRouter(prefix="/api")
 
+# Mirror the DB constraints (documents_visibility_check, documents_tipo_check,
+# area_path ltree) so invalid input is a 422 at the boundary, not a 500 from
+# the UPDATE. Same closed sets / pattern as api/search.py.
+Visibility = Literal["publico", "interno", "privado"]
+DocumentType = Literal[
+    "tesis",
+    "paper",
+    "trabajo_practico",
+    "proyecto_investigacion",
+    "monografia",
+    "ponencia_poster",
+    "apunte_resumen",
+    "informe_catedra",
+]
+_AREA_PATH_PATTERN = r"^[a-z0-9_]+(\.[a-z0-9_]+)*$"
+
 
 class OwnDocDTO(BaseModel):
     id: int
@@ -33,9 +50,9 @@ class OwnDocDTO(BaseModel):
 
 class CreateDraftRequest(BaseModel):
     title: str
-    area_path: str
-    document_type: str
-    visibility: str
+    area_path: str = Field(pattern=_AREA_PATH_PATTERN)
+    document_type: DocumentType
+    visibility: Visibility
     external_authors: list[str] = []
     coauthor_user_ids: list[int] = []
 
@@ -134,9 +151,9 @@ class UpdateDraftRequest(BaseModel):
     abstract: str | None = None
     keywords: list[str] | None = None
     fecha: date | None = None
-    visibility: str | None = None
-    area_path: str | None = None
-    document_type: str | None = None
+    visibility: Visibility | None = None
+    area_path: str | None = Field(default=None, pattern=_AREA_PATH_PATTERN)
+    document_type: DocumentType | None = None
 
 
 @router.get("/documents/{doc_id}/draft", response_model=DraftStateDTO)

@@ -304,6 +304,28 @@ async def write_indexed_candidate(
         },
     )
 
+    # A título PATCH can land after this task embedded its headline (the index
+    # window spans minutes for OCR). The R001 guard suppresses the enqueue while
+    # processing, so the stamped fingerprint is now stale against documents.titulo
+    # with no refresh queued — a permanently stuck `reindexing_headline` gate.
+    # Detect the drift here and enqueue the refresh ourselves.
+    from buscasam.core.chunk import headline_fingerprint as _compute_fp
+
+    drift = (
+        await session.execute(
+            text(
+                "SELECT d.titulo, v.staged_abstract "
+                "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
+                "WHERE v.id = :id"
+            ),
+            {"id": version_id},
+        )
+    ).mappings().one()
+    if _compute_fp(drift["titulo"], drift["staged_abstract"] or "") != headline_fingerprint:
+        from buscasam.core import jobs
+
+        await jobs.enqueue_refresh_headline(session, version_id)
+
 
 async def write_headline(
     session: AsyncSession,

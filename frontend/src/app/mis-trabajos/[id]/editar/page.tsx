@@ -7,11 +7,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { useUser } from "@/lib/useUser";
-import { useDraftState, type DraftStateDTO } from "../../useDraftState";
+import { useDraftState, draftQueryKey, type DraftStateDTO } from "../../useDraftState";
 
 const STATUS_PILL: Record<string, string> = {
   pending: "Procesando…",
@@ -56,6 +57,7 @@ export default function EditarPage() {
 }
 
 function EditarForm({ docId, state }: { docId: number; state: DraftStateDTO }) {
+  const queryClient = useQueryClient();
   const { register, getValues } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     mode: "onBlur",
@@ -82,7 +84,14 @@ function EditarForm({ docId, state }: { docId: number; state: DraftStateDTO }) {
       params: { path: { doc_id: docId } },
       body,
     });
-    if (error) toast.error("No se pudo guardar el cambio");
+    if (error) {
+      toast.error("No se pudo guardar el cambio");
+      return;
+    }
+    // A title/abstract save can flip the server's publish gate to
+    // reindexing_headline; refetch so the UI leaves the idle indexed state and
+    // picks up the new gate (useDraftState polls again while reindexing).
+    await queryClient.invalidateQueries({ queryKey: draftQueryKey(docId) });
   }
 
   const processing = state.index_status === "processing";
