@@ -5,6 +5,7 @@ Covers load_candidate, write_indexed_candidate, write_headline, mark_failed.
 from __future__ import annotations
 
 import secrets
+from datetime import date
 
 import numpy as np
 import pytest
@@ -104,6 +105,47 @@ async def test_write_indexed_candidate_inserts_chunks_and_updates_version(sessio
     assert chunk_rows[0]["is_headline"] is True and chunk_rows[0]["chunk_seq"] == 0
     assert all(r["is_current"] is False for r in chunk_rows)
     assert all(r["version_id"] == version_id for r in chunk_rows)
+
+
+async def test_write_indexed_candidate_preserves_staged_fields_edited_during_processing(session):
+    """R007: an author who edits staged_* via save-on-blur while the candidate is
+    still processing must keep those edits. Extraction fills only still-empty
+    columns, so write_indexed_candidate never overwrites an author edit."""
+    uid = await make_user(session)
+    version_id = await _make_candidate_version(session, owner_id=uid)
+
+    # The author landed during processing and saved their own metadata.
+    await session.execute(
+        text(
+            "UPDATE document_versions SET staged_abstract = :a, "
+            "  staged_keywords = :k, staged_fecha = :f WHERE id = :vid"
+        ),
+        {"a": "resumen del autor", "k": ["autor"], "f": date(2021, 5, 1), "vid": version_id},
+    )
+
+    meta = IndexableMetadata(
+        abstract="resumen del extractor", keywords=["extractor"], fecha=date(2099, 1, 1)
+    )
+    headline = Chunk(body_text="h", is_headline=True, chunk_seq=0)
+    await documents.write_indexed_candidate(
+        session, version_id, body=[], headline=headline,
+        embeds=[np.full(1024, 0.1, dtype=np.float16)], meta=meta,
+        headline_fingerprint=headline_fingerprint("t", "resumen del extractor"),
+    )
+
+    row = (
+        await session.execute(
+            text(
+                "SELECT index_status, staged_abstract, staged_keywords, staged_fecha "
+                "FROM document_versions WHERE id = :id"
+            ),
+            {"id": version_id},
+        )
+    ).mappings().one()
+    assert row["index_status"] == "indexed"
+    assert row["staged_abstract"] == "resumen del autor"
+    assert row["staged_keywords"] == ["autor"]
+    assert row["staged_fecha"] == date(2021, 5, 1)
 
 
 async def test_mark_failed_sets_failed_status_and_inserts_notification(session):
