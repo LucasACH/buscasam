@@ -823,6 +823,16 @@ class Attachment:
 
 
 @dataclass(frozen=True)
+class DetailVersion:
+    n: int  # 1-based row_number ordering, shared with the version-download route
+    original_filename: str
+    mime: str
+    size_bytes: int
+    indexed_at: datetime | None
+    is_current: bool
+
+
+@dataclass(frozen=True)
 class DetailRow:
     doc_id: int
     titulo: str
@@ -835,6 +845,7 @@ class DetailRow:
     palabras_clave: list[str]
     archivo_principal: MainFile
     adjuntos: list[Attachment]
+    versions: list[DetailVersion] | None
     manageable: bool
 
 
@@ -848,8 +859,10 @@ async def get_detail(
     Returns `None` when the document fails `readable_where(user_ctx)` — the
     router maps `None → 404` uniformly. `archivo_principal` and `adjuntos`
     reflect the published current version's rows (`document_versions.is_current`)
-    and `document_attachments` respectively. `manageable=False` and `versions`
-    are owned by a later slice; this branch is reader-only (issue #43).
+    and `document_attachments` respectively. `versions` (ascending by 1-based
+    `n`) and `manageable=True` are populated only when `manageable_where(user_ctx)`
+    admits the requester (owner / accepted coautor); for any other reader
+    `versions is None` and `manageable=False` (issue #44).
     """
     where, params = readable_where("d", user_ctx)
     row = (
@@ -891,6 +904,38 @@ async def get_detail(
         )
     ).mappings().all()
 
+    mgmt_where, mgmt_params = manageable_where("d", user_ctx)
+    manageable = (
+        await session.execute(
+            text(f"SELECT 1 FROM documents d WHERE d.id = :doc_id AND ({mgmt_where})"),
+            {"doc_id": doc_id, **mgmt_params},
+        )
+    ).scalar_one_or_none() is not None
+
+    versions: list[DetailVersion] | None = None
+    if manageable:
+        version_rows = (
+            await session.execute(
+                text(
+                    "SELECT row_number() OVER (ORDER BY id) AS n, "
+                    "       original_filename, mime, bytes, indexed_at, is_current "
+                    "FROM document_versions WHERE doc_id = :d ORDER BY id"
+                ),
+                {"d": doc_id},
+            )
+        ).mappings().all()
+        versions = [
+            DetailVersion(
+                n=v["n"],
+                original_filename=v["original_filename"],
+                mime=v["mime"],
+                size_bytes=v["bytes"],
+                indexed_at=v["indexed_at"],
+                is_current=v["is_current"],
+            )
+            for v in version_rows
+        ]
+
     return DetailRow(
         doc_id=row["id"],
         titulo=row["titulo"],
@@ -918,5 +963,6 @@ async def get_detail(
             )
             for a in attachment_rows
         ],
-        manageable=False,
+        versions=versions,
+        manageable=manageable,
     )

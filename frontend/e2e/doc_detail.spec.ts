@@ -32,6 +32,38 @@ const PUBLICO_DETAIL = {
   manageable: false,
 };
 
+const USER = {
+  user_id: 7,
+  role: "estudiante",
+  name: "Ada Lovelace",
+  picture_url: null,
+  hd: "estudiantes.unsam.edu.ar",
+};
+
+const MANAGEABLE_DETAIL = {
+  ...PUBLICO_DETAIL,
+  visibility: "privado",
+  manageable: true,
+  versions: [
+    {
+      n: 1,
+      original_filename: "tesis_v1.pdf",
+      mime: "application/pdf",
+      size_bytes: 1000,
+      indexed_at: "2024-01-01T10:00:00+00:00",
+      is_current: false,
+    },
+    {
+      n: 2,
+      original_filename: "tesis_v2.pdf",
+      mime: "application/pdf",
+      size_bytes: 2048,
+      indexed_at: "2024-02-01T10:00:00+00:00",
+      is_current: true,
+    },
+  ],
+};
+
 function json(body: unknown, status = 200) {
   return {
     status,
@@ -119,5 +151,62 @@ test.describe("/docs/[id] reader page", () => {
     await expect(page.getByText("No encontramos este documento")).toBeVisible();
     // No metadata leak: no Descargar links rendered.
     await expect(page.getByRole("link", { name: /descargar/i })).toHaveCount(0);
+  });
+
+  test("owner: Editar CTA + Versiones panel + per-version download", async ({
+    page,
+  }) => {
+    await page.route("**/api/me", (route) => route.fulfill(json(USER)));
+    await page.route(`**/api/docs/${DOC_ID}`, (route) =>
+      route.fulfill(json(MANAGEABLE_DETAIL)),
+    );
+    // HEAD preflight succeeds; the GET navigation streams an attachment so the
+    // browser fires a native download instead of navigating away.
+    await page.route(`**/api/docs/${DOC_ID}/versions/1/download`, (route) => {
+      if (route.request().method() === "HEAD") {
+        return route.fulfill({ status: 200 });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: "application/pdf",
+        headers: {
+          "Content-Disposition": "attachment; filename*=UTF-8''tesis_v1.pdf",
+        },
+        body: Buffer.from("%PDF-fake-v1"),
+      });
+    });
+
+    await page.goto(`/docs/${DOC_ID}`);
+
+    const editar = page.getByRole("link", { name: /editar/i });
+    await expect(editar).toBeVisible();
+    await expect(editar).toHaveAttribute(
+      "href",
+      `/mis-trabajos/${DOC_ID}/editar`,
+    );
+
+    await expect(page.getByText("Versiones anteriores")).toBeVisible();
+    await expect(page.getByText("tesis_v2.pdf")).toBeVisible();
+    await expect(page.getByText("tesis_v1.pdf")).toBeVisible();
+
+    const dl = page.waitForEvent("download");
+    await page.getByRole("button", { name: /descargar versión 1/i }).click();
+    const download = await dl;
+    expect(download.url()).toContain(`/api/docs/${DOC_ID}/versions/1/download`);
+  });
+
+  test("logged-in non-author: no Editar CTA, no Versiones panel", async ({
+    page,
+  }) => {
+    await page.route("**/api/me", (route) => route.fulfill(json(USER)));
+    await page.route(`**/api/docs/${DOC_ID}`, (route) =>
+      route.fulfill(json(PUBLICO_DETAIL)),
+    );
+
+    await page.goto(`/docs/${DOC_ID}`);
+
+    await expect(page.getByRole("heading", { name: TITULO })).toBeVisible();
+    await expect(page.getByRole("link", { name: /editar/i })).toHaveCount(0);
+    await expect(page.getByText("Versiones anteriores")).toHaveCount(0);
   });
 });

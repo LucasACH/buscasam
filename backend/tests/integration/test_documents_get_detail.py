@@ -1,7 +1,7 @@
 """Integration tests for core/documents.get_detail (reader branch, issue #43)."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -202,3 +202,38 @@ async def test_get_detail_archivo_principal_uses_current_version_not_candidate(s
     assert detail is not None
     assert detail.archivo_principal.original_filename == "published-v1.pdf"
     assert detail.archivo_principal.size_bytes == 1000
+
+
+async def test_get_detail_manageable_branch_populates_versions_for_owner(session):
+    """Manager branch (issue #44): owner gets versions ascending by 1-based n,
+    with is_current and a tz-aware indexed_at; manageable is True."""
+    doc_id = await make_document(session, visibility="privado")
+    owner_id = await make_user(session, name="Owner")
+    await make_document_author(session, doc_id, user_id=owner_id, status="owner")
+    await session.execute(
+        text(
+            "INSERT INTO document_versions "
+            "(doc_id, version_no, sha256, original_filename, bytes, mime, "
+            " index_status, is_current, indexed_at) VALUES "
+            "(:d, 1, decode('11', 'hex'), 'v1.pdf', 100, 'application/pdf', "
+            " 'indexed', false, CAST('2024-01-01T10:00:00Z' AS timestamptz)), "
+            "(:d, 2, decode('22', 'hex'), 'v2.pdf', 200, 'application/pdf', "
+            " 'indexed', true, CAST('2024-02-01T10:00:00Z' AS timestamptz))"
+        ),
+        {"d": doc_id},
+    )
+    await session.commit()
+
+    detail = await documents.get_detail(session, doc_id, _student(owner_id))
+
+    assert detail is not None
+    assert detail.manageable is True
+    assert detail.versions is not None
+    assert [(v.n, v.original_filename, v.is_current) for v in detail.versions] == [
+        (1, "v1.pdf", False),
+        (2, "v2.pdf", True),
+    ]
+    assert detail.versions[0].size_bytes == 100
+    assert detail.versions[0].indexed_at == datetime(
+        2024, 1, 1, 10, 0, tzinfo=timezone.utc
+    )

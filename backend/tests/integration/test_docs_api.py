@@ -61,6 +61,41 @@ async def _seed_current_version(
     )
 
 
+async def _seed_version(
+    session,
+    doc_id: int,
+    *,
+    version_no: int,
+    original_filename: str,
+    sha_hex: str,
+    is_current: bool = False,
+    bytes_: int = 1024,
+    mime: str = "application/pdf",
+    indexed_at: str | None = None,
+) -> int:
+    return (
+        await session.execute(
+            text(
+                "INSERT INTO document_versions "
+                "(doc_id, version_no, sha256, original_filename, bytes, mime, "
+                " index_status, is_current, indexed_at) "
+                "VALUES (:d, :vn, decode(:sha, 'hex'), :name, :b, :m, 'indexed', "
+                "        :cur, CAST(:idx AS timestamptz)) RETURNING id"
+            ),
+            {
+                "d": doc_id,
+                "vn": version_no,
+                "sha": sha_hex,
+                "name": original_filename,
+                "b": bytes_,
+                "m": mime,
+                "cur": is_current,
+                "idx": indexed_at,
+            },
+        )
+    ).scalar_one()
+
+
 async def _seed_attachment(
     session,
     doc_id: int,
@@ -389,3 +424,220 @@ async def test_download_denials_pending_coauthor_on_privado(client, session):
     for r in (detail, main, att):
         assert r.status_code == 404
         assert "x-accel-redirect" not in {k.lower() for k in r.headers}
+
+
+# --- Slice 2: manager affordances (issue #44) ---
+
+
+async def _seed_two_versions(session, doc_id: int) -> None:
+    """A historical v1 + the published current v2 (single is_current per doc)."""
+    await _seed_version(
+        session,
+        doc_id,
+        version_no=1,
+        original_filename="tesis_v1.pdf",
+        sha_hex="11" * 32,
+        bytes_=1000,
+        indexed_at="2024-01-01T10:00:00Z",
+    )
+    await _seed_version(
+        session,
+        doc_id,
+        version_no=2,
+        original_filename="tesis_v2.pdf",
+        sha_hex="22" * 32,
+        is_current=True,
+        bytes_=2000,
+        indexed_at="2024-02-01T10:00:00Z",
+    )
+
+
+async def test_get_doc_detail_owner_sees_versions_and_manageable(client, session):
+    """Owner gets the full versions array (ascending by 1-based n) and
+    manageable=true. n is the row_number ordering, not version_no."""
+    doc_id = await make_document(session, visibility="privado")
+    owner_id = await make_user(session)
+    await make_document_author(
+        session, doc_id, user_id=owner_id, status="owner", display_name="Owner"
+    )
+    await _seed_two_versions(session, doc_id)
+    sid = await _sid_cookie(session, owner_id)
+    await session.commit()
+
+    r = await client.get(f"/api/docs/{doc_id}", cookies={"sid": sid})
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["manageable"] is True
+    assert body["versions"] == [
+        {
+            "n": 1,
+            "original_filename": "tesis_v1.pdf",
+            "mime": "application/pdf",
+            "size_bytes": 1000,
+            "indexed_at": "2024-01-01T10:00:00+00:00",
+            "is_current": False,
+        },
+        {
+            "n": 2,
+            "original_filename": "tesis_v2.pdf",
+            "mime": "application/pdf",
+            "size_bytes": 2000,
+            "indexed_at": "2024-02-01T10:00:00+00:00",
+            "is_current": True,
+        },
+    ]
+
+
+async def test_get_doc_detail_accepted_coautor_sees_versions(client, session):
+    """The second manageable grant source: an accepted coautor (not the owner)."""
+    doc_id = await make_document(session, visibility="privado")
+    owner_id = await make_user(session)
+    coautor_id = await make_user(session, role="docente")
+    await make_document_author(session, doc_id, user_id=owner_id, status="owner")
+    await make_document_author(
+        session, doc_id, user_id=coautor_id, status="accepted", display_name="Co"
+    )
+    await _seed_two_versions(session, doc_id)
+    sid = await _sid_cookie(session, coautor_id)
+    await session.commit()
+
+    r = await client.get(f"/api/docs/{doc_id}", cookies={"sid": sid})
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["manageable"] is True
+    assert [v["n"] for v in body["versions"]] == [1, 2]
+
+
+@pytest.mark.parametrize(
+    "requester",
+    ["invitado", "estudiante", "docente", "pending"],
+)
+async def test_get_doc_detail_non_manager_omits_versions(client, session, requester):
+    """No-leak contract: any reader who is not owner/accepted gets manageable
+    false and the versions key absent — even on a doc they can fully read.
+    The doc carries an external-author attribution (user_id NULL), which can
+    never satisfy manageable_where, so external attribution leaks nothing."""
+    doc_id = await make_document(session, visibility="publico")
+    owner_id = await make_user(session)
+    await make_document_author(session, doc_id, user_id=owner_id, status="owner")
+    await make_document_author(
+        session, doc_id, status="external", display_name="Autor Externo"
+    )
+    await _seed_two_versions(session, doc_id)
+
+    cookies: dict[str, str] = {}
+    if requester != "invitado":
+        role = "docente" if requester == "docente" else "estudiante"
+        uid = await make_user(session, role=role)
+        if requester == "pending":
+            await make_document_author(
+                session, doc_id, user_id=uid, status="pending", display_name="P"
+            )
+        cookies = {"sid": await _sid_cookie(session, uid)}
+    await session.commit()
+
+    r = await client.get(f"/api/docs/{doc_id}", cookies=cookies)
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["manageable"] is False
+    assert "versions" not in body
+
+
+@pytest.mark.parametrize("author_status", ["owner", "accepted"])
+async def test_version_download_manager_each_n_returns_x_accel(
+    client, session, author_status
+):
+    """Story 26/27: owner and accepted coautor can download every historical
+    version; X-Accel path + Content-Disposition come from that version's own
+    row (the human original_filename, never the sha256 path)."""
+    doc_id = await make_document(session, visibility="privado")
+    owner_id = await make_user(session)
+    await make_document_author(session, doc_id, user_id=owner_id, status="owner")
+    requester_id = owner_id
+    if author_status == "accepted":
+        requester_id = await make_user(session, role="docente")
+        await make_document_author(
+            session, doc_id, user_id=requester_id, status="accepted", display_name="Co"
+        )
+    await _seed_two_versions(session, doc_id)
+    sid = await _sid_cookie(session, requester_id)
+    await session.commit()
+
+    cookies = {"sid": sid}
+    r1 = await client.get(f"/api/docs/{doc_id}/versions/1/download", cookies=cookies)
+    r2 = await client.get(f"/api/docs/{doc_id}/versions/2/download", cookies=cookies)
+
+    assert r1.status_code == 200
+    assert r1.headers["x-accel-redirect"] == "/_blobs/11/11/" + "11" * 32
+    assert r1.headers["content-type"] == "application/pdf"
+    assert (
+        r1.headers["content-disposition"]
+        == "attachment; filename*=UTF-8''tesis_v1.pdf"
+    )
+    # FastAPI workers must not hold the bytes.
+    assert r1.content == b""
+
+    assert r2.status_code == 200
+    assert r2.headers["x-accel-redirect"] == "/_blobs/22/22/" + "22" * 32
+    assert (
+        r2.headers["content-disposition"]
+        == "attachment; filename*=UTF-8''tesis_v2.pdf"
+    )
+
+
+@pytest.mark.parametrize(
+    "requester",
+    ["invitado", "estudiante", "docente", "pending"],
+)
+async def test_version_download_non_manager_returns_404(client, session, requester):
+    """Historical versions are author-only even on a publico doc whose main
+    file these same readers CAN download — the manageable gate is independent
+    of readability. 404 on every existing n, no X-Accel leak."""
+    doc_id = await make_document(session, visibility="publico")
+    owner_id = await make_user(session)
+    await make_document_author(session, doc_id, user_id=owner_id, status="owner")
+    await _seed_two_versions(session, doc_id)
+
+    cookies: dict[str, str] = {}
+    if requester != "invitado":
+        role = "docente" if requester == "docente" else "estudiante"
+        uid = await make_user(session, role=role)
+        if requester == "pending":
+            await make_document_author(
+                session, doc_id, user_id=uid, status="pending", display_name="P"
+            )
+        cookies = {"sid": await _sid_cookie(session, uid)}
+    await session.commit()
+
+    for n in (1, 2):
+        r = await client.get(
+            f"/api/docs/{doc_id}/versions/{n}/download", cookies=cookies
+        )
+        assert r.status_code == 404
+        assert "x-accel-redirect" not in {k.lower() for k in r.headers}
+
+
+@pytest.mark.parametrize(
+    "bad_n",
+    ["0", "-1", "3", "abc"],
+    ids=["zero", "negative", "out_of_range", "non_integer"],
+)
+async def test_version_download_owner_bad_n_returns_404(client, session, bad_n):
+    """Uniform 404 (never 400/422) for n that does not resolve to a row:
+    zero, negative, beyond max, and non-integer."""
+    doc_id = await make_document(session, visibility="privado")
+    owner_id = await make_user(session)
+    await make_document_author(session, doc_id, user_id=owner_id, status="owner")
+    await _seed_two_versions(session, doc_id)  # n resolves only for 1 and 2
+    sid = await _sid_cookie(session, owner_id)
+    await session.commit()
+
+    r = await client.get(
+        f"/api/docs/{doc_id}/versions/{bad_n}/download", cookies={"sid": sid}
+    )
+
+    assert r.status_code == 404
+    assert "x-accel-redirect" not in {k.lower() for k in r.headers}

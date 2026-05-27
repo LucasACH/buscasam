@@ -20,6 +20,15 @@ export type Attachment = {
   mime: string | null;
 };
 
+export type DetailVersion = {
+  n: number;
+  original_filename: string;
+  mime: string;
+  size_bytes: number;
+  indexed_at: string | null;
+  is_current: boolean;
+};
+
 export type DocDetail = {
   doc_id: number;
   titulo: string;
@@ -32,6 +41,8 @@ export type DocDetail = {
   palabras_clave: string[];
   archivo_principal: MainFile;
   adjuntos: Attachment[];
+  // Omitted from the API JSON for non-managers (no-leak contract).
+  versions?: DetailVersion[];
   manageable: boolean;
 };
 

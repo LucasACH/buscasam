@@ -1,22 +1,23 @@
-"""Reader-facing document endpoints (issue #43, module map §api/docs).
+"""Reader-facing document endpoints (issues #43, #44; module map §api/docs).
 
-Three endpoints share one UserCtx dep (cookie → invitado on absent), and one
-uniform 404 envelope across every denial path. Slice 1 is reader-only: no
-manager affordances, no related rail, no historical-version download — those
-land in later PRD slices.
+Four endpoints share one UserCtx dep (cookie → invitado on absent), and one
+uniform 404 envelope across every denial path. Slice 2 adds the manager
+affordances on top of the slice-1 reader surface: the `versions`/`manageable`
+detail fields and the historical-version download (`download_version`), both
+gated on `manageable_where`. The related rail lands in a later PRD slice.
 """
 from __future__ import annotations
 
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, model_serializer
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from buscasam.api.deps import get_session
 from buscasam.core import auth, blob_store
-from buscasam.core.document_access import readable_where
+from buscasam.core.document_access import manageable_where, readable_where
 from buscasam.core.documents import get_detail
 
 router = APIRouter(prefix="/api/docs")
@@ -40,6 +41,15 @@ class AttachmentDTO(BaseModel):
     mime: str | None
 
 
+class DetailVersionDTO(BaseModel):
+    n: int
+    original_filename: str
+    mime: str
+    size_bytes: int
+    indexed_at: str | None  # ISO datetime; None when never indexed.
+    is_current: bool
+
+
 class DetailDTO(BaseModel):
     doc_id: int
     titulo: str
@@ -52,7 +62,17 @@ class DetailDTO(BaseModel):
     palabras_clave: list[str]
     archivo_principal: MainFileDTO
     adjuntos: list[AttachmentDTO]
+    versions: list[DetailVersionDTO] | None = None
     manageable: bool
+
+    @model_serializer(mode="wrap")
+    def _omit_versions_when_absent(self, handler):
+        # Non-managers get `versions` *omitted* (not null) — the no-leak contract
+        # (module map §api/docs). Other null fields (fecha, user_id) are kept.
+        data = handler(self)
+        if self.versions is None:
+            data.pop("versions", None)
+        return data
 
 
 def _not_found() -> HTTPException:
@@ -111,6 +131,23 @@ async def get_doc_detail(
             )
             for a in detail.adjuntos
         ],
+        versions=(
+            [
+                DetailVersionDTO(
+                    n=v.n,
+                    original_filename=v.original_filename,
+                    mime=v.mime,
+                    size_bytes=v.size_bytes,
+                    indexed_at=(
+                        v.indexed_at.isoformat() if v.indexed_at is not None else None
+                    ),
+                    is_current=v.is_current,
+                )
+                for v in detail.versions
+            ]
+            if detail.versions is not None
+            else None
+        ),
         manageable=detail.manageable,
     )
 
@@ -171,4 +208,46 @@ async def download_attachment(
         # Attachments can have NULL mime per migration 0010; fall back to a
         # generic stream type so Content-Type is always present.
         mime=row.mime or "application/octet-stream",
+    )
+
+
+@router.get("/{doc_id}/versions/{n}/download")
+async def download_version(
+    doc_id: int,
+    n: str,
+    user_ctx: auth.UserCtx = Depends(auth.current_user),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    # Historical versions are author-only (story 26), so this route gates on
+    # manageable_where, not readable_where. `n` is the 1-based row_number
+    # ordering shared with get_detail; any non-integer / out-of-range value is
+    # the same uniform 404 — never a 400/422 (module map §api/docs).
+    try:
+        version_n = int(n)
+    except ValueError:
+        raise _not_found() from None
+    if version_n < 1:
+        raise _not_found()
+
+    where, params = manageable_where("d", user_ctx)
+    row = (
+        await session.execute(
+            text(
+                "SELECT encode(v.sha256, 'hex') AS sha, "
+                "       v.original_filename, v.mime "
+                "FROM documents d "
+                "JOIN ("
+                "  SELECT doc_id, sha256, original_filename, mime, "
+                "         row_number() OVER (PARTITION BY doc_id ORDER BY id) AS n "
+                "  FROM document_versions WHERE doc_id = :doc_id"
+                ") v ON v.doc_id = d.id "
+                f"WHERE d.id = :doc_id AND v.n = :n AND ({where})"
+            ),
+            {"doc_id": doc_id, "n": version_n, **params},
+        )
+    ).first()
+    if row is None:
+        raise _not_found()
+    return _download_response(
+        sha_hex=row.sha, original_filename=row.original_filename, mime=row.mime
     )
