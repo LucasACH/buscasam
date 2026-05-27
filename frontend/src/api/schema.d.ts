@@ -276,6 +276,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/documents/{doc_id}/coauthors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Coauthor */
+        post: operations["post_coauthor_api_documents__doc_id__coauthors_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{doc_id}/coauthors/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Coauthor */
+        delete: operations["delete_coauthor_api_documents__doc_id__coauthors__user_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/documents/{doc_id}": {
         parameters: {
             query?: never;
@@ -437,13 +471,13 @@ export interface paths {
             cookie?: never;
         };
         /** Download Version */
-        get: operations["download_version_api_docs__doc_id__versions__n__download_get"];
+        get: operations["download_version_api_docs__doc_id__versions__n__download_head"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         /** Download Version */
-        head: operations["download_version_api_docs__doc_id__versions__n__download_get"];
+        head: operations["download_version_api_docs__doc_id__versions__n__download_head"];
         patch?: never;
         trace?: never;
     };
@@ -485,6 +519,17 @@ export interface components {
         Body_upload_main_file_api_documents__doc_id__upload_post: {
             /** File */
             file: string;
+        };
+        /** CoauthorRowDTO */
+        CoauthorRowDTO: {
+            /** User Id */
+            user_id: number | null;
+            /** Display Name */
+            display_name: string;
+            /** Email Local */
+            email_local: string | null;
+            /** Status */
+            status: string;
         };
         /** CreateDraftRequest */
         CreateDraftRequest: {
@@ -581,11 +626,18 @@ export interface components {
             is_owner: boolean;
             /** Attachments */
             attachments: components["schemas"]["AttachmentDTO"][];
+            /** Coauthors */
+            coauthors: components["schemas"]["CoauthorRowDTO"][];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** InviteCoauthorRequest */
+        InviteCoauthorRequest: {
+            /** User Id */
+            user_id: number;
         };
         /** MainFileDTO */
         MainFileDTO: {
@@ -1215,6 +1267,69 @@ export interface operations {
             };
         };
     };
+    post_coauthor_api_documents__doc_id__coauthors_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InviteCoauthorRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_coauthor_api_documents__doc_id__coauthors__user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     patch_draft_api_documents__doc_id__patch: {
         parameters: {
             query?: never;
@@ -1487,7 +1602,7 @@ export interface operations {
             };
         };
     };
-    download_version_api_docs__doc_id__versions__n__download_get: {
+    download_version_api_docs__doc_id__versions__n__download_head: {
         parameters: {
             query?: never;
             header?: never;
@@ -1519,7 +1634,7 @@ export interface operations {
             };
         };
     };
-    download_version_api_docs__doc_id__versions__n__download_get: {
+    download_version_api_docs__doc_id__versions__n__download_head: {
         parameters: {
             query?: never;
             header?: never;

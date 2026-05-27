@@ -35,6 +35,7 @@ function returns(state: Partial<DraftStateDTO>) {
     publish_gate_reason: null,
     is_owner: true,
     attachments: [],
+    coauthors: [],
     ...state,
   };
   apiGet.mockResolvedValue({ data: body, error: undefined });

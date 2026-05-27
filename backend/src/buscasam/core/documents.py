@@ -67,12 +67,36 @@ class InvitationNotPending(Exception):
     soft-deleted / moderation-hidden / unpublished (PRD stories 20-22, 32-33)."""
 
 
+class NotOwner(Exception):
+    """Caller is not the document's owner (→ 403). Owner-only is stricter than
+    manageable_where, which also admits accepted coautores (ADR-0010 §8)."""
+
+
+class CoauthorAlreadyListed(Exception):
+    """A document_authors row already exists for (doc_id, user_id), regardless
+    of status (owner | pending | accepted | declined | external) (→ 409).
+    Blocks re-invite of a declined user per ADR-0010 §5 / PRD story 10."""
+
+
+class CoauthorNotPending(Exception):
+    """Revoke is pending-only at MVP (ADR-0010 §5). Maps to 404 uniform with
+    not-found — no leak about whether a non-pending row exists."""
+
+
 @dataclass(frozen=True)
 class AttachmentInfo:
     id: int
     original_filename: str
     size_bytes: int
     mime: str | None
+
+
+@dataclass(frozen=True)
+class CoauthorRow:
+    user_id: int | None
+    display_name: str
+    email_local: str | None
+    status: str
 
 
 @dataclass(frozen=True)
@@ -88,6 +112,7 @@ class DraftState:
     publish_gate_reason: str | None
     is_owner: bool
     attachments: list[AttachmentInfo]
+    coauthors: list[CoauthorRow]
 
 
 def _publish_gate_reason(index_status: str, fingerprint_matches: bool) -> str | None:
@@ -692,6 +717,114 @@ async def publish(session: AsyncSession, user_ctx: UserCtx, doc_id: int) -> None
     await jobs.enqueue_fan_out_coauthor_invites(session, doc_id)
 
 
+async def _assert_owner(
+    session: AsyncSession, user_ctx: UserCtx, doc_id: int
+) -> None:
+    """Owner-only predicate stricter than manageable_where: accepted coautores
+    cannot manage coauthors (ADR-0010 §8, module map §core/documents)."""
+    is_owner = (
+        await session.execute(
+            text(
+                "SELECT 1 FROM document_authors "
+                "WHERE doc_id = :doc_id AND user_id = :uid AND status = 'owner'"
+            ),
+            {"doc_id": doc_id, "uid": user_ctx.user_id},
+        )
+    ).scalar_one_or_none()
+    if is_owner is None:
+        raise NotOwner
+
+
+async def invite_coauthor(
+    session: AsyncSession,
+    user_ctx: UserCtx,
+    doc_id: int,
+    invitee_user_id: int,
+) -> None:
+    """Owner-only invite. Inserts a pending document_authors row; raises
+    CoauthorAlreadyListed if any row exists for (doc_id, user_id) regardless
+    of status (PRD story 10). On a published doc, enqueues the fan-out task
+    in the same transaction (ADR-0008 §1) so the invitee notification appears
+    immediately. On a draft, the row sits silent until publish picks it up."""
+    await _assert_owner(session, user_ctx, doc_id)
+
+    existing = (
+        await session.execute(
+            text(
+                "SELECT 1 FROM document_authors "
+                "WHERE doc_id = :doc_id AND user_id = :uid"
+            ),
+            {"doc_id": doc_id, "uid": invitee_user_id},
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise CoauthorAlreadyListed
+
+    name = (
+        await session.execute(
+            text("SELECT name FROM users WHERE id = :uid"),
+            {"uid": invitee_user_id},
+        )
+    ).scalar_one_or_none()
+    if name is None:
+        raise InvalidCoauthorId({invitee_user_id})
+
+    await session.execute(
+        text(
+            "INSERT INTO document_authors (doc_id, user_id, display_name, status) "
+            "VALUES (:doc_id, :uid, :name, 'pending')"
+        ),
+        {"doc_id": doc_id, "uid": invitee_user_id, "name": name},
+    )
+
+    publication_status = (
+        await session.execute(
+            text("SELECT publication_status FROM documents WHERE id = :doc_id"),
+            {"doc_id": doc_id},
+        )
+    ).scalar_one()
+    if publication_status == "published":
+        from buscasam.core import jobs
+
+        await jobs.enqueue_fan_out_coauthor_invites(session, doc_id)
+
+
+async def revoke_invitation(
+    session: AsyncSession,
+    user_ctx: UserCtx,
+    doc_id: int,
+    invitee_user_id: int,
+) -> None:
+    """Owner-only, pending-only at MVP (ADR-0010 §5). Atomic DELETE of the
+    document_authors row + DELETE of the matching notifications row so a later
+    re-invite under the same dedup key can INSERT cleanly without an UPSERT
+    (PRD story 29, module map §core/documents)."""
+    await _assert_owner(session, user_ctx, doc_id)
+
+    result = await session.execute(
+        text(
+            "DELETE FROM document_authors "
+            "WHERE doc_id = :doc_id AND user_id = :uid AND status = 'pending'"
+        ),
+        {"doc_id": doc_id, "uid": invitee_user_id},
+    )
+    if result.rowcount == 0:
+        raise CoauthorNotPending
+
+    from buscasam.core.jobs import coauthor_invite_event_key
+
+    await session.execute(
+        text(
+            "DELETE FROM notifications "
+            "WHERE user_id = :uid AND event_key = :ek"
+        ),
+        {
+            "uid": invitee_user_id,
+            "ek": coauthor_invite_event_key(doc_id, invitee_user_id),
+        },
+    )
+
+
 async def accept_invitation(
     session: AsyncSession, user_ctx: UserCtx, doc_id: int
 ) -> None:
@@ -856,6 +989,22 @@ async def get_draft_state(
             {"doc_id": doc_id},
         )
     ).mappings().all()
+    # Owner row first, then insertion order. The CASE keeps the owner pinned
+    # regardless of the row id; document_authors.id is monotonic per insert so
+    # ordering by id is the insertion order the module map prescribes.
+    coauthor_rows = (
+        await session.execute(
+            text(
+                "SELECT da.user_id, da.display_name, da.status, "
+                "       split_part(u.email, '@', 1) AS email_local "
+                "FROM document_authors da "
+                "LEFT JOIN users u ON u.id = da.user_id "
+                "WHERE da.doc_id = :doc_id "
+                "ORDER BY (da.status = 'owner') DESC, da.id"
+            ),
+            {"doc_id": doc_id},
+        )
+    ).mappings().all()
     return DraftState(
         doc_id=doc_id,
         version_id=row["version_id"],
@@ -877,6 +1026,15 @@ async def get_draft_state(
                 mime=a["mime"],
             )
             for a in att_rows
+        ],
+        coauthors=[
+            CoauthorRow(
+                user_id=c["user_id"],
+                display_name=c["display_name"],
+                email_local=c["email_local"],
+                status=c["status"],
+            )
+            for c in coauthor_rows
         ],
     )
 
