@@ -1,23 +1,45 @@
 """HTTP surface for document management endpoints."""
 from __future__ import annotations
 
-from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from datetime import date
+from typing import Literal
+
+from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from buscasam.api.deps import get_session
 from buscasam.core import auth, blob_store
 from buscasam.core.documents import (
+    UNSET,
     DocumentNotFound,
     InvalidCoauthorId,
     assert_manageable,
     attach_main_version,
     create_draft,
+    get_draft_state,
     list_own_documents,
+    update_draft_metadata,
 )
 from buscasam.core.extract import PDFEncryptionError, probe_encrypted
 
 router = APIRouter(prefix="/api")
+
+# Mirror the DB constraints (documents_visibility_check, documents_tipo_check,
+# area_path ltree) so invalid input is a 422 at the boundary, not a 500 from
+# the UPDATE. Same closed sets / pattern as api/search.py.
+Visibility = Literal["publico", "interno", "privado"]
+DocumentType = Literal[
+    "tesis",
+    "paper",
+    "trabajo_practico",
+    "proyecto_investigacion",
+    "monografia",
+    "ponencia_poster",
+    "apunte_resumen",
+    "informe_catedra",
+]
+_AREA_PATH_PATTERN = r"^[a-z0-9_]+(\.[a-z0-9_]+)*$"
 
 
 class OwnDocDTO(BaseModel):
@@ -29,9 +51,9 @@ class OwnDocDTO(BaseModel):
 
 class CreateDraftRequest(BaseModel):
     title: str
-    area_path: str
-    document_type: str
-    visibility: str
+    area_path: str = Field(pattern=_AREA_PATH_PATTERN)
+    document_type: DocumentType
+    visibility: Visibility
     external_authors: list[str] = []
     coauthor_user_ids: list[int] = []
 
@@ -113,6 +135,74 @@ async def upload_main_file(
         original_filename=file.filename or "upload",
     )
     return {}
+
+
+class DraftStateDTO(BaseModel):
+    title: str
+    index_status: str
+    staged_abstract: str | None
+    staged_keywords: list[str]
+    staged_fecha: date | None
+    index_error: str | None
+    publish_gate_reason: str | None
+
+
+class UpdateDraftRequest(BaseModel):
+    title: str | None = None
+    abstract: str | None = None
+    keywords: list[str] | None = None
+    fecha: date | None = None
+    visibility: Visibility | None = None
+    area_path: str | None = Field(default=None, pattern=_AREA_PATH_PATTERN)
+    document_type: DocumentType | None = None
+
+
+@router.get("/documents/{doc_id}/draft", response_model=DraftStateDTO)
+async def get_draft(
+    doc_id: int,
+    user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
+    session: AsyncSession = Depends(get_session),
+) -> DraftStateDTO:
+    try:
+        state = await get_draft_state(session, user_ctx, doc_id)
+    except DocumentNotFound:
+        raise HTTPException(status_code=404)
+    return DraftStateDTO(
+        title=state.title,
+        index_status=state.index_status,
+        staged_abstract=state.staged_abstract,
+        staged_keywords=state.staged_keywords,
+        staged_fecha=state.staged_fecha,
+        index_error=state.index_error,
+        publish_gate_reason=state.publish_gate_reason,
+    )
+
+
+@router.patch("/documents/{doc_id}", status_code=204)
+async def patch_draft(
+    doc_id: int,
+    body: UpdateDraftRequest,
+    user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    try:
+        await update_draft_metadata(
+            session,
+            user_ctx,
+            doc_id,
+            title=body.title,
+            abstract=body.abstract,
+            keywords=body.keywords,
+            # Distinguish an absent fecha from an explicit null: only null clears
+            # staged_fecha; omitting it leaves the stored value untouched.
+            fecha=body.fecha if "fecha" in body.model_fields_set else UNSET,
+            visibility=body.visibility,
+            area_path=body.area_path,
+            document_type=body.document_type,
+        )
+    except DocumentNotFound:
+        raise HTTPException(status_code=404)
+    return Response(status_code=204)
 
 
 @router.get("/me/documents", response_model=list[OwnDocDTO])
