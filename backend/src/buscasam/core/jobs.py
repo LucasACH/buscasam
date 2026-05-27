@@ -13,7 +13,7 @@ import zipfile
 
 import httpx
 from pdfminer.pdfparser import PDFSyntaxError
-from procrastinate import App, PsycopgConnector, RetryStrategy
+from procrastinate import App, JobContext, PsycopgConnector, RetryStrategy
 from procrastinate.exceptions import AlreadyEnqueued
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -187,30 +187,80 @@ def _get_worker_resources():
     return _worker_sessionmaker, _worker_tei
 
 
-async def _run_with_session(runner, version_id: int) -> None:
+async def _terminal_index_failure(
+    session: AsyncSession, version_id: int, exc: BaseException
+) -> None:
+    await documents.mark_failed(
+        session, version_id, error=f"exhausted retries: {type(exc).__name__}"
+    )
+
+
+async def _terminal_headline_failure(
+    session: AsyncSession, version_id: int, exc: BaseException
+) -> None:
+    await documents.mark_headline_refresh_failed(
+        session, version_id, reason=f"exhausted retries: {type(exc).__name__}"
+    )
+
+
+async def _run_attempt(context, runner, version_id, on_terminal) -> None:
+    """Single chokepoint for indexing terminal outcomes (ADR-0008 §5).
+
+    Runs `runner` in a worker session. On uncaught failure: rolls back, asks
+    the task's retry strategy whether another attempt remains, and if not,
+    opens a fresh session to call `on_terminal` — so every fatal path
+    (recognized parse/OCR errors inside the runner *and* exhausted transient
+    failures here) converges on `documents.mark_failed` /
+    `documents.mark_headline_refresh_failed`.
+    """
     sm, tei = _get_worker_resources()
+    exc: BaseException | None = None
     async with sm() as session:
         try:
             await runner(session, tei, version_id)
             await session.commit()
-        except Exception:
+            return
+        except Exception as e:
             await session.rollback()
-            raise
+            exc = e
+
+    will_retry = (
+        context.task.get_retry_exception(exception=exc, job=context.job) is not None
+    )
+    if not will_retry:
+        async with sm() as terminal_session:
+            try:
+                await on_terminal(terminal_session, version_id, exc)
+                await terminal_session.commit()
+            except Exception:
+                await terminal_session.rollback()
+                logger.exception(
+                    "terminal_handler_failed version_id=%s task=%s",
+                    version_id,
+                    context.job.task_name,
+                )
+    raise exc
 
 
-@app.task(queue="default", retry=_DEFAULT_RETRY)
-async def index_document(version_id: int) -> None:
-    await _run_with_session(_run_index_document, version_id)
+@app.task(queue="default", retry=_DEFAULT_RETRY, pass_context=True)
+async def index_document(context: JobContext, version_id: int) -> None:
+    await _run_attempt(
+        context, _run_index_document, version_id, _terminal_index_failure
+    )
 
 
-@app.task(queue="ocr", retry=_DEFAULT_RETRY)
-async def ocr_index_document(version_id: int) -> None:
-    await _run_with_session(_run_ocr_index_document, version_id)
+@app.task(queue="ocr", retry=_DEFAULT_RETRY, pass_context=True)
+async def ocr_index_document(context: JobContext, version_id: int) -> None:
+    await _run_attempt(
+        context, _run_ocr_index_document, version_id, _terminal_index_failure
+    )
 
 
-@app.task(queue="default", retry=_HEADLINE_RETRY)
-async def refresh_headline(version_id: int) -> None:
-    await _run_with_session(_run_refresh_headline, version_id)
+@app.task(queue="default", retry=_HEADLINE_RETRY, pass_context=True)
+async def refresh_headline(context: JobContext, version_id: int) -> None:
+    await _run_attempt(
+        context, _run_refresh_headline, version_id, _terminal_headline_failure
+    )
 
 
 # --- Typed enqueue helpers (ADR-0008 §3, transactional defer §1). ---
