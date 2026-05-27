@@ -203,13 +203,21 @@ async def test_get_doc_detail_non_existent_returns_404(client, session):
     assert r.status_code == 404
 
 
-async def test_get_doc_detail_pending_coauthor_on_privado_returns_404(client, session):
-    """Story 10: pending coautores must not see the privado doc."""
-    doc_id = await make_document(session, visibility="privado")
+async def test_get_doc_detail_pending_coauthor_on_privado_returns_minimal(
+    client, session
+):
+    """Slice 2 / ADR-0010 §6: a pending invitee on a privado doc gets the minimal
+    disclosure block — titulo + inviter only, no abstract/archivo/adjuntos."""
+    doc_id = await make_document(
+        session, visibility="privado", titulo="Tesis secreta", abstract="oculto"
+    )
     await _seed_current_version(session, doc_id)
-    owner_id = await make_user(session)
+    att_id = await _seed_attachment(session, doc_id)  # must NOT leak
+    owner_id = await make_user(session, name="Ada Lovelace")
     pending_id = await make_user(session)
-    await make_document_author(session, doc_id, user_id=owner_id, status="owner")
+    await make_document_author(
+        session, doc_id, user_id=owner_id, status="owner", display_name="Ada Lovelace"
+    )
     await make_document_author(
         session, doc_id, user_id=pending_id, status="pending", display_name="P"
     )
@@ -217,7 +225,154 @@ async def test_get_doc_detail_pending_coauthor_on_privado_returns_404(client, se
     await session.commit()
 
     r = await client.get(f"/api/docs/{doc_id}", cookies={"sid": sid})
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body == {
+        "view": "minimal",
+        "doc_id": doc_id,
+        "titulo": "Tesis secreta",
+        "inviter_display_name": "Ada Lovelace",
+    }
+
+
+@pytest.mark.parametrize(
+    "visibility", ["interno", "publico"], ids=["interno", "publico"]
+)
+async def test_get_doc_detail_pending_invitee_on_readable_doc_returns_banner(
+    client, session, visibility
+):
+    """Slice 2 / ADR-0010 §6: a pending invitee on a doc they can already read
+    (interno as UNSAM, or publico) gets the full DetailDTO plus the invitation
+    banner field — view 'detail_with_invitation'."""
+    doc_id = await make_document(
+        session, visibility=visibility, titulo="Abierto", abstract="visible"
+    )
+    await _seed_current_version(session, doc_id)
+    owner_id = await make_user(session, name="Ada Lovelace")
+    pending_id = await make_user(session)
+    await make_document_author(
+        session, doc_id, user_id=owner_id, status="owner", display_name="Ada Lovelace"
+    )
+    await make_document_author(
+        session, doc_id, user_id=pending_id, status="pending", display_name="P"
+    )
+    sid = await _sid_cookie(session, pending_id)
+    await session.commit()
+
+    r = await client.get(f"/api/docs/{doc_id}", cookies={"sid": sid})
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["view"] == "detail_with_invitation"
+    assert body["doc_id"] == doc_id
+    assert body["abstract"] == "visible"  # full detail present
+    assert body["invitation"] == {"inviter_display_name": "Ada Lovelace"}
+
+
+async def test_get_doc_detail_accepted_coautor_returns_plain_detail(client, session):
+    """An accepted coautor reads via readable_where — view 'detail', no banner."""
+    doc_id = await make_document(session, visibility="privado")
+    await _seed_current_version(session, doc_id)
+    owner_id = await make_user(session)
+    accepted_id = await make_user(session)
+    await make_document_author(session, doc_id, user_id=owner_id, status="owner")
+    await make_document_author(
+        session, doc_id, user_id=accepted_id, status="accepted"
+    )
+    sid = await _sid_cookie(session, accepted_id)
+    await session.commit()
+
+    r = await client.get(f"/api/docs/{doc_id}", cookies={"sid": sid})
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["view"] == "detail"
+    assert "invitation" not in body
+
+
+async def test_get_doc_detail_declined_invitee_returns_404(client, session):
+    """Declined is terminal — no leak of 'previously declined' (uniform 404)."""
+    doc_id = await make_document(session, visibility="privado")
+    await _seed_current_version(session, doc_id)
+    owner_id = await make_user(session)
+    declined_id = await make_user(session)
+    await make_document_author(session, doc_id, user_id=owner_id, status="owner")
+    await make_document_author(
+        session, doc_id, user_id=declined_id, status="declined"
+    )
+    sid = await _sid_cookie(session, declined_id)
+    await session.commit()
+
+    r = await client.get(f"/api/docs/{doc_id}", cookies={"sid": sid})
     assert r.status_code == 404
+
+
+async def test_get_doc_detail_pending_on_different_doc_returns_404(client, session):
+    """A pending row on doc A grants nothing on doc B (recipient-scoped to the
+    queried document)."""
+    doc_a = await make_document(session, visibility="privado")
+    doc_b = await make_document(session, visibility="privado")
+    await _seed_current_version(session, doc_b)
+    owner_id = await make_user(session)
+    invitee_id = await make_user(session)
+    await make_document_author(session, doc_a, user_id=invitee_id, status="pending")
+    await make_document_author(session, doc_b, user_id=owner_id, status="owner")
+    sid = await _sid_cookie(session, invitee_id)
+    await session.commit()
+
+    r = await client.get(f"/api/docs/{doc_b}", cookies={"sid": sid})
+    assert r.status_code == 404
+
+
+@pytest.mark.parametrize(
+    "factory_kwargs",
+    [{"soft_deleted": True}, {"moderation_hidden": True}],
+    ids=["soft_deleted", "moderation_hidden"],
+)
+async def test_get_doc_detail_pending_on_unavailable_doc_returns_404(
+    client, session, factory_kwargs
+):
+    """Disclosure filters soft-delete and moderation-hidden (PRD stories 32-33)."""
+    doc_id = await make_document(session, visibility="privado", **factory_kwargs)
+    await _seed_current_version(session, doc_id)
+    owner_id = await make_user(session)
+    pending_id = await make_user(session)
+    await make_document_author(session, doc_id, user_id=owner_id, status="owner")
+    await make_document_author(
+        session, doc_id, user_id=pending_id, status="pending"
+    )
+    sid = await _sid_cookie(session, pending_id)
+    await session.commit()
+
+    r = await client.get(f"/api/docs/{doc_id}", cookies={"sid": sid})
+    assert r.status_code == 404
+
+
+async def test_get_doc_detail_guest_skips_disclosure_select(
+    client, session, monkeypatch
+):
+    """Invitados cannot be invitees — the router must not issue the disclosure
+    SELECT on the anonymous-read hot path (module map §api/docs)."""
+    from buscasam.api import docs as docs_module
+
+    called = False
+
+    async def _spy(*args, **kwargs):
+        nonlocal called
+        called = True
+        return None
+
+    monkeypatch.setattr(docs_module, "get_pending_invitation", _spy)
+    doc_id = await make_document(session, visibility="publico")
+    await _seed_current_version(session, doc_id)
+    await session.commit()
+
+    r = await client.get(f"/api/docs/{doc_id}")  # no cookie → invitado
+
+    assert r.status_code == 200
+    assert r.json()["view"] == "detail"
+    assert called is False
 
 
 @pytest.mark.parametrize(
@@ -401,8 +556,10 @@ async def test_download_denials_return_404_with_no_x_accel_header(
         assert "x-accel-redirect" not in {k.lower() for k in r.headers}
 
 
-async def test_download_denials_pending_coauthor_on_privado(client, session):
-    """Story 10: pending coautor on privado gets 404 from all three endpoints."""
+async def test_disclosure_bounded_to_detail_other_endpoints_stay_404(client, session):
+    """Slice 2: the disclosure carve-out is bounded to GET /api/docs/{id}. A
+    pending invitee still gets 404 from related, downloads, attachments, and
+    historical-version downloads (PRD story 25 / ADR-0010 §6)."""
     doc_id = await make_document(session, visibility="privado")
     await _seed_current_version(session, doc_id)
     att_id = await _seed_attachment(session, doc_id)
@@ -416,12 +573,15 @@ async def test_download_denials_pending_coauthor_on_privado(client, session):
     await session.commit()
 
     cookies = {"sid": sid}
-    detail = await client.get(f"/api/docs/{doc_id}", cookies=cookies)
+    related = await client.get(f"/api/docs/{doc_id}/related", cookies=cookies)
     main = await client.get(f"/api/docs/{doc_id}/download", cookies=cookies)
     att = await client.get(
         f"/api/docs/{doc_id}/attachments/{att_id}", cookies=cookies
     )
-    for r in (detail, main, att):
+    version = await client.get(
+        f"/api/docs/{doc_id}/versions/1/download", cookies=cookies
+    )
+    for r in (related, main, att, version):
         assert r.status_code == 404
         assert "x-accel-redirect" not in {k.lower() for k in r.headers}
 
