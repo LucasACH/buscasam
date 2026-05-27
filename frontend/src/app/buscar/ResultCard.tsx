@@ -23,6 +23,21 @@ function truncate(text: string | null, max: number): string {
   return text.length <= max ? text : text.slice(0, max - 1).trimEnd() + "…";
 }
 
+function renderHighlightedSnippet(snippet: string) {
+  let highlighted = false;
+  return snippet.split(/(<mark>|<\/mark>)/).map((part, index) => {
+    if (part === "<mark>") {
+      highlighted = true;
+      return null;
+    }
+    if (part === "</mark>") {
+      highlighted = false;
+      return null;
+    }
+    return highlighted ? <mark key={index}>{part}</mark> : part;
+  });
+}
+
 export function ResultCard({ result }: { result: Result }) {
   const year = result.fecha.slice(0, 4);
   const tipo = TIPO_LABEL[result.tipo] ?? result.tipo;
@@ -47,10 +62,9 @@ export function ResultCard({ result }: { result: Result }) {
         </p>
       )}
       {result.snippet_is_html ? (
-        <p
-          className="mt-3 text-sm leading-relaxed [&_mark]:bg-yellow-200 [&_mark]:px-0.5 [&_mark]:font-medium"
-          dangerouslySetInnerHTML={{ __html: result.snippet }}
-        />
+        <p className="mt-3 text-sm leading-relaxed [&_mark]:bg-yellow-200 [&_mark]:px-0.5 [&_mark]:font-medium">
+          {renderHighlightedSnippet(result.snippet)}
+        </p>
       ) : (
         <p className="mt-3 text-sm leading-relaxed">{result.snippet}</p>
       )}
