@@ -210,6 +210,8 @@ async def attach_main_version(
     *,
     original_filename: str,
 ) -> int:
+    await assert_manageable(session, user_ctx, doc_id)
+
     version_no = (
         await session.execute(
             text(

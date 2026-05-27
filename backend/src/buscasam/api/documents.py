@@ -111,6 +111,8 @@ async def upload_main_file(
     user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
+    # Pre-check gates byte writes: reject unauthorized requests before streaming
+    # to disk. attach_main_version re-checks as the authoritative gate.
     try:
         await assert_manageable(session, user_ctx, doc_id)
     except DocumentNotFound:
@@ -135,13 +137,16 @@ async def upload_main_file(
         await blob_store.discard_if_unreferenced(session, result.sha256)
         raise HTTPException(status_code=415, detail="Formato no permitido")
 
-    await attach_main_version(
-        session,
-        user_ctx,
-        doc_id,
-        result,
-        original_filename=file.filename or "upload",
-    )
+    try:
+        await attach_main_version(
+            session,
+            user_ctx,
+            doc_id,
+            result,
+            original_filename=file.filename or "upload",
+        )
+    except DocumentNotFound:
+        raise HTTPException(status_code=404)
     return {}
 
 
