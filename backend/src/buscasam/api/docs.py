@@ -1,9 +1,10 @@
-"""Reader-facing document endpoints (issue #43, module map §api/docs).
+"""Reader-facing document endpoints (issues #43, #44; module map §api/docs).
 
-Three endpoints share one UserCtx dep (cookie → invitado on absent), and one
-uniform 404 envelope across every denial path. Slice 1 is reader-only: no
-manager affordances, no related rail, no historical-version download — those
-land in later PRD slices.
+Four endpoints share one UserCtx dep (cookie → invitado on absent), and one
+uniform 404 envelope across every denial path. Slice 2 adds the manager
+affordances on top of the slice-1 reader surface: the `versions`/`manageable`
+detail fields and the historical-version download (`download_version`), both
+gated on `manageable_where`. The related rail lands in a later PRD slice.
 """
 from __future__ import annotations
 
