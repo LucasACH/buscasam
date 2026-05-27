@@ -82,9 +82,8 @@ function jsonResponse(body: unknown, status = 200) {
 function mockFetchByUrl(routes: Record<string, () => Response>) {
   vi.spyOn(global, "fetch").mockImplementation(async (input) => {
     const url = typeof input === "string" ? input : (input as Request).url;
-    for (const prefix of Object.keys(routes)) {
-      if (url.includes(prefix)) return routes[prefix]();
-    }
+    const path = new URL(url, "http://localhost").pathname;
+    if (routes[path]) return routes[path]();
     return new Response("", { status: 404 });
   });
 }
@@ -202,6 +201,79 @@ describe("/docs/[id] page", () => {
     await screen.findByText("Búsqueda híbrida en repositorios académicos");
     expect(screen.queryByRole("link", { name: /editar/i })).toBeNull();
     expect(screen.queryByText("Versiones anteriores")).toBeNull();
+  });
+
+  it("renders the trabajos relacionados rail with up to 5 cards", async () => {
+    const related = [
+      {
+        doc_id: 100,
+        titulo: "Vecino A",
+        autores: [{ display_name: "Ada", user_id: 1 }],
+        area_path: "escuela_ciencia",
+        tipo: "paper",
+        fecha: "2024-01-15",
+        similarity: 0.93,
+      },
+      {
+        doc_id: 101,
+        titulo: "Vecino B",
+        autores: [{ display_name: "Bob", user_id: 2 }],
+        area_path: "escuela_ciencia",
+        tipo: "tesis",
+        fecha: "2023-09-01",
+        similarity: 0.82,
+      },
+    ];
+    mockFetchByUrl({
+      "/api/docs/42/related": () => jsonResponse(related),
+      "/api/docs/42": () => jsonResponse(PUBLICO_DETAIL),
+      "/api/areas": () => jsonResponse(AREAS),
+    });
+
+    renderPage();
+
+    await screen.findByText("Vecino A");
+    expect(screen.getByText("Vecino B")).toBeInTheDocument();
+    // Title links go to the detail page; rail cards are reachable by click.
+    expect(screen.getByRole("link", { name: "Vecino A" })).toHaveAttribute(
+      "href",
+      "/docs/100",
+    );
+    // No snippet text leaks into the rail cards.
+    expect(screen.queryByText(/<mark>/)).toBeNull();
+  });
+
+  it("hides the related rail entirely when the list is empty", async () => {
+    mockFetchByUrl({
+      "/api/docs/42/related": () => jsonResponse([]),
+      "/api/docs/42": () => jsonResponse(PUBLICO_DETAIL),
+      "/api/areas": () => jsonResponse(AREAS),
+    });
+
+    renderPage();
+
+    await screen.findByText("Búsqueda híbrida en repositorios académicos");
+    // The rail's header must not render when there are no neighbours.
+    expect(screen.queryByText(/trabajos relacionados/i)).toBeNull();
+  });
+
+  it("does not fetch related when the detail itself 404s", async () => {
+    const fetchSpy = vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : (input as Request).url;
+      if (url.includes("/api/docs/42/related"))
+        return jsonResponse([{ doc_id: 9, titulo: "Should not appear" }]);
+      if (url.includes("/api/docs/42"))
+        return new Response("", { status: 404 });
+      if (url.includes("/api/areas")) return jsonResponse(AREAS);
+      return new Response("", { status: 404 });
+    });
+
+    renderPage();
+
+    await screen.findByText("No encontramos este documento");
+    expect(screen.queryByText("Should not appear")).toBeNull();
+    const calls = fetchSpy.mock.calls.map((c) => String(c[0]));
+    expect(calls.some((u) => u.includes("/api/docs/42/related"))).toBe(false);
   });
 
   it("does not render the interno badge for publico but renders it for non-publico", async () => {
