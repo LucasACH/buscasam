@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { setMockRoute } from "./mock-helpers";
+
 const AREAS = [
   { area_path: "escuela_ciencia", display_name: "Escuela de Ciencia y Tecnología" },
   {
@@ -72,13 +74,19 @@ function json(body: unknown, status = 200) {
   };
 }
 
-test.describe("/docs/[id] reader page", () => {
+// The mock-backend is shared across all specs; this file owns DOC_ID 42 and
+// serial mode lets later tests overwrite the registry slot for /api/docs/42.
+test.describe.configure({ mode: "serial" });
+
+test.describe("/docs/[id] reader page (SSR)", () => {
   test.beforeEach(async ({ page }) => {
-    // Invitado: /api/me returns 401.
+    // Always-present SSR route: áreas tree resolves display names. Idempotent.
+    await setMockRoute({ path: "/api/areas", status: 200, body: AREAS });
+
+    // Browser-side AuthNav requests stay mocked at the Playwright layer.
     await page.route("**/api/me", (route) =>
       route.fulfill({ status: 401, body: "" }),
     );
-    await page.route("**/api/areas", (route) => route.fulfill(json(AREAS)));
     await page.route("**/api/notifications**", (route) =>
       route.fulfill(json({ items: [] })),
     );
@@ -87,11 +95,11 @@ test.describe("/docs/[id] reader page", () => {
   test("invitado on publico: metadata + downloads + tab title", async ({
     page,
   }) => {
-    await page.route(`**/api/docs/${DOC_ID}`, (route) =>
-      route.fulfill(json(PUBLICO_DETAIL)),
-    );
-    // Both download endpoints reply with a small attachment-style body so the
-    // browser triggers a download event.
+    await setMockRoute({
+      path: `/api/docs/${DOC_ID}`,
+      status: 200,
+      body: PUBLICO_DETAIL,
+    });
     await page.route(`**/api/docs/${DOC_ID}/download`, (route) =>
       route.fulfill({
         status: 200,
@@ -139,29 +147,30 @@ test.describe("/docs/[id] reader page", () => {
     );
   });
 
-  test("invitado on interno: same empty state as non-existent id", async ({
+  test("invitado on interno: same empty state as non-existent id, 404 status", async ({
     page,
   }) => {
-    await page.route(`**/api/docs/${DOC_ID}`, (route) =>
-      route.fulfill({ status: 404, body: "" }),
-    );
+    // Mock-backend returns 404, fetchDetail returns null, page calls notFound()
+    // → not-found.tsx renders and the response carries HTTP 404.
+    await setMockRoute({ path: `/api/docs/${DOC_ID}`, status: 404 });
 
-    await page.goto(`/docs/${DOC_ID}`);
+    const response = await page.goto(`/docs/${DOC_ID}`);
 
+    expect(response?.status()).toBe(404);
     await expect(page.getByText("No encontramos este documento")).toBeVisible();
-    // No metadata leak: no Descargar links rendered.
     await expect(page.getByRole("link", { name: /descargar/i })).toHaveCount(0);
   });
 
   test("owner: Editar CTA + Versiones panel + per-version download", async ({
     page,
   }) => {
+    await page.unroute("**/api/me");
     await page.route("**/api/me", (route) => route.fulfill(json(USER)));
-    await page.route(`**/api/docs/${DOC_ID}`, (route) =>
-      route.fulfill(json(MANAGEABLE_DETAIL)),
-    );
-    // HEAD preflight succeeds; the GET navigation streams an attachment so the
-    // browser fires a native download instead of navigating away.
+    await setMockRoute({
+      path: `/api/docs/${DOC_ID}`,
+      status: 200,
+      body: MANAGEABLE_DETAIL,
+    });
     await page.route(`**/api/docs/${DOC_ID}/versions/1/download`, (route) => {
       if (route.request().method() === "HEAD") {
         return route.fulfill({ status: 200 });
@@ -198,10 +207,13 @@ test.describe("/docs/[id] reader page", () => {
   test("logged-in non-author: no Editar CTA, no Versiones panel", async ({
     page,
   }) => {
+    await page.unroute("**/api/me");
     await page.route("**/api/me", (route) => route.fulfill(json(USER)));
-    await page.route(`**/api/docs/${DOC_ID}`, (route) =>
-      route.fulfill(json(PUBLICO_DETAIL)),
-    );
+    await setMockRoute({
+      path: `/api/docs/${DOC_ID}`,
+      status: 200,
+      body: PUBLICO_DETAIL,
+    });
 
     await page.goto(`/docs/${DOC_ID}`);
 

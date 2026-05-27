@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import type { AuthorDisplay } from "./useDocDetail";
+import type { AuthorDisplay } from "./types";
 
 export type Related = {
   doc_id: number;

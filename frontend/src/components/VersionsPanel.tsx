@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { useVersionDownload } from "@/app/docs/[id]/useVersionDownload";
-import type { DetailVersion } from "@/app/docs/[id]/useDocDetail";
+import type { DetailVersion } from "@/app/docs/[id]/types";
 import { formatBytes } from "@/lib/utils";
 
 type Props = {

@@ -11,7 +11,7 @@ vi.mock("@/app/docs/[id]/useVersionDownload", () => ({
 }));
 
 import { VersionsPanel } from "./VersionsPanel";
-import type { DetailVersion } from "@/app/docs/[id]/useDocDetail";
+import type { DetailVersion } from "@/app/docs/[id]/types";
 
 const VERSIONS: DetailVersion[] = [
   {
