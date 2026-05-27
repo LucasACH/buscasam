@@ -241,9 +241,9 @@ Returns `null` if `!canManage || versions == null`. Otherwise renders a header "
 ## Touched, not new
 
 - **`components/ResultCard`** — snippet block becomes conditional. The DTO prop widens to a union (or the snippet field becomes optional); when `snippet` is `undefined` the snippet block does not render. Search-mvp.md's depth note already anticipated this reuse: *"reused unchanged when PRD-4 lands related-document cards."* The change is one conditional render; no second visual contract introduced. The related rail mounts `ResultCard` directly with a `RelatedDTO`-shaped row (título, autores, área, tipo, fecha — no snippet).
-- **`core/document_access`** — no new adapter. `readable_where` gains its third caller (`core/related`, in addition to `core/search_query` and `core/documents.get_detail`). `manageable_where` gains its second consumer chain via the historical-version download route in `api/docs`. The seam introduced in document-publication.md remains at three adapters; the depth comes from caller count, not adapter count.
+- **`core/document_access`** — no new adapter. `readable_where` gains its third caller (`core/related`, in addition to `core/search_query` and `core/documents.get_detail`); the download lookups in `core/documents` add three further callers (main, attachment, historical version). `manageable_where` gains its second consumer chain via `get_manageable_version_file`. The seam introduced in document-publication.md remains at three adapters; the depth comes from caller count, not adapter count.
 - **`core/blob_store.internal_path`** — three new callers inside `api/docs` (main download, attachment download, historical-version download). No interface change.
-- **`core/documents`** — gains the read-only `get_detail` surface defined above. No change to the publish/draft mutation surface.
+- **`core/documents`** — gains the read-only `get_detail` surface defined above plus three download lookups (`get_readable_main_file`, `get_readable_attachment`, `get_manageable_version_file`) returning `DownloadableFile | None`. Same `None → 404` envelope as `get_detail`; routers consume them and keep only transport. No change to the publish/draft mutation surface.
 - **AuthNav / sidebar** — unchanged. The detail page is reached via search results, related cards, or shared links; it does not introduce a top-nav entry.
 
 ## Dependency graph
@@ -267,7 +267,10 @@ Returns `null` if `!canManage || versions == null`. Otherwise renders a header "
                                \        |             /
                                        api/docs
                                     /     |      \
-                  core/documents.get_detail    core/related.fetch_related    core/blob_store.internal_path
+                  core/documents.get_detail            core/related.fetch_related    core/blob_store.internal_path
+                  core/documents.get_readable_main_file
+                  core/documents.get_readable_attachment
+                  core/documents.get_manageable_version_file
                                     \     |      /
                             core/document_access.readable_where  (detail, related, main, attachment)
                             core/document_access.manageable_where (historical-version download)

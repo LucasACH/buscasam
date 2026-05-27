@@ -1006,3 +1006,105 @@ async def get_detail(
         versions=versions,
         manageable=manageable,
     )
+
+
+@dataclass(frozen=True)
+class DownloadableFile:
+    sha_hex: str
+    original_filename: str
+    mime: str | None  # NULL only possible for attachments (migration 0010)
+
+
+async def get_readable_main_file(
+    session: AsyncSession,
+    doc_id: int,
+    user_ctx: UserCtx,
+) -> DownloadableFile | None:
+    """Current published main-file lookup gated by `readable_where`.
+
+    Returns `None` for missing doc, denied access, or no `is_current` version.
+    Router maps `None → 404`.
+    """
+    where, params = readable_where("d", user_ctx)
+    row = (
+        await session.execute(
+            text(
+                "SELECT encode(dv.sha256, 'hex') AS sha, "
+                "       dv.original_filename, dv.mime "
+                "FROM documents d "
+                "JOIN document_versions dv "
+                "  ON dv.doc_id = d.id AND dv.is_current "
+                f"WHERE d.id = :doc_id AND ({where})"
+            ),
+            {"doc_id": doc_id, **params},
+        )
+    ).first()
+    if row is None:
+        return None
+    return DownloadableFile(
+        sha_hex=row.sha, original_filename=row.original_filename, mime=row.mime
+    )
+
+
+async def get_readable_attachment(
+    session: AsyncSession,
+    doc_id: int,
+    att_id: int,
+    user_ctx: UserCtx,
+) -> DownloadableFile | None:
+    """Attachment lookup gated by `readable_where`. `mime` may be NULL."""
+    where, params = readable_where("d", user_ctx)
+    row = (
+        await session.execute(
+            text(
+                "SELECT encode(a.sha256, 'hex') AS sha, "
+                "       a.original_filename, a.mime "
+                "FROM documents d "
+                "JOIN document_attachments a "
+                "  ON a.doc_id = d.id "
+                f"WHERE d.id = :doc_id AND a.id = :att_id AND ({where})"
+            ),
+            {"doc_id": doc_id, "att_id": att_id, **params},
+        )
+    ).first()
+    if row is None:
+        return None
+    return DownloadableFile(
+        sha_hex=row.sha, original_filename=row.original_filename, mime=row.mime
+    )
+
+
+async def get_manageable_version_file(
+    session: AsyncSession,
+    doc_id: int,
+    n: int,
+    user_ctx: UserCtx,
+) -> DownloadableFile | None:
+    """Historical-version lookup gated by `manageable_where` (story 26).
+
+    `n` is the 1-based row_number ordering shared with `get_detail`. Any
+    out-of-range value returns `None`. The ordering (`ORDER BY id`) must match
+    `get_detail`'s `version_rows` query.
+    """
+    where, params = manageable_where("d", user_ctx)
+    row = (
+        await session.execute(
+            text(
+                "SELECT encode(v.sha256, 'hex') AS sha, "
+                "       v.original_filename, v.mime "
+                "FROM documents d "
+                "JOIN ("
+                "  SELECT doc_id, sha256, original_filename, mime, "
+                "         row_number() OVER (PARTITION BY doc_id ORDER BY id) AS n "
+                "  FROM document_versions WHERE doc_id = :doc_id"
+                ") v ON v.doc_id = d.id "
+                f"WHERE d.id = :doc_id AND v.n = :n AND ({where})"
+            ),
+            {"doc_id": doc_id, "n": n, **params},
+        )
+    ).first()
+    if row is None:
+        return None
+    return DownloadableFile(
+        sha_hex=row.sha, original_filename=row.original_filename, mime=row.mime
+    )
