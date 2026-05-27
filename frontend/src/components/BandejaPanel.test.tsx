@@ -13,6 +13,9 @@ const { useNotificationsMock, markAllRead, markRead } = vi.hoisted(() => ({
 vi.mock("@/lib/useNotifications", () => ({
   useNotifications: () => useNotificationsMock(),
 }));
+vi.mock("@/lib/useCoauthorInvitation", () => ({
+  useCoauthorInvitation: () => ({ accept: vi.fn(), decline: vi.fn() }),
+}));
 
 function notif(id: number, read: boolean): NotificationDTO {
   return {

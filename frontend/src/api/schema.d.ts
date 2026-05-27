@@ -191,6 +191,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/coauthor_invitations/{doc_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept */
+        post: operations["accept_api_coauthor_invitations__doc_id__accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/coauthor_invitations/{doc_id}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Decline */
+        post: operations["decline_api_coauthor_invitations__doc_id__decline_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/documents": {
         parameters: {
             query?: never;
@@ -336,6 +370,23 @@ export interface paths {
         };
         /** Get Doc Detail */
         get: operations["get_doc_detail_api_docs__doc_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/docs/{doc_id}/related": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Doc Related */
+        get: operations["get_doc_related_api_docs__doc_id__related_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -610,6 +661,21 @@ export interface components {
             visibility: string;
             /** Published At */
             published_at: string | null;
+        };
+        /** RelatedDTO */
+        RelatedDTO: {
+            /** Doc Id */
+            doc_id: number;
+            /** Titulo */
+            titulo: string;
+            /** Autores */
+            autores: components["schemas"]["AuthorDisplayDTO"][];
+            /** Area Path */
+            area_path: string;
+            /** Tipo */
+            tipo: string;
+            /** Fecha */
+            fecha: string | null;
         };
         /** ResultDTO */
         ResultDTO: {
@@ -989,6 +1055,64 @@ export interface operations {
             };
         };
     };
+    accept_api_coauthor_invitations__doc_id__accept_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decline_api_coauthor_invitations__doc_id__decline_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_draft_endpoint_api_documents_post: {
         parameters: {
             query?: never;
@@ -1255,6 +1379,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DetailDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_doc_related_api_docs__doc_id__related_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelatedDTO"][];
                 };
             };
             /** @description Validation Error */

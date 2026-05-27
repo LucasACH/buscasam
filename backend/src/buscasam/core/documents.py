@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 from sqlalchemy import text
@@ -59,6 +59,12 @@ class PublishConflict(Exception):
 
 class AttachmentCapExceeded(Exception):
     """The document already holds the maximum of 5 attachments (→ 409)."""
+
+
+class InvitationNotPending(Exception):
+    """No `pending` row for `(doc_id, user_id)` on a readable document (→ 404):
+    already-transitioned, revoked, never-invited, or the document
+    soft-deleted / moderation-hidden / unpublished (PRD stories 20-22, 32-33)."""
 
 
 @dataclass(frozen=True)
@@ -677,10 +683,68 @@ async def publish(session: AsyncSession, user_ctx: UserCtx, doc_id: int) -> None
         },
     )
 
-    # No-op stub at this PRD's window; PRD #5 fills the fan-out (module map).
+    # Fan out in-app invites for any pending coautores, transactional with the
+    # publish flip (ADR-0008 §1, module map §core/jobs).
     from buscasam.core import jobs
 
     await jobs.enqueue_fan_out_coauthor_invites(session, doc_id)
+
+
+async def accept_invitation(
+    session: AsyncSession, user_ctx: UserCtx, doc_id: int
+) -> None:
+    """Invitee flips their own pending row to accepted and marks the matching
+    invite notification read, atomically (module map §core/documents). Raises
+    InvitationNotPending for any miss — already-transitioned, revoked,
+    never-invited, or the document soft-deleted / moderation-hidden /
+    unpublished — which the router maps to a uniform 404 (PRD stories 20-22,
+    32-33)."""
+    await _transition_invitation(session, user_ctx, doc_id, "accepted")
+
+
+async def decline_invitation(
+    session: AsyncSession, user_ctx: UserCtx, doc_id: int
+) -> None:
+    """Sticky terminal decline; same atomicity and miss semantics as
+    accept_invitation (ADR-0010 §5)."""
+    await _transition_invitation(session, user_ctx, doc_id, "declined")
+
+
+async def _transition_invitation(
+    session: AsyncSession,
+    user_ctx: UserCtx,
+    doc_id: int,
+    new_status: Literal["accepted", "declined"],
+) -> None:
+    # Idempotency lives at the row level: the status='pending' predicate stops
+    # matching after the first transition, so a re-submit is a 0-row UPDATE. The
+    # readable-lifecycle guards mean a hidden/soft-deleted doc cannot ratify.
+    flipped = await session.execute(
+        text(
+            "UPDATE document_authors SET status = :new_status "
+            "WHERE doc_id = :doc_id AND user_id = :uid AND status = 'pending' "
+            "  AND EXISTS (SELECT 1 FROM documents d WHERE d.id = :doc_id "
+            "              AND d.publication_status = 'published' "
+            "              AND d.soft_deleted_at IS NULL "
+            "              AND d.moderation_hidden_at IS NULL)"
+        ),
+        {"new_status": new_status, "doc_id": doc_id, "uid": user_ctx.user_id},
+    )
+    if flipped.rowcount == 0:
+        raise InvitationNotPending
+
+    from buscasam.core.jobs import coauthor_invite_event_key
+
+    await session.execute(
+        text(
+            "UPDATE notifications SET read_at = now() "
+            "WHERE user_id = :uid AND event_key = :ek"
+        ),
+        {
+            "uid": user_ctx.user_id,
+            "ek": coauthor_invite_event_key(doc_id, user_ctx.user_id),
+        },
+    )
 
 
 async def add_attachment(
