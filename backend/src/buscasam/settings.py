@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
@@ -16,10 +17,12 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://buscasam:buscasam@localhost:5432/buscasam"
     tei_url: str = "http://localhost:8080"
     min_semantic_similarity: float = 0.78
+    embed_query_timeout_s: float = 0.5
     # ADR-0007 §12: per-row provenance stamp for the extraction pipeline.
     extract_pipeline_version: str = "extract-v1"
 
     base_url: str = "http://localhost:3000"
+    blob_root: Path = Path("/var/lib/buscasam/blobs")
     secret_key: str = DEV_SECRET_KEY
     oidc_client_id: str = "dev-client-id"
     oidc_client_secret: str = DEV_OIDC_CLIENT_SECRET

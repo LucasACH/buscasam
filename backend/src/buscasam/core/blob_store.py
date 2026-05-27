@@ -14,7 +14,9 @@ from typing import AsyncIterator
 
 import magic
 
-BLOB_ROOT: Path = Path("/var/lib/buscasam/blobs")
+from buscasam.settings import settings
+
+BLOB_ROOT: Path = settings.blob_root
 
 _MIME_SNIFF_BYTES = 2048
 

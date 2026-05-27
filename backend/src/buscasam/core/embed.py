@@ -10,7 +10,9 @@ from typing import Literal
 import httpx
 import numpy as np
 
-QUERY_TIMEOUT_S = 0.5
+from buscasam.settings import settings
+
+INDEX_TIMEOUT_S = 30.0
 
 
 class EmbedUnavailable(Exception):
@@ -28,8 +30,9 @@ async def embed(
         "truncate": True,
         "normalize": True,
     }
+    timeout = settings.embed_query_timeout_s if kind == "query" else INDEX_TIMEOUT_S
     try:
-        r = await client.post("/embed", json=payload, timeout=QUERY_TIMEOUT_S)
+        r = await client.post("/embed", json=payload, timeout=timeout)
         r.raise_for_status()
     except httpx.RequestError as e:
         raise EmbedUnavailable from e
