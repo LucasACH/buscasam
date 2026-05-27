@@ -19,6 +19,8 @@ from buscasam.api.deps import get_session
 from buscasam.core import auth, blob_store
 from buscasam.core.document_access import manageable_where, readable_where
 from buscasam.core.documents import get_detail
+from buscasam.core.related import fetch_related
+from buscasam.settings import settings
 
 router = APIRouter(prefix="/api/docs")
 
@@ -48,6 +50,16 @@ class DetailVersionDTO(BaseModel):
     size_bytes: int
     indexed_at: str | None  # ISO datetime; None when never indexed.
     is_current: bool
+
+
+class RelatedDTO(BaseModel):
+    doc_id: int
+    titulo: str
+    autores: list[AuthorDisplayDTO]
+    area_path: str
+    tipo: str
+    fecha: str | None  # ISO date; None when documents.fecha is NULL.
+    similarity: float
 
 
 class DetailDTO(BaseModel):
@@ -150,6 +162,37 @@ async def get_doc_detail(
         ),
         manageable=detail.manageable,
     )
+
+
+@router.get("/{doc_id}/related", response_model=list[RelatedDTO])
+async def get_doc_related(
+    doc_id: int,
+    user_ctx: auth.UserCtx = Depends(auth.current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[RelatedDTO]:
+    rows = await fetch_related(
+        session,
+        doc_id,
+        user_ctx,
+        min_semantic_similarity=settings.min_semantic_similarity,
+    )
+    if rows is None:
+        raise _not_found()
+    return [
+        RelatedDTO(
+            doc_id=r.doc_id,
+            titulo=r.titulo,
+            autores=[
+                AuthorDisplayDTO(display_name=a.display_name, user_id=a.user_id)
+                for a in r.autores
+            ],
+            area_path=r.area_path,
+            tipo=r.tipo,
+            fecha=r.fecha.isoformat() if r.fecha is not None else None,
+            similarity=r.similarity,
+        )
+        for r in rows
+    ]
 
 
 @router.get("/{doc_id}/download")
