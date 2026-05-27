@@ -101,21 +101,29 @@ function EditarForm({ docId, state }: { docId: number; state: DraftStateDTO }) {
 
   async function onPublish() {
     setPublishing(true);
-    const { error, response } = await api.POST("/api/documents/{doc_id}/publish", {
-      params: { path: { doc_id: docId } },
-    });
-    setPublishing(false);
-    if (error) {
-      // A 409 is a publish-gate race: refetch so the next poll re-renders the
-      // gate reason (server is source of truth). Other errors are surfaced.
-      if (response?.status === 409) {
-        await queryClient.invalidateQueries({ queryKey: draftQueryKey(docId) });
+    // try/catch/finally so a thrown fetch (network error, abort) still
+    // re-enables the button and toasts — the disabled state also doubles as
+    // the double-click guard, so without finally the user gets stuck.
+    try {
+      const { error, response } = await api.POST("/api/documents/{doc_id}/publish", {
+        params: { path: { doc_id: docId } },
+      });
+      if (error) {
+        // A 409 is a publish-gate race: refetch so the next poll re-renders the
+        // gate reason (server is source of truth). Other errors are surfaced.
+        if (response?.status === 409) {
+          await queryClient.invalidateQueries({ queryKey: draftQueryKey(docId) });
+          return;
+        }
+        toast.error("No se pudo publicar");
         return;
       }
+      router.push("/mis-trabajos");
+    } catch {
       toast.error("No se pudo publicar");
-      return;
+    } finally {
+      setPublishing(false);
     }
-    router.push("/mis-trabajos");
   }
 
   const processing = state.index_status === "processing";

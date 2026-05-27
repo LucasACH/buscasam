@@ -532,6 +532,11 @@ async def publish(session: AsyncSession, user_ctx: UserCtx, doc_id: int) -> None
     non-owner coauthors raise DocumentNotFound. Raises PublishConflict if the
     candidate is not indexed or its stored headline_fingerprint no longer
     matches current title + staged_abstract (module map §core/documents)."""
+    # FOR UPDATE OF v, d serializes against concurrent update_draft_metadata:
+    # without it, a PATCH committing between this SELECT and the UPDATEs below
+    # could change títuto/staged_abstract while we still copy the pre-edit
+    # staged_abstract into documents.abstract — yielding a published row with
+    # mismatched títuto/abstract and a stale headline_fingerprint.
     row = (
         await session.execute(
             text(
@@ -542,7 +547,8 @@ async def publish(session: AsyncSession, user_ctx: UserCtx, doc_id: int) -> None
                 "         WHERE a.doc_id = d.id AND a.status = 'owner' LIMIT 1) "
                 "         AS owner_user_id "
                 "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
-                "WHERE v.doc_id = :doc_id ORDER BY v.version_no DESC LIMIT 1"
+                "WHERE v.doc_id = :doc_id ORDER BY v.version_no DESC LIMIT 1 "
+                "FOR UPDATE OF v, d"
             ),
             {"doc_id": doc_id},
         )

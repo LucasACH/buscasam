@@ -121,6 +121,17 @@ describe("editar page", () => {
     expect(push).not.toHaveBeenCalled();
   });
 
+  it("toasts and re-enables the Publicar button if the publish request rejects", async () => {
+    apiPost.mockRejectedValue(new Error("network down"));
+    useDraftStateMock.mockReturnValue(draft({ publish_gate_reason: null, is_owner: true }));
+    render(<EditarPage />);
+    const btn = screen.getByRole("button", { name: /publicar/i });
+    fireEvent.click(btn);
+    await waitFor(() => expect(toastError).toHaveBeenCalled());
+    expect(btn).toBeEnabled();
+    expect(push).not.toHaveBeenCalled();
+  });
+
   it("renders the staged suggestions", () => {
     useDraftStateMock.mockReturnValue(draft({}));
     render(<EditarPage />);
