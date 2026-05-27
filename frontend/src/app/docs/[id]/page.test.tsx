@@ -114,6 +114,12 @@ describe("/docs/[id] page", () => {
     expect(mainDl).toHaveAttribute("href", "/api/docs/42/download");
     const attDl = screen.getByRole("link", { name: /descargar datos\.csv/i });
     expect(attDl).toHaveAttribute("href", "/api/docs/42/attachments/101");
+
+    // Publico carries no visibility badge — the badge only renders for
+    // non-publico tiers (interno/privado).
+    expect(screen.queryByText("Interno")).toBeNull();
+    expect(screen.queryByText("Privado")).toBeNull();
+    expect(screen.queryByText("Visibilidad")).toBeNull();
   });
 
   it("sets document.title to detail.titulo and reverts on unmount", async () => {

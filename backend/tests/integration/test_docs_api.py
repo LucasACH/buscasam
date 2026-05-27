@@ -185,6 +185,58 @@ async def test_get_doc_detail_pending_coauthor_on_privado_returns_404(client, se
     assert r.status_code == 404
 
 
+@pytest.mark.parametrize(
+    ("role", "visibility", "author_status"),
+    [
+        ("estudiante", "interno", None),
+        ("docente", "interno", None),
+        ("estudiante", "privado", "owner"),
+        ("docente", "privado", "accepted"),
+    ],
+    ids=["estudiante_interno", "docente_interno", "owner_privado", "accepted_privado"],
+)
+async def test_get_doc_detail_positive_grants_return_200(
+    client, session, role, visibility, author_status
+):
+    """Router→core wiring for authenticated grants. The access-predicate matrix
+    itself is owned by `test_document_access_readable.py`; this test pins the
+    API layer routing through `readable_where` for each grant source."""
+    doc_id = await make_document(session, visibility=visibility)
+    await _seed_current_version(session, doc_id)
+    user_id = await make_user(session, role=role)
+    if author_status is not None:
+        await make_document_author(
+            session,
+            doc_id,
+            user_id=user_id,
+            status=author_status,
+            display_name="Reader",
+        )
+    sid = await _sid_cookie(session, user_id)
+    await session.commit()
+
+    r = await client.get(f"/api/docs/{doc_id}", cookies={"sid": sid})
+
+    assert r.status_code == 200
+    assert r.json()["doc_id"] == doc_id
+
+
+async def test_get_doc_detail_estudiante_on_privado_non_author_returns_404(
+    client, session
+):
+    """Authenticated UNSAM identity alone does not unlock privado."""
+    doc_id = await make_document(session, visibility="privado")
+    await _seed_current_version(session, doc_id)
+    other_owner = await make_user(session)
+    await make_document_author(session, doc_id, user_id=other_owner, status="owner")
+    requester = await make_user(session, role="estudiante")
+    sid = await _sid_cookie(session, requester)
+    await session.commit()
+
+    r = await client.get(f"/api/docs/{doc_id}", cookies={"sid": sid})
+    assert r.status_code == 404
+
+
 async def test_download_main_file_granted_returns_x_accel_redirect(client, session):
     """Story 27 + ADR-0006 §9: granted main-file reads return 200 with
     X-Accel-Redirect, Content-Disposition from original_filename, and
@@ -214,7 +266,6 @@ async def test_download_main_file_granted_returns_x_accel_redirect(client, sessi
 
 async def test_download_attachment_granted_returns_x_accel_redirect(client, session):
     doc_id = await make_document(session, visibility="publico")
-    await _seed_current_version(session, doc_id)
     att_id = await _seed_attachment(
         session,
         doc_id,
@@ -236,7 +287,6 @@ async def test_download_attachment_with_null_mime_falls_back_to_octet_stream(
     client, session
 ):
     doc_id = await make_document(session, visibility="publico")
-    await _seed_current_version(session, doc_id)
     att_id = await _seed_attachment(
         session, doc_id, mime=None, sha_hex="12" + "34" * 31
     )
@@ -249,13 +299,54 @@ async def test_download_attachment_with_null_mime_falls_back_to_octet_stream(
 
 
 @pytest.mark.parametrize(
+    ("role", "visibility", "author_status"),
+    [
+        ("estudiante", "interno", None),
+        ("estudiante", "privado", "owner"),
+        ("docente", "privado", "accepted"),
+    ],
+    ids=["estudiante_interno", "owner_privado", "accepted_privado"],
+)
+async def test_download_endpoints_granted_for_authenticated_roles(
+    client, session, role, visibility, author_status
+):
+    """Both download handlers carry their own hand-rolled `readable_where`
+    join; this pins their routing for authenticated grants so a future
+    refactor cannot silently drop the EXISTS subquery."""
+    doc_id = await make_document(session, visibility=visibility)
+    await _seed_current_version(session, doc_id, sha_hex="ab" + "cd" * 31)
+    att_id = await _seed_attachment(session, doc_id, sha_hex="ef" + "01" * 31)
+    user_id = await make_user(session, role=role)
+    if author_status is not None:
+        await make_document_author(
+            session,
+            doc_id,
+            user_id=user_id,
+            status=author_status,
+            display_name="Reader",
+        )
+    sid = await _sid_cookie(session, user_id)
+    await session.commit()
+
+    cookies = {"sid": sid}
+    main = await client.get(f"/api/docs/{doc_id}/download", cookies=cookies)
+    att = await client.get(f"/api/docs/{doc_id}/attachments/{att_id}", cookies=cookies)
+
+    for r in (main, att):
+        assert r.status_code == 200
+        assert r.headers.get("x-accel-redirect", "").startswith("/_blobs/")
+
+
+@pytest.mark.parametrize(
     "factory_kwargs",
     [
         {"visibility": "interno"},
+        {"visibility": "privado"},
+        {"publication_status": "draft"},
         {"soft_deleted": True},
         {"moderation_hidden": True},
     ],
-    ids=["interno", "soft_deleted", "moderation_hidden"],
+    ids=["interno", "privado", "draft", "soft_deleted", "moderation_hidden"],
 )
 async def test_download_denials_return_404_with_no_x_accel_header(
     client, session, factory_kwargs

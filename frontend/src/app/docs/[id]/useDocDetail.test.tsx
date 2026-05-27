@@ -23,9 +23,11 @@ const DETAIL_BODY = {
   manageable: false,
 };
 
-function wrapper() {
+function wrapper(opts: { retryDelay?: number } = {}) {
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    defaultOptions: {
+      queries: { retry: false, retryDelay: opts.retryDelay ?? 0 },
+    },
   });
   const Wrapper = ({ children }: { children: React.ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -60,7 +62,7 @@ describe("useDocDetail", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
-  it("retries on transient (non-404) errors", async () => {
+  it("retries on transient (non-404) errors and caps at 3 retries", async () => {
     const fetchSpy = vi
       .spyOn(global, "fetch")
       .mockResolvedValue(new Response("", { status: 500 }));
@@ -69,10 +71,11 @@ describe("useDocDetail", () => {
       wrapper: wrapper(),
     });
 
-    await waitFor(() => expect(fetchSpy.mock.calls.length).toBeGreaterThan(1), {
-      timeout: 3000,
-    });
+    // After exhausting retries the query settles into the error state.
+    await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.is404).toBe(false);
+    // 1 initial + 3 retries; the predicate must not retry past failureCount=3.
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
   });
 
   it("returns detail on 200", async () => {

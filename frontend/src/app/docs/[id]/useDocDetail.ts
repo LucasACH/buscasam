@@ -53,7 +53,7 @@ export function useDocDetail(docId: number) {
   const query = useQuery<DocDetail, HttpError>({
     queryKey: ["doc-detail", docId],
     queryFn: () => fetchDocDetail(docId),
-    retry: (_failureCount, err) => err.status !== 404,
+    retry: (failureCount, err) => err.status !== 404 && failureCount < 3,
   });
   const is404 = query.isError && query.error?.status === 404;
   return {
