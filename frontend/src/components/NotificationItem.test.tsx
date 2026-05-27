@@ -5,9 +5,16 @@ import userEvent from "@testing-library/user-event";
 import type { NotificationDTO } from "@/lib/useNotifications";
 import { NotificationItem } from "./NotificationItem";
 
-const { markRead } = vi.hoisted(() => ({ markRead: vi.fn() }));
+const { markRead, accept, decline } = vi.hoisted(() => ({
+  markRead: vi.fn(),
+  accept: vi.fn(),
+  decline: vi.fn(),
+}));
 vi.mock("@/lib/useNotifications", () => ({
   useNotifications: () => ({ markRead }),
+}));
+vi.mock("@/lib/useCoauthorInvitation", () => ({
+  useCoauthorInvitation: () => ({ accept, decline }),
 }));
 
 function item(over: Partial<NotificationDTO>): NotificationDTO {
@@ -22,7 +29,11 @@ function item(over: Partial<NotificationDTO>): NotificationDTO {
 }
 
 describe("NotificationItem per-kind renderers", () => {
-  beforeEach(() => markRead.mockReset());
+  beforeEach(() => {
+    markRead.mockReset();
+    accept.mockReset();
+    decline.mockReset();
+  });
   afterEach(() => cleanup());
 
   it("coauthor_invite: shows title + inviter", () => {
@@ -78,7 +89,9 @@ describe("NotificationItem per-kind renderers", () => {
 
   it("degrades gracefully when payload fields are missing", () => {
     render(
-      <NotificationItem item={item({ kind: "coauthor_invite", payload: {} })} />,
+      <NotificationItem
+        item={item({ kind: "coauthor_invite", payload: {} })}
+      />,
     );
     expect(screen.queryByText(/undefined/)).not.toBeInTheDocument();
     expect(screen.getByText(/Alguien/)).toBeInTheDocument();
@@ -112,6 +125,59 @@ describe("NotificationItem per-kind renderers", () => {
     );
     expect(
       screen.queryByRole("button", { name: /Marcar como leída/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("unread coauthor_invite shows Aceptar / Rechazar + Ver link", () => {
+    render(
+      <NotificationItem
+        item={item({
+          read_at: null,
+          payload: { doc_title: "Redes", inviter: "Ada", doc_id: 7 },
+        })}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: /Aceptar/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Rechazar/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Ver/i })).toHaveAttribute(
+      "href",
+      "/docs/7",
+    );
+  });
+
+  it("Aceptar / Rechazar call the invitation mutation with doc_id", async () => {
+    render(
+      <NotificationItem
+        item={item({
+          read_at: null,
+          payload: { doc_title: "Redes", inviter: "Ada", doc_id: 7 },
+        })}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Aceptar/i }));
+    expect(accept).toHaveBeenCalledWith(7);
+    await userEvent.click(screen.getByRole("button", { name: /Rechazar/i }));
+    expect(decline).toHaveBeenCalledWith(7);
+  });
+
+  it("read coauthor_invite hides Aceptar / Rechazar", () => {
+    render(
+      <NotificationItem
+        item={item({
+          read_at: "2026-01-01T00:00:00Z",
+          payload: { doc_title: "Redes", inviter: "Ada", doc_id: 7 },
+        })}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: /Aceptar/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Rechazar/i }),
     ).not.toBeInTheDocument();
   });
 });
