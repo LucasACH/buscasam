@@ -7,26 +7,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { AttachmentsPanel } from "@/components/AttachmentsPanel";
 import { useUser } from "@/lib/useUser";
-import { useDraftState, draftQueryKey, type DraftStateDTO } from "../../useDraftState";
-
-const STATUS_PILL: Record<string, string> = {
-  pending: "Procesando…",
-  processing: "Procesando…",
-  indexed: "Listo para publicar",
-  failed: "Falló el procesamiento",
-};
-
-const GATE_COPY: Record<string, string> = {
-  processing: "Procesando…",
-  reindexing_headline: "Reindexando título…",
-  processing_failed: "Falló el procesamiento — revisá tu archivo",
-};
+import { useDraftState, type DraftState } from "../../useDraftState";
 
 const formSchema = z.object({
   titulo: z.string().min(1, "El título es obligatorio"),
@@ -42,7 +28,7 @@ export default function EditarPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const docId = Number(params.id);
-  const { state, isLoading } = useDraftState(docId);
+  const { state, isLoading, refresh } = useDraftState(docId);
 
   useEffect(() => {
     if (isInvitado) router.replace(`/login?next=/mis-trabajos/${docId}/editar`);
@@ -54,12 +40,26 @@ export default function EditarPage() {
   // Re-seed the form when the candidate's status changes (e.g. processing →
   // indexed): RHF captures defaultValues once at mount, so polled staged_*
   // would otherwise never reach the editable inputs.
-  return <EditarForm key={state.index_status} docId={docId} state={state} />;
+  return (
+    <EditarForm
+      key={state.lifecycle.formSeedKey}
+      docId={docId}
+      state={state}
+      refresh={refresh}
+    />
+  );
 }
 
-function EditarForm({ docId, state }: { docId: number; state: DraftStateDTO }) {
+function EditarForm({
+  docId,
+  state,
+  refresh,
+}: {
+  docId: number;
+  state: DraftState;
+  refresh: () => Promise<void>;
+}) {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const [publishing, setPublishing] = useState(false);
   const { register, getValues, formState } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -94,10 +94,7 @@ function EditarForm({ docId, state }: { docId: number; state: DraftStateDTO }) {
       toast.error("No se pudo guardar el cambio");
       return;
     }
-    // A title/abstract save can flip the server's publish gate to
-    // reindexing_headline; refetch so the UI leaves the idle indexed state and
-    // picks up the new gate (useDraftState polls again while reindexing).
-    await queryClient.invalidateQueries({ queryKey: draftQueryKey(docId) });
+    await refresh();
   }
 
   async function onPublish() {
@@ -106,14 +103,17 @@ function EditarForm({ docId, state }: { docId: number; state: DraftStateDTO }) {
     // re-enables the button and toasts — the disabled state also doubles as
     // the double-click guard, so without finally the user gets stuck.
     try {
-      const { error, response } = await api.POST("/api/documents/{doc_id}/publish", {
-        params: { path: { doc_id: docId } },
-      });
+      const { error, response } = await api.POST(
+        "/api/documents/{doc_id}/publish",
+        {
+          params: { path: { doc_id: docId } },
+        },
+      );
       if (error) {
         // A 409 is a publish-gate race: refetch so the next poll re-renders the
         // gate reason (server is source of truth). Other errors are surfaced.
         if (response?.status === 409) {
-          await queryClient.invalidateQueries({ queryKey: draftQueryKey(docId) });
+          await refresh();
           return;
         }
         toast.error("No se pudo publicar");
@@ -127,16 +127,19 @@ function EditarForm({ docId, state }: { docId: number; state: DraftStateDTO }) {
     }
   }
 
-  const processing = state.index_status === "processing";
-  const gateReason = state.publish_gate_reason;
-  const canPublish = gateReason === null && state.is_owner;
+  const { lifecycle } = state;
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Editar trabajo</h1>
-        <span data-testid="status-pill" className="rounded-full bg-muted px-3 py-1 text-sm">
-          {STATUS_PILL[state.index_status] ?? state.index_status}
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Editar trabajo
+        </h1>
+        <span
+          data-testid="status-pill"
+          className="bg-muted rounded-full px-3 py-1 text-sm"
+        >
+          {lifecycle.statusLabel}
         </span>
       </div>
 
@@ -154,7 +157,9 @@ function EditarForm({ docId, state }: { docId: number; state: DraftStateDTO }) {
               id="abstract"
               className="w-full rounded-md border px-3 py-2 text-sm"
               rows={5}
-              {...register("abstract", { onBlur: () => patchField("abstract") })}
+              {...register("abstract", {
+                onBlur: () => patchField("abstract"),
+              })}
             />
           </Field>
           <Field label="Palabras clave" htmlFor="keywords">
@@ -162,7 +167,9 @@ function EditarForm({ docId, state }: { docId: number; state: DraftStateDTO }) {
               id="keywords"
               className="w-full rounded-md border px-3 py-2 text-sm"
               placeholder="separadas por comas"
-              {...register("keywords", { onBlur: () => patchField("keywords") })}
+              {...register("keywords", {
+                onBlur: () => patchField("keywords"),
+              })}
             />
           </Field>
           <Field label="Fecha" htmlFor="fecha">
@@ -175,12 +182,14 @@ function EditarForm({ docId, state }: { docId: number; state: DraftStateDTO }) {
           </Field>
         </form>
 
-        <section className="relative rounded-lg border bg-muted/30 p-4">
-          <h2 className="text-sm font-medium text-muted-foreground">Sugerencias del extractor</h2>
-          {processing && (
+        <section className="bg-muted/30 relative rounded-lg border p-4">
+          <h2 className="text-muted-foreground text-sm font-medium">
+            Sugerencias del extractor
+          </h2>
+          {lifecycle.showSuggestionsSpinner && (
             <div
               data-testid="suggestions-spinner"
-              className="absolute inset-0 flex items-center justify-center bg-background/60"
+              className="bg-background/60 absolute inset-0 flex items-center justify-center"
             >
               <Loader2 className="animate-spin" />
             </div>
@@ -206,12 +215,18 @@ function EditarForm({ docId, state }: { docId: number; state: DraftStateDTO }) {
       </div>
 
       <div className="mt-8">
-        <Button disabled={!canPublish || publishing} onClick={onPublish}>
+        <Button
+          disabled={!lifecycle.canPublish || publishing}
+          onClick={onPublish}
+        >
           Publicar
         </Button>
-        {gateReason && (
-          <p data-testid="gate-reason" className="mt-2 text-sm text-muted-foreground">
-            {GATE_COPY[gateReason] ?? gateReason}
+        {lifecycle.gateMessage && (
+          <p
+            data-testid="gate-reason"
+            className="text-muted-foreground mt-2 text-sm"
+          >
+            {lifecycle.gateMessage}
           </p>
         )}
       </div>
@@ -249,7 +264,7 @@ function Suggestion({
 }) {
   return (
     <div>
-      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dt className="text-muted-foreground text-xs">{label}</dt>
       <dd data-testid={testId} className="mt-0.5">
         {children}
       </dd>

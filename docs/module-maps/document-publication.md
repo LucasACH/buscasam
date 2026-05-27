@@ -322,32 +322,57 @@ On submit: `POST /api/documents` (validation 422 surfaced inline) → on success
 
 **Interface:** Edit page. Composes:
 
-- `useDraftState(id)` for the polled server state (status pill, publish-gate reason).
+- `useDraftState(id)` for staged metadata and interpreted lifecycle meaning (status pill copy, suggestion loading, publish eligibility, gate copy, refresh after a mutation).
 - A metadata form (RHF + Zod, scoped to this page — not extracted) bound to `documents.get_draft_state`'s staged + author-entered fields. Save-on-blur PATCHes `/api/documents/{id}`.
-- A suggestions panel that renders `staged_abstract`, `staged_keywords`, `staged_fecha` next to the editable inputs (PRD stories 17-18). While `index_status='processing'`, the panel shows a spinner over the suggestion slots.
+- A suggestions panel that renders `staged_abstract`, `staged_keywords`, `staged_fecha` next to the editable inputs (PRD stories 17-18). It renders the loading meaning supplied by `useDraftState`, without inspecting indexing values.
 - `AttachmentsPanel({ docId })` (PRD stories 22-25).
-- **Publish** button — disabled iff `publish_gate_reason !== null`. The inline message under the button echoes the server's `publish_gate_reason` (one of: `Procesando…`, `Reindexando título…`, `Falló el procesamiento — revisá tu archivo`). On click: `POST /api/documents/{id}/publish`; a 409 (race) re-renders the gate reason from the next poll.
-- Status pill at the top: `Procesando…` / `Listo para publicar` / `Falló el procesamiento` (PRD story 16).
+- **Publish** button — enabled only when the lifecycle view exposes `canPublish`; the inline message renders its Spanish `gateMessage`. On click: `POST /api/documents/{id}/publish`; a 409 (race) requests a draft refresh through the hook.
+- Status pill at the top renders the lifecycle view's `statusLabel`: `Procesando…` / `Listo para publicar` / `Falló el procesamiento` (PRD story 16).
 
-**Responsibilities:** The edit-page layout, the save-on-blur metadata PATCH wiring, the publish-button gating, the suggestions↔staged↔final flow. Never derives the gate reason locally — it renders the server value verbatim (PRD §"Implementation Decisions" — server is source of truth).
+**Responsibilities:** The edit-page layout, the save-on-blur metadata PATCH wiring, and the suggestions↔staged↔final flow. It renders lifecycle meaning supplied by the draft-management Module; it does not know OpenAPI status/gate strings or the draft query cache contract.
 
 **Seams:** None.
 
-**Depth note:** Where every PRD UX rule that connects "what the worker did" to "what the user is allowed to click" lives. Deletion test: scattering the publish-gate render, the save-on-blur PATCH, and the suggestions panel into separate pages would force each to re-derive the polling cadence and the gate-reason copy.
+**Depth note:** The page is layout and form wiring only. Lifecycle interpretation now has locality in `useDraftState.ts`, so another draft-management surface can consume the same meaning without duplicating raw gate rules.
 
 ---
 
 ### `app/mis-trabajos/useDraftState.ts`
 
-**Interface:** `useDraftState(docId: number) -> { state: DraftStateDTO | undefined, isLoading: boolean, isError: boolean }`.
+**Interface:**
 
-TanStack Query against `GET /api/documents/{id}/draft`. `refetchInterval`: 3000 ms while `state.index_status === 'processing'` OR `state.publish_gate_reason === 'reindexing_headline'`; `false` otherwise (idle while `indexed` and fingerprint-matched, or while `failed`). Query key `["draft", docId]`. Mapped 404 → `isError`.
+```ts
+useDraftState(docId: number) -> {
+  state: {
+    title; staged_abstract; staged_keywords; staged_fecha;
+    lifecycle: {
+      formSeedKey: string;
+      statusLabel: string;
+      showSuggestionsSpinner: boolean;
+      gateMessage: string | null;
+      canPublish: boolean;
+    };
+  } | undefined;
+  isLoading: boolean;
+  isError: boolean;
+  refresh(): Promise<void>;
+}
 
-**Responsibilities:** Polling cadence, request shape, query-key design. Single concentration of "when do we poll vs. idle."
+useDraftAttachments(docId: number) -> {
+  attachments: Attachment[];
+  atCapacity: boolean;
+  addAttachment(file: File): Promise<AttachmentMutationError | undefined>;
+  removeAttachment(attachment: Attachment): Promise<AttachmentMutationError | undefined>;
+}
+```
 
-**Seams:** None.
+Both hooks share TanStack Query against `GET /api/documents/{id}/draft`. The raw OpenAPI `index_status`, `publish_gate_reason`, `is_owner`, attachment payload, query key, and optimistic cache updates are Implementation details. Polling remains 3000 ms while the raw response denotes processing or headline reindexing, and is idle once publishable or failed. `useDraftAttachments` performs direct multipart upload because the generated body type cannot represent runtime `File`; it performs optimistic removal and rollback against the shared draft query.
 
-**Depth note:** Earns isolation because the cadence rule (poll while `processing` or `reindexing_headline`, idle otherwise) is non-obvious and would silently drift if every page that needs draft state copied the `refetchInterval` expression. Deletion test: future surfaces (a global "in-progress drafts" badge in `AuthNav`?) would each reinvent the rule.
+**Responsibilities:** Request shape, polling cadence, raw lifecycle-to-view interpretation, refresh invalidation after metadata/publish races, and attachment cache synchronization. The backend remains the source of publish-gate truth; this Module owns its Spanish/UI projection.
+
+**Seams:** None. Calls FastAPI only through the existing typed client, except the already-required multipart `File` browser request.
+
+**Depth note:** Earns isolation because cadence, lifecycle interpretation, mutation invalidation, and attachment synchronization are one staged-publication rule bundle. Deletion test: pages and attachment widgets would again coordinate raw gate values and a shared query cache directly.
 
 ---
 
@@ -365,18 +390,18 @@ TanStack Query against `GET /api/documents/{id}/draft`. `refetchInterval`: 3000 
 
 ### `components/AttachmentsPanel.tsx`
 
-**Interface:** Props: `{ docId: number, canManage: boolean }`. Reads attachments from `GET /api/documents/{id}/draft` (server includes the list there) and renders:
+**Interface:** Props: `{ docId: number, canManage: boolean }`. Consumes `useDraftAttachments(docId)` and renders:
 
 - Existing rows: `original_filename · sizebytes` + "Quitar" button (PRD stories 24-25). Click → `DELETE /api/documents/{docId}/attachments/{att_id}` → optimistic remove.
 - Add affordance: `<input type="file" accept=".csv,.json,.txt,.py,.ipynb,.png,.jpg,.jpeg,.gif,.zip">` (ADR-0006 §10 allowlist). Click → `POST /api/documents/{docId}/attachments` with the file. Disabled when `attachments.length === 5` with copy "Llegaste al máximo de 5 adjuntos" (PRD story 23). 413 surfaced inline as "Este adjunto pasa los 20 MB. Probá uno más chico."
 
 `canManage` is true for owner + accepted coauthors per ADR-0010 §8 — the page passes whatever the server exposes; this component just hides the add/remove affordances when false.
 
-**Responsibilities:** Attachment list + add + remove UX, including the 5-cap disable rule and the 20 MB inline error. Owns the optimistic-remove pattern.
+**Responsibilities:** Attachment list + add + remove rendering, including Spanish copy for the 5-cap and upload/remove errors. Mutation requests and optimistic synchronization belong to draft management.
 
 **Seams:** None.
 
-**Depth note:** The 5-cap and the 20 MB limit are user-visible invariants (PRD stories 22-23) — concentrating them here keeps the error copy and the disabled-state rule from drifting between the edit page and any future surface that lists attachments.
+**Depth note:** The 5-cap and the 20 MB limit remain user-visible here (PRD stories 22-23); cache and mutation behavior is no longer part of the component contract.
 
 ---
 
@@ -403,8 +428,8 @@ TanStack Query against `GET /api/documents/{id}/draft`. `refetchInterval`: 3000 
                   AreasCascader (requireLeaf)   useDraftState  metadata  AttachmentsPanel
                   CoauthorPicker                     |          form           |
                   file picker                  GET /api/documents/{id}/draft
-                            |                                                  |
-                  POST /api/documents                                           |
+                            |                          useDraftAttachments ◄────┘
+                  POST /api/documents                          |
                   POST /api/documents/{id}/upload         POST/DELETE /api/documents/{id}/attachments
                   GET  /api/users/search                  POST /api/documents/{id}/publish
                             |                             PATCH /api/documents/{id}
@@ -475,6 +500,6 @@ No cycles. `core/jobs` task bodies depend on `core/documents`, `core/extract`, `
 - The publish transaction (`core/documents.publish`) is the single SQL block from ADR-0006 §6, run inside one `async with session.begin()` so a crash between flips cannot leave the document partially published (PRD story 37).
 - `write_headline` retains the target version's `is_current` flag. A refresh of the published current version updates searchable headline content; a refresh of an indexed candidate cannot expose it before publish.
 - `headline_fingerprint` is a stable hash (e.g., `sha256(normalize(title) + "\x00" + normalize(abstract))[:32]`) so the publish gate, the post-edit reindex enqueue rule, and the worker can all compute the same value without coordination. `core/chunk.headline_fingerprint` is the single source.
-- `publish_gate_reason` enum values are server-owned: `null` (publishable), `processing`, `reindexing_headline`, `processing_failed`. The frontend maps each to the Spanish copy from the PRD; the server doesn't return user-facing strings.
+- `publish_gate_reason` enum values are server-owned: `null` (publishable), `processing`, `reindexing_headline`, `processing_failed`. `app/mis-trabajos/useDraftState.ts` alone maps them to Spanish lifecycle copy and publish eligibility; pages do not inspect them. The server doesn't return user-facing strings.
 - The `processing_failed` notification's `event_key` is `processing_failed:{version_id}` to use the existing unique index (ADR-0010 §9) — retries cannot create duplicates (PRD §"MVP acceptance tests" via ADR-0010 §12).
 - ADR-0006 §10's MIME sniff happens inside `core/blob_store.put_stream` (bytes are streaming through there anyway); the upload route compares `BlobPutResult.sniffed_mime` against the main-file allowlist after the put completes and returns 415 + an inline message (encrypted PDF gets its own 415 message via `core/extract.probe_encrypted` checked before `put_stream`, so the blob is never written for an encrypted PDF).
