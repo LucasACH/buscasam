@@ -12,6 +12,7 @@ from starlette.responses import PlainTextResponse
 from buscasam.api.areas import router as areas_router
 from buscasam.api.auth import auth_router, me_router
 from buscasam.api.notifications import router as notifications_router
+from buscasam.api.docs import router as docs_router
 from buscasam.api.documents import router as documents_router
 from buscasam.api.search import router as search_router
 from buscasam.core import auth
@@ -61,4 +62,5 @@ def create_app() -> FastAPI:
     app.include_router(me_router)
     app.include_router(notifications_router)
     app.include_router(documents_router)
+    app.include_router(docs_router)
     return app
