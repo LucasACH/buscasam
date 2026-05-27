@@ -27,9 +27,12 @@ BUSCASAM_OIDC_CLIENT_ID=<your-client-id>
 BUSCASAM_OIDC_CLIENT_SECRET=<your-client-secret>
 BUSCASAM_BLOB_ROOT=./var/blobs
 BUSCASAM_EMBED_QUERY_TIMEOUT_S=5
+BUSCASAM_SERVE_BLOBS_INLINE=1
 ```
 
 `BUSCASAM_EMBED_QUERY_TIMEOUT_S=5` overrides the prod default of `0.5` so semantic search actually fires on Apple Silicon (TEI runs amd64-emulated and easily blows past 500 ms).
+
+`BUSCASAM_SERVE_BLOBS_INLINE=1` makes download endpoints stream the blob from disk instead of emitting `X-Accel-Redirect` for nginx (which doesn't exist locally). Leave unset in prod.
 
 ## Bring up infra
 

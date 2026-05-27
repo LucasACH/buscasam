@@ -13,6 +13,7 @@ from __future__ import annotations
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, model_serializer
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -98,6 +99,15 @@ def _content_disposition(original_filename: str) -> str:
 
 
 def _download_response(*, sha_hex: str, original_filename: str, mime: str) -> Response:
+    # Prod ships an empty body and lets nginx serve the file via
+    # X-Accel-Redirect. Local-dev runs uvicorn directly without nginx, so
+    # `serve_blobs_inline` flips to streaming the blob from disk instead.
+    if settings.serve_blobs_inline:
+        return FileResponse(
+            blob_store.local_path(sha_hex),
+            media_type=mime,
+            headers={"Content-Disposition": _content_disposition(original_filename)},
+        )
     return Response(
         status_code=200,
         headers={
@@ -254,7 +264,7 @@ async def download_attachment(
     )
 
 
-@router.get("/{doc_id}/versions/{n}/download")
+@router.api_route("/{doc_id}/versions/{n}/download", methods=["GET", "HEAD"])
 async def download_version(
     doc_id: int,
     n: str,
