@@ -279,3 +279,137 @@ async def test_index_document_happy_path_indexes_docx(session, blob_root):
     assert chunks[0]["is_headline"] is True
     assert all(c["version_id"] == version_id for c in chunks)
     assert all(c["is_current"] is False for c in chunks)
+
+
+async def test_index_document_duplicate_success_is_no_op(session, blob_root):
+    payload = _docx_bytes([
+        "Resumen",
+        "Este trabajo debe indexarse una sola vez aunque el job se repita.",
+    ])
+    sha_hex, sha_bytes = _persist_blob(blob_root, payload)
+    uid, doc_id, version_id = await _seed_version(
+        session, sha_bytes=sha_bytes, mime=_DOCX_MIME
+    )
+    tei = _tei_mock()
+
+    await jobs._run_index_document(session, tei, version_id)
+    first_chunks = (
+        await session.execute(
+            text(
+                "SELECT chunk_seq, body_text FROM chunks "
+                "WHERE version_id = :vid ORDER BY chunk_seq"
+            ),
+            {"vid": version_id},
+        )
+    ).all()
+
+    await jobs._run_index_document(session, tei, version_id)
+    await tei.aclose()
+
+    second_chunks = (
+        await session.execute(
+            text(
+                "SELECT chunk_seq, body_text FROM chunks "
+                "WHERE version_id = :vid ORDER BY chunk_seq"
+            ),
+            {"vid": version_id},
+        )
+    ).all()
+    assert second_chunks == first_chunks
+
+
+async def test_default_and_ocr_completion_share_retry_safe_indexed_result(
+    session, blob_root, monkeypatch
+):
+    import sys
+    from types import ModuleType, SimpleNamespace
+
+    from buscasam.core.extract import ExtractedDoc
+
+    payload = b"source"
+    sha_hex, sha_bytes = _persist_blob(blob_root, payload)
+    uid, doc_id, default_id = await _seed_version(
+        session, sha_bytes=sha_bytes, mime=_DOCX_MIME
+    )
+    uid, doc_id, ocr_id = await _seed_version(
+        session, sha_bytes=sha_bytes, mime="application/pdf"
+    )
+    await session.execute(
+        text("UPDATE document_versions SET index_status = 'processing' WHERE id = :id"),
+        {"id": ocr_id},
+    )
+
+    async def _extract(sha, mime):
+        return ExtractedDoc(
+            text="Resumen\nTexto equivalente para ambas rutas.",
+            paragraph_breaks=[],
+            page_breaks=[],
+            raw_metadata={},
+        )
+
+    monkeypatch.setattr(jobs.extractmod, "extract", _extract)
+
+    async def _open_for_send(sha):
+        yield b"%PDF-1.4 source"
+
+    async def _put_stream(stream, *, max_bytes):
+        async for _ in stream:
+            pass
+        return SimpleNamespace(sha256="ocr-output")
+
+    deleted: list[str] = []
+
+    async def _delete(sha):
+        deleted.append(sha)
+
+    monkeypatch.setattr(jobs.blob_store, "open_for_send", _open_for_send)
+    monkeypatch.setattr(jobs.blob_store, "put_stream", _put_stream)
+    monkeypatch.setattr(jobs.blob_store, "delete", _delete)
+
+    ocr_runs: list[bool] = []
+
+    def _ocr(source, output, **kwargs):
+        ocr_runs.append(True)
+        output.write(b"%PDF-1.4 ocr")
+
+    class _ExitCodeException(Exception):
+        pass
+
+    ocr_module = ModuleType("ocrmypdf")
+    ocr_module.ocr = _ocr
+    exceptions_module = ModuleType("ocrmypdf.exceptions")
+    exceptions_module.ExitCodeException = _ExitCodeException
+    monkeypatch.setitem(sys.modules, "ocrmypdf", ocr_module)
+    monkeypatch.setitem(sys.modules, "ocrmypdf.exceptions", exceptions_module)
+
+    tei = _tei_mock()
+    await jobs._run_index_document(session, tei, default_id)
+    await jobs._run_ocr_index_document(session, tei, ocr_id)
+    await jobs._run_index_document(session, tei, default_id)
+    await jobs._run_ocr_index_document(session, tei, ocr_id)
+    await tei.aclose()
+
+    async def _result(version_id):
+        row = (
+            await session.execute(
+                text(
+                    "SELECT index_status, staged_abstract, staged_keywords, "
+                    "headline_fingerprint FROM document_versions WHERE id = :id"
+                ),
+                {"id": version_id},
+            )
+        ).one()
+        chunks = (
+            await session.execute(
+                text(
+                    "SELECT chunk_seq, is_headline, body_text FROM chunks "
+                    "WHERE version_id = :id ORDER BY chunk_seq"
+                ),
+                {"id": version_id},
+            )
+        ).all()
+        return row, chunks
+
+    assert await _result(ocr_id) == await _result(default_id)
+    assert len(ocr_runs) == 1
+    assert deleted == ["ocr-output"]
