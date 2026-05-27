@@ -54,10 +54,31 @@ async def insert_chunk(
 ) -> None:
     await conn.execute(
         text(
+            "INSERT INTO document_versions "
+            "(doc_id, version_no, sha256, original_filename, bytes, mime, "
+            " is_current, index_status, extract_pipeline_version) "
+            "VALUES (:doc_id, 1, decode(repeat('00', 32), 'hex'), "
+            " 'fixture-current', 0, 'application/pdf', true, 'indexed', "
+            " 'fixture-current') "
+            "ON CONFLICT DO NOTHING"
+        ),
+        {"doc_id": chunk.doc_id},
+    )
+    version_id = (
+        await conn.execute(
+            text(
+                "SELECT id FROM document_versions "
+                "WHERE doc_id = :doc_id AND is_current"
+            ),
+            {"doc_id": chunk.doc_id},
+        )
+    ).scalar_one()
+    await conn.execute(
+        text(
             "INSERT INTO chunks (id, doc_id, chunk_seq, is_headline, "
-            "body_text, embedding, embedding_model_version) "
+            "body_text, embedding, embedding_model_version, version_id, is_current) "
             "VALUES (:id, :doc_id, :seq, :hl, :body, "
-            f"'{_halfvec(embedding)}'::halfvec(1024), :mv) "
+            f"'{_halfvec(embedding)}'::halfvec(1024), :mv, :version_id, true) "
             "ON CONFLICT (id) DO NOTHING"
         ),
         {
@@ -67,6 +88,7 @@ async def insert_chunk(
             "hl": chunk.is_headline,
             "body": chunk.body_text,
             "mv": EMBEDDING_MODEL_VERSION,
+            "version_id": version_id,
         },
     )
 

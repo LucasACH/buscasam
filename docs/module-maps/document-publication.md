@@ -241,14 +241,16 @@ async def write_indexed_candidate(
 # sets document_versions.index_status='indexed', staged_*, headline_fingerprint, indexed_at.
 
 async def write_headline(version_id: int, headline: Chunk, embed: halfvec, fp: str) -> None
-# Used by refresh_headline. Replaces the single is_headline=true chunk for this version.
+# Used by refresh_headline. Replaces the single is_headline=true chunk for this
+# version while retaining its is_current value: a published-current refresh
+# remains searchable; a staged replacement remains unsearchable.
 
 async def mark_failed(version_id: int, error: str) -> None
 # Transaction: index_status='failed', index_error=error,
 # inserts notifications(kind='processing_failed', user_id=owner, ...) with unique event_key.
 ```
 
-Invariants: every author-facing function takes `user_ctx` and applies `document_access.manageable_where` (owner | accepted) before any mutation; cross-user attempts return 404 (ADR-0010 §7). `publish` is the only function that writes to `documents.publication_status`. The 5-attachment cap, the headline-fingerprint check, and the atomic publish SQL (ADR-0006 §6) are not exposed as building blocks. No worker function takes `user_ctx` — workers don't have one.
+Invariants: every author-facing function takes `user_ctx` and applies `document_access.manageable_where` (owner | accepted) before any mutation; cross-user attempts return 404 (ADR-0010 §7). `publish` is the only function that writes to `documents.publication_status` or makes replacement chunks searchable. Chunks are keyed by `(version_id, chunk_seq)`, so current and candidate versions can both hold headline/body sequences; exactly the current version's chunks carry `is_current=true`. The 5-attachment cap, the headline-fingerprint check, and the atomic publish SQL (ADR-0006 §6) are not exposed as building blocks. No worker function takes `user_ctx` — workers don't have one.
 
 **Responsibilities:** Owns every domain mutation across the four document tables and the version-scoped `chunks` rows. Owns the publish transaction's SQL exactly (ADR-0006 §6). Owns the `processing_failed` notification insert. Owns the "post-publish metadata edits persist immediately + enqueue headline reindex" rule (PRD story 28-29). Owns the `publish_gate_reason` projection — server is the source of truth (PRD §"Implementation Decisions").
 
@@ -386,9 +388,9 @@ TanStack Query against `GET /api/documents/{id}/draft`. `refetchInterval`: 3000 
 - **`core/document_access`** — gains `manageable_where(alias: str, user_ctx: UserCtx) -> tuple[str, dict]` returning the WHERE-clause body for owner-or-accepted-coauthor scope (ADR-0010 §8). Joins `document_authors` with `status IN ('owner', 'accepted') AND user_id = :user_id`. Used by every `api/documents` mutation route and by `list_own_documents`. The seam now has **three real adapters** (`invitado_where`, `readable_where`, `manageable_where`); the conceptual seam flagged in auth-sessions.md is now fully materialized.
 - **`api/auth`** — adds `GET /api/users/search?q=<prefix>` guarded by `require_authenticated`. Returns up to ~10 `{user_id, name, email_local, picture_url}` rows from `users` with `ILIKE` prefix on `name` (and possibly `email_local`), excluding the current user. SQL inline in the router per the same "earn a domain module with a second caller" rule that keeps notifications inline.
 - **`components/AreasCascader`** — gains `requireLeaf?: boolean` prop (PRD story 5). When `true`, the cascader's emitted `onChange` only fires after Materia (the leaf) is selected; partial selections render an inline error "Elegí una Materia". Other callers (the search filter) keep `requireLeaf={false}`.
-- **`chunks` schema** — gains `version_id bigint not null references document_versions(id)` and `is_current boolean not null default false` (ADR-0006 §6). The existing partial index `documents_publico_recientes` is unaffected; a new partial index on `chunks(version_id) WHERE is_current` supports the publish flip.
+- **`chunks` schema** — `version_id bigint not null references document_versions(id)` and `is_current boolean not null default false` implement ADR-0006 §6. Sequence identity is version-scoped: `UNIQUE (version_id, chunk_seq)` replaces `UNIQUE (doc_id, chunk_seq)`, permitting an indexed replacement to coexist with the current version before publish.
 - **`AuthNav`** — gains a "Mis trabajos" entry in the authenticated dropdown linking to `/mis-trabajos`. One line.
-- **`api/search` / `core/search_query`** — untouched at the interface level. Publish writes the rows search already reads (`is_current=true` chunks + `publication_status='published'` documents); search-side semantics are unchanged.
+- **`api/search` / `core/search_query`** — unchanged at the public interface; lexical, hybrid-semantic, and `recientes&q=` candidate CTEs now admit only `chunks.is_current=true`. Publish is the atomic point at which replacement text enters reader-visible search.
 
 ## Dependency graph
 
@@ -472,8 +474,9 @@ No cycles. `core/jobs` task bodies depend on `core/documents`, `core/extract`, `
 
 ## Further Notes
 
-- The schema migration is a single alembic revision (PRD §"Further Notes"). It introduces `document_versions`, `document_authors`, `document_attachments`, the ADR-0007 §9 columns on `document_versions`, and adds `version_id` + `is_current` to `chunks`. Existing fixture chunks (search-mvp seeds) need a backfill: synthesize a `document_versions` row per fixture document and point existing chunks at it with `is_current=true`.
+- Migration `0010` introduces version/chunk columns and backfills existing search rows; follow-up migration `0013` makes `chunks.version_id` mandatory and replaces document-scoped chunk sequence uniqueness with version-scoped uniqueness. Any legacy unversioned rows encountered during that upgrade are assigned a synthetic current indexed version before the constraint is tightened.
 - The publish transaction (`core/documents.publish`) is the single SQL block from ADR-0006 §6, run inside one `async with session.begin()` so a crash between flips cannot leave the document partially published (PRD story 37).
+- `write_headline` retains the target version's `is_current` flag. A refresh of the published current version updates searchable headline content; a refresh of an indexed candidate cannot expose it before publish.
 - `headline_fingerprint` is a stable hash (e.g., `sha256(normalize(title) + "\x00" + normalize(abstract))[:32]`) so the publish gate, the post-edit reindex enqueue rule, and the worker can all compute the same value without coordination. `core/chunk.headline_fingerprint` is the single source.
 - `publish_gate_reason` enum values are server-owned: `null` (publishable), `processing`, `reindexing_headline`, `processing_failed`. The frontend maps each to the Spanish copy from the PRD; the server doesn't return user-facing strings.
 - The `processing_failed` notification's `event_key` is `processing_failed:{version_id}` to use the existing unique index (ADR-0010 §9) — retries cannot create duplicates (PRD §"MVP acceptance tests" via ADR-0010 §12).

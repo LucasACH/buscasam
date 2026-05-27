@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from datetime import date
 
+import numpy as np
 import pytest
 from sqlalchemy import text
 
 from buscasam.core import documents, search_query
 from buscasam.core.auth import GUEST, UserCtx
-from buscasam.core.chunk import headline_fingerprint
+from buscasam.core.chunk import Chunk, headline_fingerprint
 from tests.factories import make_document, make_document_author, make_user
 
 
@@ -201,6 +202,87 @@ async def test_published_publico_visible_to_invitado(session):
     assert doc_id in _doc_ids(results)
 
 
+async def test_published_replacement_becomes_searchable_only_on_publish(session):
+    owner = await make_user(session)
+    doc_id, original_id = await _seed_candidate(
+        session,
+        owner_user_id=owner,
+        staged_abstract="resumen original",
+    )
+    await documents.publish(session, _ctx(owner), doc_id)
+    replacement_abstract = "resumen candidato"
+    replacement_id = (
+        await session.execute(
+            text(
+                "INSERT INTO document_versions "
+                "(doc_id, version_no, sha256, original_filename, bytes, mime, "
+                " uploaded_by, index_status, staged_abstract, headline_fingerprint) "
+                "VALUES (:doc, 2, decode(repeat('02', 32), 'hex'), 'replacement.pdf', "
+                " 1, 'application/pdf', :uid, 'indexed', :abstract, :fp) RETURNING id"
+            ),
+            {
+                "doc": doc_id,
+                "uid": owner,
+                "abstract": replacement_abstract,
+                "fp": headline_fingerprint("Mi trabajo", replacement_abstract),
+            },
+        )
+    ).scalar_one()
+    for seq, hl, body in (
+        (0, True, "Mi trabajo resumen candidato"),
+        (1, False, "contenidoreemplazado aprobado"),
+    ):
+        await session.execute(
+            text(
+                "INSERT INTO chunks (doc_id, chunk_seq, is_headline, body_text, "
+                " embedding_model_version, version_id, is_current) "
+                "VALUES (:doc, :seq, :hl, :body, 'm', :version, false)"
+            ),
+            {
+                "doc": doc_id,
+                "seq": seq,
+                "hl": hl,
+                "body": body,
+                "version": replacement_id,
+            },
+        )
+
+    before = await search_query.run(
+        session,
+        filters=search_query.Filters(q="contenidoreemplazado"),
+        user_ctx=GUEST,
+    )
+    assert doc_id not in _doc_ids(before)
+
+    await documents.publish(session, _ctx(owner), doc_id)
+
+    after = await search_query.run(
+        session,
+        filters=search_query.Filters(q="contenidoreemplazado"),
+        user_ctx=GUEST,
+    )
+    old = await search_query.run(
+        session,
+        filters=search_query.Filters(q="cuerpo"),
+        user_ctx=GUEST,
+    )
+    assert doc_id in _doc_ids(after)
+    assert doc_id not in _doc_ids(old)
+    currents = (
+        await session.execute(
+            text(
+                "SELECT id, is_current FROM document_versions "
+                "WHERE id IN (:original, :replacement) ORDER BY id"
+            ),
+            {"original": original_id, "replacement": replacement_id},
+        )
+    ).mappings().all()
+    assert [(r["id"], r["is_current"]) for r in currents] == [
+        (original_id, False),
+        (replacement_id, True),
+    ]
+
+
 async def test_published_interno_visible_to_estudiante_not_invitado(session):
     owner = await make_user(session)
     doc_id, _ = await _seed_candidate(session, owner_user_id=owner)
@@ -242,3 +324,49 @@ async def test_patch_title_after_publish_reindexes_and_stays_published(session):
         )
     ).scalar_one()
     assert status == "published"
+
+
+async def test_completed_published_headline_refresh_remains_searchable(session):
+    owner = await make_user(session)
+    doc_id, version_id = await _seed_candidate(
+        session,
+        owner_user_id=owner,
+        title="marcadorviejo",
+        staged_abstract="resumen",
+    )
+    await documents.publish(session, _ctx(owner), doc_id)
+
+    await documents.update_draft_metadata(
+        session, _ctx(owner), doc_id, title="marcadornuevo"
+    )
+    fp = headline_fingerprint("marcadornuevo", "resumen")
+    await documents.write_headline(
+        session,
+        version_id,
+        Chunk(body_text="marcadornuevo resumen", is_headline=True, chunk_seq=0),
+        np.full(1024, 0.2, dtype=np.float16),
+        fp,
+    )
+
+    fresh = await search_query.run(
+        session,
+        filters=search_query.Filters(q="marcadornuevo"),
+        user_ctx=GUEST,
+    )
+    stale = await search_query.run(
+        session,
+        filters=search_query.Filters(q="marcadorviejo"),
+        user_ctx=GUEST,
+    )
+    headline_current = (
+        await session.execute(
+            text(
+                "SELECT is_current FROM chunks "
+                "WHERE version_id = :version AND is_headline"
+            ),
+            {"version": version_id},
+        )
+    ).scalar_one()
+    assert doc_id in _doc_ids(fresh)
+    assert doc_id not in _doc_ids(stale)
+    assert headline_current is True

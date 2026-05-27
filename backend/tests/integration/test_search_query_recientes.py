@@ -1,5 +1,7 @@
 from datetime import date
 
+from sqlalchemy import text
+
 from buscasam.core import auth, search_query
 from tests.factories import make_chunk, make_document
 
@@ -86,6 +88,51 @@ async def test_recientes_snippet_has_mark_highlights_when_q_set(session):
     snippet = result.rows[0].snippet
     assert "<mark>redes</mark>" in snippet
     assert "<mark>neuronales</mark>" in snippet
+
+
+async def test_recientes_with_query_excludes_indexed_candidate_replacement(session):
+    doc_id = await make_document(
+        session,
+        titulo="Documento vigente",
+        abstract="Resumen publicado.",
+        fecha=date(2024, 6, 1),
+    )
+    await make_chunk(
+        session,
+        doc_id,
+        chunk_seq=0,
+        is_headline=True,
+        body_text="Texto vigente aprobado.",
+    )
+    candidate_id = (
+        await session.execute(
+            text(
+                "INSERT INTO document_versions "
+                "(doc_id, version_no, sha256, original_filename, bytes, mime, "
+                " index_status, is_current) "
+                "VALUES (:doc, 2, decode(repeat('04', 32), 'hex'), 'replacement.pdf', "
+                " 10, 'application/pdf', 'indexed', false) RETURNING id"
+            ),
+            {"doc": doc_id},
+        )
+    ).scalar_one()
+    await session.execute(
+        text(
+            "INSERT INTO chunks "
+            "(doc_id, chunk_seq, is_headline, body_text, embedding_model_version, "
+            " version_id, is_current) "
+            "VALUES (:doc, 1, false, 'recientecandidata reservada', 'm', :version, false)"
+        ),
+        {"doc": doc_id, "version": candidate_id},
+    )
+
+    result = await search_query.run(
+        session,
+        filters=search_query.Filters(q="recientecandidata", orden="recientes"),
+        user_ctx=auth.GUEST,
+    )
+
+    assert result.rows == []
 
 
 async def test_recientes_snippet_is_abstract_prefix_when_q_empty(session):

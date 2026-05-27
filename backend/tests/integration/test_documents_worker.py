@@ -107,6 +107,75 @@ async def test_write_indexed_candidate_inserts_chunks_and_updates_version(sessio
     assert all(r["version_id"] == version_id for r in chunk_rows)
 
 
+async def test_write_indexed_replacement_can_reuse_current_version_chunk_sequences(session):
+    uid = await make_user(session)
+    doc_id = await make_document(session, publication_status="published")
+    await session.execute(
+        text(
+            "INSERT INTO document_authors (doc_id, user_id, display_name, status) "
+            "VALUES (:doc, :uid, 'Owner', 'owner')"
+        ),
+        {"doc": doc_id, "uid": uid},
+    )
+    current_id = (
+        await session.execute(
+            text(
+                "INSERT INTO document_versions "
+                "(doc_id, version_no, sha256, original_filename, bytes, mime, "
+                " uploaded_by, is_current, index_status) "
+                "VALUES (:doc, 1, decode(repeat('01', 32), 'hex'), 'current.pdf', "
+                " 1, 'application/pdf', :uid, true, 'indexed') RETURNING id"
+            ),
+            {"doc": doc_id, "uid": uid},
+        )
+    ).scalar_one()
+    await session.execute(
+        text(
+            "INSERT INTO chunks "
+            "(doc_id, chunk_seq, is_headline, body_text, embedding_model_version, "
+            " version_id, is_current) "
+            "VALUES (:doc, 0, true, 'Current headline', 'm', :version, true)"
+        ),
+        {"doc": doc_id, "version": current_id},
+    )
+    replacement_id = (
+        await session.execute(
+            text(
+                "INSERT INTO document_versions "
+                "(doc_id, version_no, sha256, original_filename, bytes, mime, "
+                " uploaded_by, index_status) "
+                "VALUES (:doc, 2, decode(repeat('02', 32), 'hex'), 'replacement.pdf', "
+                " 1, 'application/pdf', :uid, 'pending') RETURNING id"
+            ),
+            {"doc": doc_id, "uid": uid},
+        )
+    ).scalar_one()
+
+    await documents.write_indexed_candidate(
+        session,
+        replacement_id,
+        body=[],
+        headline=Chunk(body_text="Replacement headline", is_headline=True, chunk_seq=0),
+        embeds=[np.full(1024, 0.2, dtype=np.float16)],
+        meta=IndexableMetadata(abstract="replacement", keywords=[], fecha=None),
+        headline_fingerprint=headline_fingerprint("test doc", "replacement"),
+    )
+
+    chunks = (
+        await session.execute(
+            text(
+                "SELECT version_id, body_text, is_current FROM chunks "
+                "WHERE doc_id = :doc AND chunk_seq = 0 ORDER BY version_id"
+            ),
+            {"doc": doc_id},
+        )
+    ).mappings().all()
+    assert [(r["version_id"], r["is_current"]) for r in chunks] == [
+        (current_id, True),
+        (replacement_id, False),
+    ]
+
+
 async def test_write_indexed_candidate_preserves_staged_fields_edited_during_processing(session):
     """R007: an author who edits staged_* via save-on-blur while the candidate is
     still processing must keep those edits. Extraction fills only still-empty

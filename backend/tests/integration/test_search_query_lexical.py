@@ -1,5 +1,9 @@
+import pytest
+from sqlalchemy import text
+
 from buscasam.core import auth, search_query
-from tests.factories import make_chunk, make_document
+from buscasam.core.auth import UserCtx
+from tests.factories import make_chunk, make_document, make_user
 
 
 async def test_search_lexical_invitado_only(session):
@@ -76,6 +80,55 @@ async def test_search_lexical_snippet_has_mark_highlights(session):
     snippet = result.rows[0].snippet
     assert "<mark>redes</mark>" in snippet
     assert "<mark>neuronales</mark>" in snippet
+
+
+@pytest.mark.parametrize("role", [None, "estudiante", "docente"])
+async def test_search_lexical_excludes_indexed_candidate_replacement(session, role):
+    doc_id = await make_document(
+        session,
+        titulo="Contenido vigente",
+        abstract="Resumen aprobado.",
+    )
+    await make_chunk(
+        session,
+        doc_id,
+        chunk_seq=0,
+        is_headline=True,
+        body_text="Contenido vigente aprobado.",
+    )
+    candidate_id = (
+        await session.execute(
+            text(
+                "INSERT INTO document_versions "
+                "(doc_id, version_no, sha256, original_filename, bytes, mime, "
+                " index_status, is_current) "
+                "VALUES (:doc, 2, decode(repeat('02', 32), 'hex'), 'replacement.pdf', "
+                " 10, 'application/pdf', 'indexed', false) RETURNING id"
+            ),
+            {"doc": doc_id},
+        )
+    ).scalar_one()
+    await session.execute(
+        text(
+            "INSERT INTO chunks "
+            "(doc_id, chunk_seq, is_headline, body_text, embedding_model_version, "
+            " version_id, is_current) "
+            "VALUES (:doc, 1, false, 'filtracioncandidata secreta', 'm', :version, false)"
+        ),
+        {"doc": doc_id, "version": candidate_id},
+    )
+    user_ctx = auth.GUEST
+    if role is not None:
+        user_id = await make_user(session, role=role)
+        user_ctx = UserCtx(user_id=user_id, is_unsam=True, role=role)
+
+    result = await search_query.run(
+        session,
+        filters=search_query.Filters(q="filtracioncandidata"),
+        user_ctx=user_ctx,
+    )
+
+    assert result.rows == []
 
 
 async def test_search_lexical_total_saturates_at_relevance_cap(session):
