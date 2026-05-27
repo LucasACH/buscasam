@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Literal
+from pathlib import Path
+from typing import AsyncIterator, Literal
 
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
@@ -10,17 +11,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from buscasam.api.deps import get_session
 from buscasam.core import auth, blob_store
+from buscasam.core.blob_store import BlobTooLarge
 from buscasam.core.documents import (
     UNSET,
+    AttachmentCapExceeded,
     DocumentNotFound,
     InvalidCoauthorId,
     PublishConflict,
+    add_attachment,
     assert_manageable,
     attach_main_version,
     create_draft,
     get_draft_state,
     list_own_documents,
     publish,
+    remove_attachment,
     update_draft_metadata,
 )
 from buscasam.core.extract import PDFEncryptionError, probe_encrypted
@@ -140,6 +145,13 @@ async def upload_main_file(
     return {}
 
 
+class AttachmentDTO(BaseModel):
+    id: int
+    original_filename: str
+    size_bytes: int
+    mime: str | None
+
+
 class DraftStateDTO(BaseModel):
     title: str
     index_status: str
@@ -149,6 +161,7 @@ class DraftStateDTO(BaseModel):
     index_error: str | None
     publish_gate_reason: str | None
     is_owner: bool
+    attachments: list[AttachmentDTO]
 
 
 class UpdateDraftRequest(BaseModel):
@@ -180,6 +193,15 @@ async def get_draft(
         index_error=state.index_error,
         publish_gate_reason=state.publish_gate_reason,
         is_owner=state.is_owner,
+        attachments=[
+            AttachmentDTO(
+                id=a.id,
+                original_filename=a.original_filename,
+                size_bytes=a.size_bytes,
+                mime=a.mime,
+            )
+            for a in state.attachments
+        ],
     )
 
 
@@ -222,6 +244,87 @@ async def publish_document(
         raise HTTPException(status_code=404)
     except PublishConflict:
         raise HTTPException(status_code=409)
+    return Response(status_code=204)
+
+
+# ADR-0006 §10: attachment extension allowlist (no content sniffing). The
+# component's <input accept=...> mirrors this set.
+_ALLOWED_ATTACHMENT_EXTS = {
+    ".csv", ".json", ".txt", ".py", ".ipynb",
+    ".png", ".jpg", ".jpeg", ".gif", ".zip",
+}
+_MAX_ATTACHMENT_BYTES = 20_000_000
+
+
+async def _file_chunks(file: UploadFile) -> AsyncIterator[bytes]:
+    while True:
+        chunk = await file.read(1 << 20)
+        if not chunk:
+            break
+        yield chunk
+
+
+@router.post(
+    "/documents/{doc_id}/attachments", status_code=201, response_model=AttachmentDTO
+)
+async def post_attachment(
+    doc_id: int,
+    file: UploadFile,
+    user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
+    session: AsyncSession = Depends(get_session),
+) -> AttachmentDTO:
+    # Reject non-authors before streaming bytes to disk (parity with /upload):
+    # an authenticated non-manager should not be able to write blobs to a
+    # document they cannot manage. add_attachment re-checks under a row lock.
+    try:
+        await assert_manageable(session, user_ctx, doc_id)
+    except DocumentNotFound:
+        raise HTTPException(status_code=404)
+
+    filename = file.filename or "adjunto"
+    if Path(filename).suffix.lower() not in _ALLOWED_ATTACHMENT_EXTS:
+        raise HTTPException(status_code=415, detail="Tipo de archivo no permitido")
+
+    try:
+        result = await blob_store.put_stream(
+            _file_chunks(file), max_bytes=_MAX_ATTACHMENT_BYTES
+        )
+    except BlobTooLarge:
+        raise HTTPException(status_code=413, detail="El adjunto supera los 20 MB")
+
+    # Both reject paths below leave the just-written blob for the dedup-safe
+    # orphan sweep (ADR-0006 §12). We deliberately don't delete it inline the
+    # way /upload's 415 path does: the blob is content-addressed and may already
+    # be shared with another row, so an unconditional delete could orphan that.
+    try:
+        att_id = await add_attachment(
+            session, user_ctx, doc_id, result, original_filename=filename
+        )
+    except DocumentNotFound:
+        raise HTTPException(status_code=404)
+    except AttachmentCapExceeded:
+        raise HTTPException(
+            status_code=409, detail={"reason": "attachment_cap_exceeded"}
+        )
+    return AttachmentDTO(
+        id=att_id,
+        original_filename=filename,
+        size_bytes=result.bytes,
+        mime=result.sniffed_mime,
+    )
+
+
+@router.delete("/documents/{doc_id}/attachments/{att_id}", status_code=204)
+async def delete_attachment(
+    doc_id: int,
+    att_id: int,
+    user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    try:
+        await remove_attachment(session, user_ctx, doc_id, att_id)
+    except DocumentNotFound:
+        raise HTTPException(status_code=404)
     return Response(status_code=204)
 
 
