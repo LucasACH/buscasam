@@ -49,6 +49,17 @@ def _headline_lock(version_id: int) -> str:
     return f"headline:v{version_id}"
 
 
+def _coauthor_lock(doc_id: int) -> str:
+    return f"coauthors:d{doc_id}"
+
+
+def coauthor_invite_event_key(doc_id: int, user_id: int) -> str:
+    """Dedup key for coauthor-invite notifications (module map §core/jobs,
+    ADR-0010 §9). The single producer/consumer format: the fan-out inserts
+    under it; core/documents.accept_invitation/decline_invitation mark it read."""
+    return f"coauthor_invite:{doc_id}:{user_id}"
+
+
 # --- Plain async cores (callable by tests + by the task body wrapper). ---
 
 
@@ -166,6 +177,46 @@ async def _run_refresh_headline(
     await documents.write_headline(session, version_id, headline, embed, fp)
 
 
+async def _run_fan_out_coauthor_invites(session: AsyncSession, doc_id: int) -> None:
+    """Insert one coauthor_invite notification per pending registered coautor,
+    deduped on (user_id, event_key). Re-runnable: ON CONFLICT DO NOTHING is the
+    only idempotency mechanism, so retries after partial completion add zero
+    duplicates (module map §core/jobs, PRD story 27)."""
+    rows = (
+        await session.execute(
+            text(
+                "SELECT da.user_id AS user_id, d.titulo AS doc_title, "
+                "       o.display_name AS inviter "
+                "FROM document_authors da "
+                "JOIN documents d ON d.id = da.doc_id "
+                "LEFT JOIN document_authors o "
+                "  ON o.doc_id = da.doc_id AND o.status = 'owner' "
+                "WHERE da.doc_id = :doc_id AND da.status = 'pending' "
+                "  AND da.user_id IS NOT NULL"
+            ),
+            {"doc_id": doc_id},
+        )
+    ).mappings().all()
+    for r in rows:
+        await session.execute(
+            text(
+                "INSERT INTO notifications (user_id, event_key, kind, payload_json) "
+                "VALUES (:uid, :ek, 'coauthor_invite', "
+                "        jsonb_build_object('doc_title', cast(:doc_title as text), "
+                "                           'doc_id', cast(:doc_id as bigint), "
+                "                           'inviter', cast(:inviter as text))) "
+                "ON CONFLICT (user_id, event_key) DO NOTHING"
+            ),
+            {
+                "uid": r["user_id"],
+                "ek": coauthor_invite_event_key(doc_id, r["user_id"]),
+                "doc_title": r["doc_title"],
+                "doc_id": doc_id,
+                "inviter": r["inviter"],
+            },
+        )
+
+
 # --- Procrastinate task bodies (production worker entry points). ---
 #
 # Each body opens its own SQLAlchemy session + TEI client per job. Tests drive
@@ -263,6 +314,18 @@ async def refresh_headline(context: JobContext, version_id: int) -> None:
     )
 
 
+@app.task(queue="default", retry=_DEFAULT_RETRY)
+async def fan_out_coauthor_invites(doc_id: int) -> None:
+    sm, _ = _get_worker_resources()
+    async with sm() as session:
+        try:
+            await _run_fan_out_coauthor_invites(session, doc_id)
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+
 # --- Typed enqueue helpers (ADR-0008 §3, transactional defer §1). ---
 
 
@@ -337,10 +400,12 @@ async def enqueue_refresh_headline(session: AsyncSession, version_id: int) -> No
 async def enqueue_fan_out_coauthor_invites(
     session: AsyncSession, doc_id: int
 ) -> None:
-    """No-op stub at this PRD's window (ADR-0008 §3, module map §core/jobs).
-
-    `core/documents.publish` calls this to fan out invites for any `pending`
-    coauthor rows. PRD #5 fills the task body and the send; until then publish
-    must still call it so the seam exists.
-    """
-    return
+    """Defer the publish-time / post-publish coauthor fan-out (module map
+    §core/jobs). Lock `coauthors:d{doc_id}` (ADR-0008 §7) collapses a duplicate
+    enqueue to a no-op."""
+    await _defer_with_savepoint(
+        fan_out_coauthor_invites,
+        lock=_coauthor_lock(doc_id),
+        session=session,
+        doc_id=doc_id,
+    )
