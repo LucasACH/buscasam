@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
 import { api } from "@/api/client";
 import type { components } from "@/api/schema";
+import { VersionsPanel } from "@/components/VersionsPanel";
 
 import { useDocDetail, type DocDetail } from "./useDocDetail";
 
@@ -178,6 +180,23 @@ function DetailView({ detail, docId }: { detail: DocDetail; docId: number }) {
               </ul>
             </section>
           )}
+
+          {detail.manageable && (
+            <div className="mt-6">
+              <Link
+                href={`/mis-trabajos/${docId}/editar`}
+                className="border-border hover:bg-muted inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium"
+              >
+                Editar
+              </Link>
+            </div>
+          )}
+
+          <VersionsPanel
+            docId={docId}
+            versions={detail.versions}
+            canManage={detail.manageable}
+          />
         </aside>
       </article>
     </main>
