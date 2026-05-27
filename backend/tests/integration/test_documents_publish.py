@@ -143,6 +143,27 @@ async def test_publish_flips_current_and_copies_staged(session):
     assert doc["has_published_at"] is True
 
 
+async def test_publish_enqueues_fan_out_coauthor_invites_in_same_txn(session):
+    """ADR-0008 §1: the fan-out job INSERT is visible from the publish txn."""
+    owner = await make_user(session, role="estudiante")
+    doc_id, _ = await _seed_candidate(session, owner_user_id=owner)
+    ctx = UserCtx(user_id=owner, is_unsam=True, role="estudiante")
+
+    await documents.publish(session, ctx, doc_id)
+
+    row = (
+        await session.execute(
+            text(
+                "SELECT task_name FROM procrastinate_jobs "
+                "WHERE args->>'doc_id' = :did"
+            ),
+            {"did": str(doc_id)},
+        )
+    ).mappings().one_or_none()
+    assert row is not None
+    assert row["task_name"].endswith("fan_out_coauthor_invites")
+
+
 async def test_publish_processing_candidate_conflicts_without_mutating(session):
     owner = await make_user(session, role="estudiante")
     doc_id, version_id = await _seed_candidate(

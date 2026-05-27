@@ -1,8 +1,9 @@
 "use client";
 
+import { useCoauthorInvitation } from "@/lib/useCoauthorInvitation";
 import { useNotifications, type NotificationDTO } from "@/lib/useNotifications";
 
-type CoauthorInvite = { doc_title?: string; inviter?: string };
+type CoauthorInvite = { doc_title?: string; inviter?: string; doc_id?: number };
 type DocumentHidden = { doc_title?: string; reason?: string };
 type DocumentUnhidden = { doc_title?: string; note?: string };
 type ProcessingFailed = { doc_title?: string };
@@ -15,13 +16,47 @@ function Title({ children }: { children: React.ReactNode }) {
   return <span className="text-foreground font-medium">«{children}»</span>;
 }
 
-function CoauthorInviteItem({ payload }: { payload: CoauthorInvite }) {
+function CoauthorInviteItem({
+  payload,
+  unread,
+}: {
+  payload: CoauthorInvite;
+  unread: boolean;
+}) {
+  const { accept, decline } = useCoauthorInvitation();
+  const docId = payload.doc_id;
   return (
-    <p className="text-sm">
-      <span className="font-medium">{payload.inviter ?? "Alguien"}</span> te
-      invitó como coautor en <Title>{payload.doc_title ?? FALLBACK_TITLE}</Title>
-      .
-    </p>
+    <div className="flex flex-col gap-1 text-sm">
+      <p>
+        <span className="font-medium">{payload.inviter ?? "Alguien"}</span> te
+        invitó como coautor en{" "}
+        <Title>{payload.doc_title ?? FALLBACK_TITLE}</Title>.
+      </p>
+      {unread && docId != null && (
+        <div className="flex items-center gap-3 text-xs">
+          <button
+            type="button"
+            onClick={() => accept(docId)}
+            className="text-foreground font-medium underline-offset-4 hover:underline"
+          >
+            Aceptar
+          </button>
+          <button
+            type="button"
+            onClick={() => decline(docId)}
+            className="text-muted-foreground underline-offset-4 hover:underline"
+          >
+            Rechazar
+          </button>
+          <a
+            href={`/docs/${docId}`}
+            className="text-muted-foreground underline-offset-4 hover:underline"
+          >
+            Ver
+          </a>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -52,11 +87,11 @@ function ProcessingFailedItem({ payload }: { payload: ProcessingFailed }) {
   );
 }
 
-function renderBody(item: NotificationDTO) {
+function renderBody(item: NotificationDTO, unread: boolean) {
   const payload = item.payload;
   switch (item.kind) {
     case "coauthor_invite":
-      return <CoauthorInviteItem payload={payload} />;
+      return <CoauthorInviteItem payload={payload} unread={unread} />;
     case "document_hidden":
       return <DocumentHiddenItem payload={payload} />;
     case "document_unhidden":
@@ -75,7 +110,7 @@ export function NotificationItem({ item }: { item: NotificationDTO }) {
     <li
       className={`flex flex-col gap-1 px-3 py-2 ${unread ? "bg-muted/40" : ""}`}
     >
-      {renderBody(item)}
+      {renderBody(item, unread)}
       {unread && (
         <button
           type="button"
