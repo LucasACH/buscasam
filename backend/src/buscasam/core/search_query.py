@@ -97,6 +97,7 @@ def _lexical_candidates_ctes(
             FROM chunks c
             JOIN documents d ON d.id = c.doc_id
             WHERE c.body_tsv @@ plainto_tsquery('es_unaccent', :q)
+              AND c.is_current
               AND {where}
               {filter_clauses}
         ),
@@ -317,7 +318,8 @@ async def _run_hybrid(
                 1 - (c.embedding <=> CAST(:embedding AS halfvec(1024))) AS similarity
             FROM chunks c
             JOIN documents d ON d.id = c.doc_id
-            WHERE {where}
+            WHERE c.is_current
+              AND {where}
               {filter_clauses}
             ORDER BY c.embedding <=> CAST(:embedding AS halfvec(1024))
             LIMIT :sem_chunk_cap

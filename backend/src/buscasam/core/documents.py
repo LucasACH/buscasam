@@ -374,7 +374,7 @@ async def write_headline(
     row = (
         await session.execute(
             text(
-                "SELECT v.doc_id, d.titulo, v.staged_abstract "
+                "SELECT v.doc_id, v.is_current, d.titulo, v.staged_abstract "
                 "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
                 "WHERE v.id = :id FOR UPDATE OF v"
             ),
@@ -401,7 +401,7 @@ async def write_headline(
             "INSERT INTO chunks (doc_id, chunk_seq, is_headline, body_text, "
             "  embedding, embedding_model_version, version_id, is_current) "
             "VALUES (:doc_id, 0, true, :body, "
-            "        cast(:emb as halfvec(1024)), :mv, :vid, false)"
+            "        cast(:emb as halfvec(1024)), :mv, :vid, :is_current)"
         ),
         {
             "doc_id": doc_id,
@@ -409,6 +409,7 @@ async def write_headline(
             "emb": _halfvec_literal(embed),
             "mv": _EMBEDDING_MODEL_VERSION,
             "vid": version_id,
+            "is_current": row["is_current"],
         },
     )
     await session.execute(

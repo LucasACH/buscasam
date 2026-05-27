@@ -155,3 +155,52 @@ def test_0010_upgrade_then_downgrade_then_upgrade(isolated_db):
 
     command.upgrade(cfg, "0010")
     assert _table_exists(url, "document_versions") is True
+
+
+def test_0013_backfills_unversioned_chunks_and_allows_replacement_sequences(isolated_db):
+    url = isolated_db
+    cfg = _alembic_cfg(url)
+
+    command.upgrade(cfg, "0010")
+    doc_id, chunk_id = _seed_document_and_chunk(url)
+
+    command.upgrade(cfg, "0013")
+
+    row = _chunk_row(url, chunk_id)
+    assert row["version_id"] is not None
+    assert row["is_current"] is True
+
+    eng = create_engine(url)
+    try:
+        with eng.begin() as c:
+            assert c.execute(
+                text(
+                    "SELECT is_nullable FROM information_schema.columns "
+                    "WHERE table_name = 'chunks' AND column_name = 'version_id'"
+                )
+            ).scalar_one() == "NO"
+            replacement_id = c.execute(
+                text(
+                    "INSERT INTO document_versions "
+                    "(doc_id, version_no, sha256, original_filename, bytes, mime, "
+                    " index_status) VALUES "
+                    "(:doc, 2, decode(repeat('02', 32), 'hex'), 'replacement.pdf', "
+                    " 1, 'application/pdf', 'indexed') RETURNING id"
+                ),
+                {"doc": doc_id},
+            ).scalar_one()
+            c.execute(
+                text(
+                    "INSERT INTO chunks "
+                    "(doc_id, chunk_seq, is_headline, body_text, "
+                    " embedding_model_version, version_id, is_current) VALUES "
+                    "(:doc, 0, false, 'replacement', 'test', :version, false)"
+                ),
+                {"doc": doc_id, "version": replacement_id},
+            )
+            assert c.execute(
+                text("SELECT count(*) FROM chunks WHERE doc_id = :doc"),
+                {"doc": doc_id},
+            ).scalar_one() == 2
+    finally:
+        eng.dispose()
