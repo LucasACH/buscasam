@@ -22,6 +22,13 @@ if TYPE_CHECKING:
 _EMBEDDING_MODEL_VERSION = "multilingual-e5-large@v1"
 
 
+class _Unset:
+    """Sentinel distinguishing an absent PATCH field from an explicit null."""
+
+
+UNSET = _Unset()
+
+
 def _halfvec_literal(values: np.ndarray) -> str:
     return "[" + ",".join(f"{float(v):.6f}" for v in values) + "]"
 
@@ -428,7 +435,7 @@ async def update_draft_metadata(
     title: str | None = None,
     abstract: str | None = None,
     keywords: list[str] | None = None,
-    fecha: date | None = None,
+    fecha: date | None | _Unset = UNSET,
     visibility: str | None = None,
     area_path: str | None = None,
     document_type: str | None = None,
@@ -484,7 +491,7 @@ async def update_draft_metadata(
     if keywords is not None:
         ver_sets.append("staged_keywords = :keywords")
         ver_params["keywords"] = keywords
-    if fecha is not None:
+    if not isinstance(fecha, _Unset):
         ver_sets.append("staged_fecha = :fecha")
         ver_params["fecha"] = fecha
     if ver_sets:

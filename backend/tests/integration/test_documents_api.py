@@ -159,6 +159,65 @@ async def test_patch_draft_persists_metadata(client, session):
     assert staged == ["redes", "grafos"]
 
 
+async def test_patch_draft_persists_document_fields(client, session):
+    uid = await make_user(session)
+    sid = await _seed_session(session, uid)
+    doc_id, version_id = await _seed_candidate(session, owner_id=uid)
+    await session.commit()
+
+    r = await client.patch(
+        f"/api/documents/{doc_id}",
+        json={
+            "visibility": "interno",
+            "area_path": "escuela.fisica",
+            "document_type": "paper",
+        },
+        headers={"origin": settings.base_url},
+        cookies={auth.SID_COOKIE: _sid_cookie(sid)},
+    )
+
+    assert r.status_code == 204
+    row = (
+        await session.execute(
+            text(
+                "SELECT visibility, area_path::text AS area_path, tipo "
+                "FROM documents WHERE id = :id"
+            ),
+            {"id": doc_id},
+        )
+    ).mappings().one()
+    assert row["visibility"] == "interno"
+    assert row["area_path"] == "escuela.fisica"
+    assert row["tipo"] == "paper"
+
+
+async def test_patch_draft_clears_fecha_with_null(client, session):
+    uid = await make_user(session)
+    sid = await _seed_session(session, uid)
+    doc_id, version_id = await _seed_candidate(session, owner_id=uid)
+    await session.execute(
+        text("UPDATE document_versions SET staged_fecha = '2020-01-01' WHERE id = :id"),
+        {"id": version_id},
+    )
+    await session.commit()
+
+    r = await client.patch(
+        f"/api/documents/{doc_id}",
+        json={"fecha": None},
+        headers={"origin": settings.base_url},
+        cookies={auth.SID_COOKIE: _sid_cookie(sid)},
+    )
+
+    assert r.status_code == 204
+    staged = (
+        await session.execute(
+            text("SELECT staged_fecha FROM document_versions WHERE id = :id"),
+            {"id": version_id},
+        )
+    ).scalar_one()
+    assert staged is None
+
+
 @pytest.mark.parametrize(
     "body",
     [

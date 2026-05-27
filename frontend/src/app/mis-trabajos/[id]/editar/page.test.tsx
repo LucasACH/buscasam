@@ -150,6 +150,15 @@ describe("editar page", () => {
     );
   });
 
+  it("does not PATCH when a field is blurred without changes", async () => {
+    useDraftStateMock.mockReturnValue(draft({}));
+    render(<EditarPage />);
+    fireEvent.blur(screen.getByLabelText("Título"));
+    fireEvent.blur(screen.getByLabelText("Resumen"));
+    await Promise.resolve();
+    expect(apiPatch).not.toHaveBeenCalled();
+  });
+
   it("PATCHes keywords as an array on blur", async () => {
     useDraftStateMock.mockReturnValue(draft({ staged_keywords: ["a"] }));
     render(<EditarPage />);
