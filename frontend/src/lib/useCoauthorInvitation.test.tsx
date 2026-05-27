@@ -66,7 +66,7 @@ describe("useCoauthorInvitation", () => {
     );
   });
 
-  it("404 returns {kind:'gone'} and does not invalidate", async () => {
+  it("404 returns {kind:'gone'} and still invalidates so the stale item refreshes", async () => {
     apiPost.mockResolvedValue({
       error: { detail: "not_found" },
       response: { status: 404 },
@@ -81,15 +81,17 @@ describe("useCoauthorInvitation", () => {
     });
 
     expect(err).toEqual({ kind: "gone" });
-    expect(invalidate).not.toHaveBeenCalled();
+    const invalidatedKeys = invalidate.mock.calls.map((c) => c[0]?.queryKey);
+    expect(invalidatedKeys).toContainEqual(["notifications"]);
   });
 
-  it("non-404 error returns {kind:'network'}", async () => {
+  it("non-404 error returns {kind:'network'} and does not invalidate", async () => {
     apiPost.mockResolvedValue({
       error: { detail: "boom" },
       response: { status: 500 },
     });
-    const { wrapper } = harness();
+    const { client, wrapper } = harness();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
     const { result } = renderHook(() => useCoauthorInvitation(), { wrapper });
 
     let err;
@@ -98,5 +100,6 @@ describe("useCoauthorInvitation", () => {
     });
 
     expect(err).toEqual({ kind: "network" });
+    expect(invalidate).not.toHaveBeenCalled();
   });
 });

@@ -28,10 +28,12 @@ export function useCoauthorInvitation() {
       "/api/coauthor_invitations/{doc_id}/accept",
       { params: { path: { doc_id: docId } } },
     );
-    if (error)
-      return response?.status === 404 ? { kind: "gone" } : { kind: "network" };
+    if (error && response?.status !== 404) return { kind: "network" };
+    // Success or a 404 (row already transitioned / revoked) both mean the
+    // server truth moved: refetch so the stale invite leaves its actionable
+    // state instead of dead-ending on repeat 404s.
     invalidate(docId);
-    return undefined;
+    return error ? { kind: "gone" } : undefined;
   }
 
   async function decline(
@@ -41,10 +43,9 @@ export function useCoauthorInvitation() {
       "/api/coauthor_invitations/{doc_id}/decline",
       { params: { path: { doc_id: docId } } },
     );
-    if (error)
-      return response?.status === 404 ? { kind: "gone" } : { kind: "network" };
+    if (error && response?.status !== 404) return { kind: "network" };
     invalidate(docId);
-    return undefined;
+    return error ? { kind: "gone" } : undefined;
   }
 
   return { accept, decline };
