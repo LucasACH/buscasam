@@ -8,7 +8,6 @@ import pytest
 import pytest_asyncio
 from alembic import command
 from alembic.config import Config
-from procrastinate.schema import SchemaManager
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
@@ -60,15 +59,6 @@ async def engine():
     cfg.set_main_option("sqlalchemy.url", url)
     os.environ["BUSCASAM_DATABASE_URL"] = url
     command.upgrade(cfg, "head")
-
-    # ADR-0008 §10: procrastinate owns its tables; apply its schema to the same DB.
-    # Use psycopg directly to bypass sqlalchemy's %-placeholder interpretation.
-    import psycopg
-
-    sync_url = url.replace("postgresql+psycopg://", "postgresql://", 1)
-    with psycopg.connect(sync_url, autocommit=True) as conn:
-        with conn.cursor() as cur:
-            cur.execute(SchemaManager.get_schema())
 
     engine = create_async_engine(url)
     try:
