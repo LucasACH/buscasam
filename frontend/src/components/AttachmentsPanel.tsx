@@ -8,16 +8,9 @@ import {
   type DraftAttachment,
   type AttachmentMutationError,
 } from "@/app/mis-trabajos/useDraftState";
+import { formatBytes } from "@/lib/utils";
 
 const ACCEPT = ".csv,.json,.txt,.py,.ipynb,.png,.jpg,.jpeg,.gif,.zip";
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${kb.toFixed(kb < 10 ? 1 : 0)} KB`;
-  const mb = kb / 1024;
-  return `${mb.toFixed(mb < 10 ? 1 : 0)} MB`;
-}
 
 export function AttachmentsPanel({
   docId,
@@ -64,7 +57,7 @@ export function AttachmentsPanel({
         {attachments.map((a) => (
           <li key={a.id} className="flex items-center justify-between gap-2">
             <span>
-              {a.original_filename} · {formatSize(a.size_bytes)}
+              {a.original_filename} · {formatBytes(a.size_bytes)}
             </span>
             {canManage && (
               <button

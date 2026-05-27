@@ -4,20 +4,13 @@ import { useState } from "react";
 
 import { useVersionDownload } from "@/app/docs/[id]/useVersionDownload";
 import type { DetailVersion } from "@/app/docs/[id]/useDocDetail";
+import { formatBytes } from "@/lib/utils";
 
 type Props = {
   docId: number;
   versions: DetailVersion[] | undefined;
   canManage: boolean;
 };
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${kb.toFixed(kb < 10 ? 1 : 0)} KB`;
-  const mb = kb / 1024;
-  return `${mb.toFixed(mb < 10 ? 1 : 0)} MB`;
-}
 
 export function VersionsPanel({ docId, versions, canManage }: Props) {
   const download = useVersionDownload(docId);
@@ -53,7 +46,7 @@ export function VersionsPanel({ docId, versions, canManage }: Props) {
             className="border-border flex items-center justify-between gap-3 rounded-lg border p-3"
           >
             <span className="truncate">
-              v{v.n} · {v.original_filename} · {formatSize(v.size_bytes)}
+              v{v.n} · {v.original_filename} · {formatBytes(v.size_bytes)}
               {v.indexed_at && ` · ${v.indexed_at.slice(0, 10)}`}
               {v.is_current && " (actual)"}
             </span>
