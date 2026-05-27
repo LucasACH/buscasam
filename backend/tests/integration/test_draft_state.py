@@ -165,6 +165,54 @@ async def test_update_title_unchanged_does_not_enqueue(session):
     assert not any(n.endswith("refresh_headline") for n in names)
 
 
+async def test_update_abstract_enqueues_reindex_and_gates_reindexing(session):
+    uid, doc_id, version_id = await _seed_candidate(
+        session, staged_abstract="viejo resumen", index_status="indexed"
+    )
+    ctx = _ctx(uid)
+
+    await documents.update_draft_metadata(
+        session, ctx, doc_id, abstract="nuevo resumen"
+    )
+
+    staged = (
+        await session.execute(
+            text("SELECT staged_abstract FROM document_versions WHERE id = :id"),
+            {"id": version_id},
+        )
+    ).scalar_one()
+    assert staged == "nuevo resumen"
+
+    names = await _enqueued_task_names(session, version_id)
+    assert any(n.endswith("refresh_headline") for n in names)
+
+    state = await documents.get_draft_state(session, ctx, doc_id)
+    assert state.publish_gate_reason == "reindexing_headline"
+
+
+async def test_update_fecha_null_clears_and_absent_leaves(session):
+    uid, doc_id, version_id = await _seed_candidate(
+        session, staged_fecha=date(2020, 1, 1), index_status="indexed"
+    )
+    ctx = _ctx(uid)
+
+    async def _staged_fecha():
+        return (
+            await session.execute(
+                text("SELECT staged_fecha FROM document_versions WHERE id = :id"),
+                {"id": version_id},
+            )
+        ).scalar_one()
+
+    # absent (default sentinel) leaves the stored value untouched
+    await documents.update_draft_metadata(session, ctx, doc_id, keywords=["x"])
+    assert await _staged_fecha() == date(2020, 1, 1)
+
+    # explicit null clears it
+    await documents.update_draft_metadata(session, ctx, doc_id, fecha=None)
+    assert await _staged_fecha() is None
+
+
 async def test_update_keywords_only_does_not_enqueue_reindex(session):
     uid, doc_id, version_id = await _seed_candidate(session, index_status="indexed")
     ctx = _ctx(uid)

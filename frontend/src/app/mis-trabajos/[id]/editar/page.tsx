@@ -58,7 +58,7 @@ export default function EditarPage() {
 
 function EditarForm({ docId, state }: { docId: number; state: DraftStateDTO }) {
   const queryClient = useQueryClient();
-  const { register, getValues } = useForm<FormValues>({
+  const { register, getValues, formState } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     mode: "onBlur",
     defaultValues: {
@@ -68,8 +68,11 @@ function EditarForm({ docId, state }: { docId: number; state: DraftStateDTO }) {
       fecha: state.staged_fecha ?? "",
     },
   });
+  const { dirtyFields } = formState;
 
   async function patchField(field: keyof FormValues) {
+    // Skip no-op blurs (e.g. tabbing through untouched fields).
+    if (!dirtyFields[field]) return;
     const v = getValues();
     const body: Record<string, unknown> = {};
     if (field === "titulo") body.title = v.titulo;

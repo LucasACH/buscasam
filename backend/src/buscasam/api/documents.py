@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from buscasam.api.deps import get_session
 from buscasam.core import auth, blob_store
 from buscasam.core.documents import (
+    UNSET,
     DocumentNotFound,
     InvalidCoauthorId,
     assert_manageable,
@@ -192,7 +193,9 @@ async def patch_draft(
             title=body.title,
             abstract=body.abstract,
             keywords=body.keywords,
-            fecha=body.fecha,
+            # Distinguish an absent fecha from an explicit null: only null clears
+            # staged_fecha; omitting it leaves the stored value untouched.
+            fecha=body.fecha if "fecha" in body.model_fields_set else UNSET,
             visibility=body.visibility,
             area_path=body.area_path,
             document_type=body.document_type,
