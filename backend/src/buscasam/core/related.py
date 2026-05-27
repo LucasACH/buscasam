@@ -82,7 +82,7 @@ async def fetch_related(
                 f"  AND ({cand_where}) "
                 f"  AND 1 - (c.embedding <=> (SELECT embedding FROM src)) "
                 f"      >= :min_sim "
-                "ORDER BY similarity DESC "
+                "ORDER BY similarity DESC, d.id "
                 "LIMIT :k"
             ),
             {

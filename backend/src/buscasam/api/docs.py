@@ -1,10 +1,12 @@
-"""Reader-facing document endpoints (issues #43, #44; module map §api/docs).
+"""Reader-facing document endpoints (issues #43, #44, #45; module map §api/docs).
 
-Four endpoints share one UserCtx dep (cookie → invitado on absent), and one
+Five endpoints share one UserCtx dep (cookie → invitado on absent), and one
 uniform 404 envelope across every denial path. Slice 2 adds the manager
 affordances on top of the slice-1 reader surface: the `versions`/`manageable`
 detail fields and the historical-version download (`download_version`), both
-gated on `manageable_where`. The related rail lands in a later PRD slice.
+gated on `manageable_where`. Slice 3 wires `core/related.fetch_related` through
+`settings.min_semantic_similarity`, returning `RelatedDTO[]` or the uniform
+404 envelope.
 """
 from __future__ import annotations
 
@@ -59,7 +61,6 @@ class RelatedDTO(BaseModel):
     area_path: str
     tipo: str
     fecha: str | None  # ISO date; None when documents.fecha is NULL.
-    similarity: float
 
 
 class DetailDTO(BaseModel):
@@ -189,7 +190,6 @@ async def get_doc_related(
             area_path=r.area_path,
             tipo=r.tipo,
             fecha=r.fecha.isoformat() if r.fecha is not None else None,
-            similarity=r.similarity,
         )
         for r in rows
     ]

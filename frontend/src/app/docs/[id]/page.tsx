@@ -220,7 +220,7 @@ function RelatedRail({ docId }: { docId: number }) {
             result={{
               doc_id: r.doc_id,
               titulo: r.titulo,
-              fecha: r.fecha ?? "",
+              fecha: r.fecha,
               area_path: r.area_path,
               tipo: r.tipo,
               autores: r.autores,

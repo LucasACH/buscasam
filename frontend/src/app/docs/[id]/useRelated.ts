@@ -11,7 +11,6 @@ export type Related = {
   area_path: string;
   tipo: string;
   fecha: string | null;
-  similarity: number;
 };
 
 class HttpError extends Error {

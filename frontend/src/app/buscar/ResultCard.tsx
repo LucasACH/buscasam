@@ -8,7 +8,7 @@ type AuthorDisplay = {
 export type ResultCardData = {
   doc_id: number;
   titulo: string;
-  fecha: string;
+  fecha: string | null;
   area_path: string;
   tipo: string;
   abstract?: string | null;
@@ -55,7 +55,7 @@ function renderHighlightedSnippet(snippet: string) {
 }
 
 export function ResultCard({ result }: { result: ResultCardData }) {
-  const year = result.fecha.slice(0, 4);
+  const year = result.fecha ? result.fecha.slice(0, 4) : null;
   const tipo = TIPO_LABEL[result.tipo] ?? result.tipo;
   const visibilityBadge =
     result.visibility && result.visibility !== "publico"
@@ -76,7 +76,7 @@ export function ResultCard({ result }: { result: ResultCardData }) {
         <div className="text-muted-foreground mt-1 text-xs">{autores}</div>
       )}
       <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-        <span>{year}</span>
+        {year && <span>{year}</span>}
         <span>{result.area_path}</span>
         <span>{tipo}</span>
         {visibilityBadge && (

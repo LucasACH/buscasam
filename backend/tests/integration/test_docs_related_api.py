@@ -110,7 +110,7 @@ async def test_returns_200_with_related_list_for_invitado(client, session):
     assert row["tipo"] == "paper"
     assert row["fecha"] == "2024-01-15"
     assert row["autores"] == [{"display_name": "Ada", "user_id": author_id}]
-    assert 0.78 <= row["similarity"] <= 1.0
+    assert "similarity" not in row
 
 
 @pytest.mark.parametrize(
