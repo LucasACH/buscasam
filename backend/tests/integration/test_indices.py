@@ -102,3 +102,28 @@ async def test_partial_btree_chosen_for_invitado_recientes(session):
     plan = "\n".join(plan_lines)
 
     assert "documents_publico_recientes" in plan, plan
+
+
+async def test_document_versions_one_candidate_partial_unique_index(session):
+    """ADR-0011 §2: at most one non-current, non-discarded candidate per doc.
+
+    Asserts the partial unique index exists with the expected WHERE clause —
+    the schema is the database-boundary enforcement; the chokepoint cooperates.
+    """
+    row = (
+        await session.execute(
+            text(
+                "SELECT pg_get_expr(indpred, indrelid) AS pred, indisunique "
+                "FROM pg_index i "
+                "JOIN pg_class c ON c.oid = i.indexrelid "
+                "WHERE c.relname = 'document_versions_one_candidate'"
+            )
+        )
+    ).mappings().one_or_none()
+
+    assert row is not None, "document_versions_one_candidate index is missing"
+    assert row["indisunique"] is True
+    assert _normalize_predicate(row["pred"]) == _normalize_predicate(
+        "is_current = false AND index_status <> 'discarded' "
+        "AND first_published_at IS NULL"
+    ), row["pred"]

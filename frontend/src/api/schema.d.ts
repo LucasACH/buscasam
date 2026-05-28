@@ -670,6 +670,23 @@ export interface components {
             attachments: components["schemas"]["AttachmentDTO"][];
             /** Coauthors */
             coauthors: components["schemas"]["CoauthorRowDTO"][];
+            /** Versions */
+            versions: components["schemas"]["DraftVersionDTO"][];
+        };
+        /** DraftVersionDTO */
+        DraftVersionDTO: {
+            /** N */
+            n: number;
+            /** Original Filename */
+            original_filename: string;
+            /** Mime */
+            mime: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Indexed At */
+            indexed_at: string | null;
+            /** Is Current */
+            is_current: boolean;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
