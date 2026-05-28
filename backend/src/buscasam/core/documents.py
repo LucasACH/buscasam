@@ -61,6 +61,12 @@ class PublishConflict(Exception):
     longer matches current title + staged_abstract (→ 409)."""
 
 
+class NoPublishedVersion(Exception):
+    """replace_main_version on a document without a published current version
+    (→ 409). The inverse of /upload's initial-publication-only entry state
+    (module map §api/documents)."""
+
+
 class AttachmentCapExceeded(Exception):
     """The document already holds the maximum of 5 attachments (→ 409)."""
 
@@ -107,6 +113,29 @@ class CoauthorRow:
 
 
 @dataclass(frozen=True)
+class CandidateState:
+    """In-flight replacement candidate projection for the editar CandidatePanel
+    (module map §core/documents, ADR-0011 §9). `status` is the raw lifecycle
+    collapsed to the three UI states; the Spanish labels live on the frontend."""
+    status: Literal["processing", "ready", "failed"]
+    staged_abstract: str | None
+    staged_keywords: list[str]
+    staged_fecha: date | None
+    can_publish: bool  # owner-only AND publish gate clear
+    can_discard: bool  # manageable-scoped
+    indexed_at: datetime | None
+    error: str | None
+
+
+def _candidate_status(index_status: str) -> Literal["processing", "ready", "failed"]:
+    if index_status == "indexed":
+        return "ready"
+    if index_status == "failed":
+        return "failed"
+    return "processing"  # pending | processing
+
+
+@dataclass(frozen=True)
 class DraftState:
     doc_id: int
     version_id: int
@@ -121,6 +150,7 @@ class DraftState:
     attachments: list[AttachmentInfo]
     coauthors: list[CoauthorRow]
     versions: list[DetailVersion]
+    candidate: CandidateState | None
 
 
 def _publish_gate_reason(index_status: str, fingerprint_matches: bool) -> str | None:
@@ -277,6 +307,103 @@ async def attach_main_version(
 
     # ADR-0008 §1: defer index_document through the active transaction so the
     # version row + the job row commit together.
+    from buscasam.core import jobs
+
+    await jobs.enqueue_index_document(session, version_id)
+
+    return version_id
+
+
+async def replace_main_version(
+    session: AsyncSession,
+    user_ctx: UserCtx,
+    doc_id: int,
+    blob: BlobPutResult,
+    *,
+    original_filename: str,
+) -> int:
+    """Insert a replacement candidate on an already-published document (module
+    map §core/documents). Manageable-scoped; cross-user → DocumentNotFound.
+    Raises NoPublishedVersion when no current published version exists. Discards
+    any pre-existing non-discarded candidate inline so the partial unique index
+    `document_versions_one_candidate` admits the new row, then inserts it
+    (is_current=false, index_status='pending', first_published_at=NULL) with
+    staged_* pre-filled from documents.* and enqueues index_document in the same
+    transaction."""
+    where, params = manageable_where("d", user_ctx)
+    # FOR UPDATE OF d serializes concurrent replaces so the inline-discard +
+    # insert pair cannot race a second uploader against the partial unique index.
+    locked = (
+        await session.execute(
+            text(
+                f"SELECT 1 FROM documents d WHERE d.id = :doc_id AND ({where}) "
+                "FOR UPDATE OF d"
+            ),
+            {"doc_id": doc_id, **params},
+        )
+    ).scalar_one_or_none()
+    if locked is None:
+        raise DocumentNotFound
+
+    has_current = (
+        await session.execute(
+            text(
+                "SELECT 1 FROM document_versions "
+                "WHERE doc_id = :doc_id AND is_current = true"
+            ),
+            {"doc_id": doc_id},
+        )
+    ).scalar_one_or_none()
+    if has_current is None:
+        raise NoPublishedVersion
+
+    # ADR-0011 §2: at most one non-discarded, never-public candidate per doc.
+    # Flip any pre-existing one to 'discarded' so the new insert is admitted.
+    await session.execute(
+        text(
+            "UPDATE document_versions SET index_status = 'discarded' "
+            "WHERE doc_id = :doc_id AND is_current = false "
+            "  AND index_status <> 'discarded' AND first_published_at IS NULL"
+        ),
+        {"doc_id": doc_id},
+    )
+
+    version_no = (
+        await session.execute(
+            text(
+                "SELECT COALESCE(MAX(version_no), 0) + 1 "
+                "FROM document_versions WHERE doc_id = :doc_id"
+            ),
+            {"doc_id": doc_id},
+        )
+    ).scalar_one()
+
+    version_id = (
+        await session.execute(
+            text(
+                "INSERT INTO document_versions "
+                "(doc_id, version_no, sha256, original_filename, bytes, mime, "
+                " uploaded_by, index_status, is_current, "
+                " staged_abstract, staged_keywords, staged_fecha) "
+                "SELECT :doc_id, :version_no, decode(:sha256, 'hex'), :filename, "
+                "       :bytes, :mime, :uid, 'pending', false, "
+                "       d.abstract, d.keywords, d.fecha "
+                "FROM documents d WHERE d.id = :doc_id RETURNING id"
+            ),
+            {
+                "doc_id": doc_id,
+                "version_no": version_no,
+                "sha256": blob.sha256,
+                "filename": original_filename,
+                "bytes": blob.bytes,
+                "mime": blob.sniffed_mime,
+                "uid": user_ctx.user_id,
+            },
+        )
+    ).scalar_one()
+
+    # ADR-0008 §1: enqueue through the active transaction so the version row +
+    # the job row commit together.
     from buscasam.core import jobs
 
     await jobs.enqueue_index_document(session, version_id)
@@ -1016,6 +1143,40 @@ async def get_draft_state(
             {"doc_id": doc_id},
         )
     ).mappings().all()
+    # ADR-0011 §9: the in-flight replacement candidate, if any. The partial
+    # unique index admits at most one (never-public, non-discarded, non-current)
+    # row, so one_or_none is the contract, not a LIMIT.
+    is_owner = row["owner_user_id"] == user_ctx.user_id
+    cand_row = (
+        await session.execute(
+            text(
+                "SELECT v.index_status, v.staged_abstract, v.staged_keywords, "
+                "       v.staged_fecha, v.indexed_at, v.index_error, "
+                "       v.headline_fingerprint, d.titulo "
+                "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
+                "WHERE v.doc_id = :doc_id AND v.is_current = false "
+                "  AND v.index_status <> 'discarded' "
+                "  AND v.first_published_at IS NULL"
+            ),
+            {"doc_id": doc_id},
+        )
+    ).mappings().one_or_none()
+    candidate: CandidateState | None = None
+    if cand_row is not None:
+        cand_matches = cand_row["headline_fingerprint"] == headline_fingerprint(
+            cand_row["titulo"], cand_row["staged_abstract"] or ""
+        )
+        candidate = CandidateState(
+            status=_candidate_status(cand_row["index_status"]),
+            staged_abstract=cand_row["staged_abstract"],
+            staged_keywords=cand_row["staged_keywords"] or [],
+            staged_fecha=cand_row["staged_fecha"],
+            can_publish=is_owner
+            and _publish_gate_reason(cand_row["index_status"], cand_matches) is None,
+            can_discard=True,
+            indexed_at=cand_row["indexed_at"],
+            error=cand_row["index_error"],
+        )
     # Owner row first, then insertion order. The CASE keeps the owner pinned
     # regardless of the row id; document_authors.id is monotonic per insert so
     # ordering by id is the insertion order the module map prescribes.
@@ -1044,7 +1205,7 @@ async def get_draft_state(
         publish_gate_reason=_publish_gate_reason(
             row["index_status"], matches
         ),
-        is_owner=row["owner_user_id"] == user_ctx.user_id,
+        is_owner=is_owner,
         attachments=[
             AttachmentInfo(
                 id=a["id"],
@@ -1074,6 +1235,7 @@ async def get_draft_state(
             )
             for v in version_rows
         ],
+        candidate=candidate,
     )
 
 

@@ -7,6 +7,19 @@ import type { components } from "@/api/schema";
 
 type DraftStateDTO = components["schemas"]["DraftStateDTO"];
 export type DraftAttachment = DraftStateDTO["attachments"][number];
+export type DraftVersion = DraftStateDTO["versions"][number];
+type CandidateDTO = NonNullable<DraftStateDTO["candidate"]>;
+
+export type Candidate = {
+  status: CandidateDTO["status"];
+  statusLabel: string;
+  stagedAbstract: CandidateDTO["staged_abstract"];
+  stagedKeywords: CandidateDTO["staged_keywords"];
+  stagedFecha: CandidateDTO["staged_fecha"];
+  canPublish: boolean;
+  canDiscard: boolean;
+  error: string | null;
+};
 
 export type DraftState = {
   title: DraftStateDTO["title"];
@@ -20,6 +33,9 @@ export type DraftState = {
     gateMessage: string | null;
     canPublish: boolean;
   };
+  isOwner: boolean;
+  candidate: Candidate | null;
+  versions: DraftVersion[];
 };
 
 export type AttachmentMutationError =
@@ -27,6 +43,12 @@ export type AttachmentMutationError =
   | "unsupported_type"
   | "upload_failed"
   | "remove_failed";
+
+export type ReplaceMutationError =
+  | "too_large"
+  | "unsupported_type"
+  | "no_published_version"
+  | "replace_failed";
 
 export const POLL_INTERVAL_MS = 3000;
 
@@ -45,13 +67,33 @@ const GATE_COPY: Record<string, string> = {
   processing_failed: "Falló el procesamiento — revisá tu archivo",
 };
 
+const CANDIDATE_STATUS_LABEL: Record<Candidate["status"], string> = {
+  processing: "Procesando…",
+  ready: "Listo para publicar",
+  failed: "Falló el procesamiento",
+};
+
 const draftQueryKey = (docId: number) => ["draft", docId] as const;
 
 function shouldPoll(state: DraftStateDTO | undefined): boolean {
   return (
     state?.index_status === "processing" ||
-    state?.publish_gate_reason === "reindexing_headline"
+    state?.publish_gate_reason === "reindexing_headline" ||
+    state?.candidate?.status === "processing"
   );
+}
+
+function projectCandidate(c: CandidateDTO): Candidate {
+  return {
+    status: c.status,
+    statusLabel: CANDIDATE_STATUS_LABEL[c.status],
+    stagedAbstract: c.staged_abstract,
+    stagedKeywords: c.staged_keywords,
+    stagedFecha: c.staged_fecha,
+    canPublish: c.can_publish,
+    canDiscard: c.can_discard,
+    error: c.error,
+  };
 }
 
 function useDraftQuery(docId: number) {
@@ -85,12 +127,37 @@ function projectDraftState(state: DraftStateDTO): DraftState {
         : null,
       canPublish: state.publish_gate_reason === null && state.is_owner,
     },
+    isOwner: state.is_owner,
+    candidate: state.candidate ? projectCandidate(state.candidate) : null,
+    versions: state.versions,
   };
 }
 
 export function useDraftState(docId: number) {
   const query = useDraftQuery(docId);
   const queryClient = useQueryClient();
+
+  async function replace(
+    file: File,
+  ): Promise<ReplaceMutationError | undefined> {
+    // Generated multipart bodies model the file as a string placeholder, so
+    // the runtime File upload stays a direct browser request to FastAPI.
+    const form = new FormData();
+    form.append("file", file);
+    const response = await fetch(`/api/documents/${docId}/replace`, {
+      method: "POST",
+      credentials: "same-origin",
+      body: form,
+    });
+    if (response.status === 413) return "too_large";
+    if (response.status === 415) return "unsupported_type";
+    if (response.status === 409) return "no_published_version";
+    if (response.status !== 202) return "replace_failed";
+    // Optimistically poke the panel into its processing state; the next poll
+    // picks up the real candidate row.
+    await queryClient.invalidateQueries({ queryKey: draftQueryKey(docId) });
+    return undefined;
+  }
 
   return {
     state: query.data ? projectDraftState(query.data) : undefined,
@@ -99,6 +166,7 @@ export function useDraftState(docId: number) {
     refresh: async () => {
       await queryClient.invalidateQueries({ queryKey: draftQueryKey(docId) });
     },
+    replace,
   };
 }
 

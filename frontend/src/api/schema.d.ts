@@ -259,6 +259,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/documents/{doc_id}/replace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replace Main File */
+        post: operations["replace_main_file_api_documents__doc_id__replace_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/documents/{doc_id}/draft": {
         parameters: {
             query?: never;
@@ -471,13 +488,13 @@ export interface paths {
             cookie?: never;
         };
         /** Download Version */
-        get: operations["download_version_api_docs__doc_id__versions__n__download_head"];
+        get: operations["download_version_api_docs__doc_id__versions__n__download_get"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         /** Download Version */
-        head: operations["download_version_api_docs__doc_id__versions__n__download_head"];
+        head: operations["download_version_api_docs__doc_id__versions__n__download_get"];
         patch?: never;
         trace?: never;
     };
@@ -515,10 +532,37 @@ export interface components {
             /** File */
             file: string;
         };
+        /** Body_replace_main_file_api_documents__doc_id__replace_post */
+        Body_replace_main_file_api_documents__doc_id__replace_post: {
+            /** File */
+            file: string;
+        };
         /** Body_upload_main_file_api_documents__doc_id__upload_post */
         Body_upload_main_file_api_documents__doc_id__upload_post: {
             /** File */
             file: string;
+        };
+        /** CandidateStateDTO */
+        CandidateStateDTO: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "processing" | "ready" | "failed";
+            /** Staged Abstract */
+            staged_abstract: string | null;
+            /** Staged Keywords */
+            staged_keywords: string[];
+            /** Staged Fecha */
+            staged_fecha: string | null;
+            /** Can Publish */
+            can_publish: boolean;
+            /** Can Discard */
+            can_discard: boolean;
+            /** Indexed At */
+            indexed_at: string | null;
+            /** Error */
+            error: string | null;
         };
         /** CoauthorRowDTO */
         CoauthorRowDTO: {
@@ -672,6 +716,7 @@ export interface components {
             coauthors: components["schemas"]["CoauthorRowDTO"][];
             /** Versions */
             versions: components["schemas"]["DraftVersionDTO"][];
+            candidate: components["schemas"]["CandidateStateDTO"] | null;
         };
         /** DraftVersionDTO */
         DraftVersionDTO: {
@@ -1314,6 +1359,43 @@ export interface operations {
             };
         };
     };
+    replace_main_file_api_documents__doc_id__replace_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_replace_main_file_api_documents__doc_id__replace_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_draft_api_documents__doc_id__draft_get: {
         parameters: {
             query?: never;
@@ -1680,7 +1762,7 @@ export interface operations {
             };
         };
     };
-    download_version_api_docs__doc_id__versions__n__download_head: {
+    download_version_api_docs__doc_id__versions__n__download_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1712,7 +1794,7 @@ export interface operations {
             };
         };
     };
-    download_version_api_docs__doc_id__versions__n__download_head: {
+    download_version_api_docs__doc_id__versions__n__download_get: {
         parameters: {
             query?: never;
             header?: never;
