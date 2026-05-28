@@ -4,6 +4,8 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
+import time
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -71,3 +73,24 @@ async def test_put_stream_mime_sniff(blob_root):
     pdf_header = b"%PDF-1.4 " + b"\x00" * 2048
     result = await blob_store.put_stream(_stream(pdf_header), max_bytes=10_000)
     assert result.sniffed_mime == "application/pdf"
+
+
+async def test_iter_orphan_candidates_skips_tmp_staging_dir(blob_root):
+    put = await blob_store.put_stream(_stream(b"stored blob"), max_bytes=1024)
+    old = time.time() - 25 * 3600
+    os.utime(blob_store.local_path(put.sha256), (old, old))
+
+    tmp = blob_root / ".tmp"
+    tmp.mkdir(exist_ok=True)
+    partial = tmp / "abcd.partial"
+    partial.write_bytes(b"in flight")
+    os.utime(partial, (old, old))
+
+    seen = [
+        sha
+        async for sha in blob_store.iter_orphan_candidates(
+            min_age=timedelta(hours=24)
+        )
+    ]
+
+    assert seen == [put.sha256]

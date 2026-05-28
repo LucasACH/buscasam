@@ -10,6 +10,8 @@ import asyncio
 import io
 import logging
 import zipfile
+from contextlib import asynccontextmanager
+from datetime import timedelta
 
 import httpx
 from pdfminer.pdfparser import PDFSyntaxError
@@ -39,6 +41,18 @@ app = _make_app()
 # ADR-0008 §5: max 3 attempts; index/ocr base 60s, headline base 30s; exponential.
 _DEFAULT_RETRY = RetryStrategy(max_attempts=3, wait=60, exponential_wait=True)
 _HEADLINE_RETRY = RetryStrategy(max_attempts=3, wait=30, exponential_wait=True)
+# ADR-0008 §5: maintenance jobs retry 3× with exponential backoff, base 5 min.
+_MAINT_RETRY = RetryStrategy(max_attempts=3, wait=300, exponential_wait=True)
+
+# Daily, off-peak. Any live worker may defer; Procrastinate records one defer
+# per period (ADR-0008 §9).
+_PURGE_CRON = "0 3 * * *"
+_SWEEP_CRON = "30 3 * * *"
+
+# Single Postgres advisory-lock namespace shared with ADR-0009 backups, so blob
+# deletion cannot race a backup recovery point (ADR-0008 §9, ADR-0006 §13). Any
+# new maintenance/backup job that touches blobs must take this same key.
+_MAINTENANCE_LOCK_KEY = 0x6273_6D6E  # "bsmn"
 
 
 def _index_lock(version_id: int) -> str:
@@ -217,6 +231,52 @@ async def _run_fan_out_coauthor_invites(session: AsyncSession, doc_id: int) -> N
         )
 
 
+@asynccontextmanager
+async def _with_maintenance_lock(session: AsyncSession):
+    """Serialize blob-touching maintenance against ADR-0009 backup recovery
+    points via the shared advisory-lock namespace (ADR-0008 §9). The lock is
+    transaction-scoped, so it auto-releases when the body commits or rolls
+    back — no explicit unlink path to leak."""
+    await session.execute(
+        text("SELECT pg_advisory_xact_lock(:k)"), {"k": _MAINTENANCE_LOCK_KEY}
+    )
+    yield
+
+
+async def _run_purge_deleted(session: AsyncSession) -> int:
+    """Hard-delete documents whose 180-día retention window has elapsed
+    (ADR-0006 §12, module map §core/jobs). `ON DELETE CASCADE` collects
+    versions, attachments, and chunks. In-window and never-deleted documents
+    are untouched; idempotent (a retried run deletes only rows still matching
+    the predicate). Returns the rowcount for the structured operator log."""
+    result = await session.execute(
+        text(
+            "DELETE FROM documents "
+            "WHERE soft_deleted_at < now() - INTERVAL '180 days'"
+        )
+    )
+    return result.rowcount
+
+
+# ADR-0006 §12: skip blobs whose final-path mtime is younger than this grace,
+# so an in-flight upload (renamed into place but not yet committed to a row)
+# is never reclaimed.
+_BLOB_GRACE = timedelta(hours=24)
+
+
+async def _run_sweep_orphan_blobs(session: AsyncSession) -> int:
+    """Reclaim past-grace blobs no live row references (ADR-0006 §12, module
+    map §core/jobs). Drives `blob_store.iter_orphan_candidates` into the
+    existing per-sha `discard_if_unreferenced`, which skips a still-referenced
+    sha and unlinks missing_ok — so a retried run neither double-deletes nor
+    errors. Returns the candidate count for the structured operator log."""
+    count = 0
+    async for sha in blob_store.iter_orphan_candidates(min_age=_BLOB_GRACE):
+        await blob_store.discard_if_unreferenced(session, sha)
+        count += 1
+    return count
+
+
 # --- Procrastinate task bodies (production worker entry points). ---
 #
 # Each body opens its own SQLAlchemy session + TEI client per job. Tests drive
@@ -314,6 +374,33 @@ async def refresh_headline(context: JobContext, version_id: int) -> None:
     )
 
 
+async def _run_maintenance(runner) -> None:
+    """Shared body for the periodic maintenance tasks: open a worker session,
+    take the maintenance advisory lock, run the core, commit. The advisory lock
+    releases with the transaction (ADR-0008 §9)."""
+    sm, _ = _get_worker_resources()
+    async with sm() as session:
+        try:
+            async with _with_maintenance_lock(session):
+                await runner(session)
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+
+@app.periodic(cron=_PURGE_CRON)
+@app.task(queue="default", retry=_MAINT_RETRY)
+async def purge_deleted(timestamp: int) -> None:
+    await _run_maintenance(_run_purge_deleted)
+
+
+@app.periodic(cron=_SWEEP_CRON)
+@app.task(queue="default", retry=_MAINT_RETRY)
+async def sweep_orphan_blobs(timestamp: int) -> None:
+    await _run_maintenance(_run_sweep_orphan_blobs)
+
+
 @app.task(queue="default", retry=_DEFAULT_RETRY)
 async def fan_out_coauthor_invites(doc_id: int) -> None:
     sm, _ = _get_worker_resources()
@@ -394,6 +481,23 @@ async def enqueue_refresh_headline(session: AsyncSession, version_id: int) -> No
         lock=_headline_lock(version_id),
         session=session,
         version_id=version_id,
+    )
+
+
+async def enqueue_purge_deleted(session: AsyncSession) -> None:
+    """Lock `maintenance:purge` (ADR-0008 §7); AlreadyEnqueued → no-op.
+    `timestamp=0` is the periodic-task arg supplied for a manual defer (the
+    periodic deferrer passes the period timestamp; the body ignores it)."""
+    await _defer_with_savepoint(
+        purge_deleted, lock="maintenance:purge", session=session, timestamp=0
+    )
+
+
+async def enqueue_sweep_orphan_blobs(session: AsyncSession) -> None:
+    """Lock `maintenance:orphan` (ADR-0008 §7); AlreadyEnqueued → no-op.
+    `timestamp=0` mirrors `enqueue_purge_deleted` (periodic-task arg)."""
+    await _defer_with_savepoint(
+        sweep_orphan_blobs, lock="maintenance:orphan", session=session, timestamp=0
     )
 
 
