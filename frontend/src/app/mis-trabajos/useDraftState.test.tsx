@@ -24,6 +24,22 @@ function wrapper() {
   return Wrapper;
 }
 
+type CandidateDTO = NonNullable<DraftStateDTO["candidate"]>;
+
+function candidate(over: Partial<CandidateDTO> = {}): CandidateDTO {
+  return {
+    status: "processing",
+    staged_abstract: null,
+    staged_keywords: [],
+    staged_fecha: null,
+    can_publish: false,
+    can_discard: true,
+    indexed_at: null,
+    error: null,
+    ...over,
+  };
+}
+
 function returns(state: Partial<DraftStateDTO>) {
   const body: DraftStateDTO = {
     title: "Doc",
@@ -37,6 +53,7 @@ function returns(state: Partial<DraftStateDTO>) {
     attachments: [],
     coauthors: [],
     versions: [],
+    candidate: null,
     ...state,
   };
   apiGet.mockResolvedValue({ data: body, error: undefined });
@@ -143,6 +160,90 @@ describe("useDraftState", () => {
     await vi.advanceTimersByTimeAsync(9000);
 
     expect(apiGet.mock.calls.length).toBe(initial);
+  });
+
+  it("projects a ready candidate to Spanish label", async () => {
+    returns({
+      candidate: candidate({
+        status: "ready",
+        can_publish: true,
+        staged_abstract: "Nuevo resumen",
+      }),
+    });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(result.current.state?.candidate).toMatchObject({
+      status: "ready",
+      statusLabel: "Listo para publicar",
+      canPublish: true,
+      stagedAbstract: "Nuevo resumen",
+    });
+  });
+
+  it("exposes a null candidate when none is in flight", async () => {
+    returns({ candidate: null });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(result.current.state?.candidate).toBeNull();
+  });
+
+  it("polls every 3s while a candidate is processing", async () => {
+    returns({
+      index_status: "indexed",
+      publish_gate_reason: null,
+      candidate: candidate({ status: "processing" }),
+    });
+    renderHook(() => useDraftState(1), { wrapper: wrapper() });
+
+    await vi.advanceTimersByTimeAsync(0);
+    const initial = apiGet.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(3000);
+
+    expect(apiGet.mock.calls.length).toBeGreaterThan(initial);
+  });
+
+  it("replace posts multipart and invalidates the draft query", async () => {
+    returns({});
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ status: 202 });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    const file = new File(["%PDF-1.4"], "nueva.pdf", {
+      type: "application/pdf",
+    });
+    const error = await result.current.replace(file);
+
+    expect(error).toBeUndefined();
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/documents/1/replace",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("replace maps rejection statuses to typed errors", async () => {
+    returns({});
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    const file = new File(["x"], "f.pdf", { type: "application/pdf" });
+
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ status: 413 });
+    expect(await result.current.replace(file)).toBe("too_large");
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ status: 415 });
+    expect(await result.current.replace(file)).toBe("unsupported_type");
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ status: 409 });
+    expect(await result.current.replace(file)).toBe("no_published_version");
   });
 });
 

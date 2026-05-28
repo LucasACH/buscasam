@@ -11,9 +11,15 @@ import { toast } from "sonner";
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { AttachmentsPanel } from "@/components/AttachmentsPanel";
+import { CandidatePanel } from "@/components/CandidatePanel";
 import { CoauthorsPanel } from "@/components/CoauthorsPanel";
+import { VersionsPanel } from "@/components/VersionsPanel";
 import { useUser } from "@/lib/useUser";
-import { useDraftState, type DraftState } from "../../useDraftState";
+import {
+  useDraftState,
+  type DraftState,
+  type ReplaceMutationError,
+} from "../../useDraftState";
 
 const formSchema = z.object({
   titulo: z.string().min(1, "El título es obligatorio"),
@@ -29,7 +35,7 @@ export default function EditarPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const docId = Number(params.id);
-  const { state, isLoading, refresh } = useDraftState(docId);
+  const { state, isLoading, refresh, replace } = useDraftState(docId);
 
   useEffect(() => {
     if (isInvitado) router.replace(`/login?next=/mis-trabajos/${docId}/editar`);
@@ -47,6 +53,7 @@ export default function EditarPage() {
       docId={docId}
       state={state}
       refresh={refresh}
+      replace={replace}
     />
   );
 }
@@ -55,10 +62,12 @@ function EditarForm({
   docId,
   state,
   refresh,
+  replace,
 }: {
   docId: number;
   state: DraftState;
   refresh: () => Promise<void>;
+  replace: (file: File) => Promise<ReplaceMutationError | undefined>;
 }) {
   const router = useRouter();
   const [publishing, setPublishing] = useState(false);
@@ -210,6 +219,20 @@ function EditarForm({
       </div>
 
       <div className="mt-8">
+        <CandidatePanel
+          docId={docId}
+          canPublish={state.isOwner}
+          candidate={state.candidate}
+          replace={replace}
+          refresh={refresh}
+        />
+      </div>
+
+      <div className="mt-8">
+        <VersionsPanel docId={docId} versions={state.versions} canManage />
+      </div>
+
+      <div className="mt-8">
         {/* The draft state only loads for manageable users (owner + accepted
             coauthors); reaching this page means the user can manage attachments. */}
         <AttachmentsPanel docId={docId} canManage />
@@ -219,22 +242,28 @@ function EditarForm({
         <CoauthorsPanel docId={docId} />
       </div>
 
-      <div className="mt-8">
-        <Button
-          disabled={!lifecycle.canPublish || publishing}
-          onClick={onPublish}
-        >
-          Publicar
-        </Button>
-        {lifecycle.gateMessage && (
-          <p
-            data-testid="gate-reason"
-            className="text-muted-foreground mt-2 text-sm"
+      {/* Initial-publication affordance only. Once the doc has a published
+          version (state.versions non-empty), CandidatePanel owns the
+          candidate Publicar — keeping this here too would show two Publicar
+          buttons and let a click re-publish the current version. */}
+      {state.versions.length === 0 && (
+        <div className="mt-8">
+          <Button
+            disabled={!lifecycle.canPublish || publishing}
+            onClick={onPublish}
           >
-            {lifecycle.gateMessage}
-          </p>
-        )}
-      </div>
+            Publicar
+          </Button>
+          {lifecycle.gateMessage && (
+            <p
+              data-testid="gate-reason"
+              className="text-muted-foreground mt-2 text-sm"
+            >
+              {lifecycle.gateMessage}
+            </p>
+          )}
+        </div>
+      )}
     </main>
   );
 }

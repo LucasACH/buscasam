@@ -42,6 +42,7 @@ function returns(overrides: Partial<DraftStateDTO> = {}) {
       { user_id: 1, display_name: "Ada", email_local: "ada", status: "owner" },
     ],
     versions: [],
+    candidate: null,
     ...overrides,
   };
   apiGet.mockResolvedValue({ data: body, error: undefined });
