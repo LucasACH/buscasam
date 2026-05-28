@@ -41,6 +41,7 @@ function returns(overrides: Partial<DraftStateDTO> = {}) {
     coauthors: [
       { user_id: 1, display_name: "Ada", email_local: "ada", status: "owner" },
     ],
+    versions: [],
     ...overrides,
   };
   apiGet.mockResolvedValue({ data: body, error: undefined });

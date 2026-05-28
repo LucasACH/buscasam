@@ -23,8 +23,11 @@ Replacement of a document's main file is modeled as a candidate version whose li
    ```sql
    CREATE UNIQUE INDEX document_versions_one_candidate
      ON document_versions (doc_id)
-     WHERE is_current = false AND index_status <> 'discarded';
+     WHERE is_current = false AND index_status <> 'discarded'
+           AND first_published_at IS NULL;
    ```
+
+   The `first_published_at IS NULL` clause scopes the invariant to never-public candidates. Without it the predicate also matches a previously-published, no-longer-current version (which publish leaves at `is_current = false, index_status = 'indexed'` on a replacement, §3) — making the publish current-flip violate the index. A candidate is by definition never-public, so the stamp is the correct discriminator (slice 1, migration 0014).
 
    Inserting a new candidate while another non-discarded candidate exists is a primary-key-like violation: the API contract forbids it, the schema enforces it, and the `core/documents.replace_main_version` chokepoint transitions any pre-existing candidate to `discarded` (inside the same transaction as the insert) so the partial index admits the new row.
 

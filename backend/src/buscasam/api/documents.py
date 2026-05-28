@@ -170,6 +170,15 @@ class CoauthorRowDTO(BaseModel):
     status: CoauthorStatus
 
 
+class DraftVersionDTO(BaseModel):
+    n: int
+    original_filename: str
+    mime: str
+    size_bytes: int
+    indexed_at: str | None  # ISO datetime; None when never indexed.
+    is_current: bool
+
+
 class DraftStateDTO(BaseModel):
     title: str
     index_status: str
@@ -181,6 +190,7 @@ class DraftStateDTO(BaseModel):
     is_owner: bool
     attachments: list[AttachmentDTO]
     coauthors: list[CoauthorRowDTO]
+    versions: list[DraftVersionDTO]
 
 
 class InviteCoauthorRequest(BaseModel):
@@ -233,6 +243,19 @@ async def get_draft(
                 status=c.status,
             )
             for c in state.coauthors
+        ],
+        versions=[
+            DraftVersionDTO(
+                n=v.n,
+                original_filename=v.original_filename,
+                mime=v.mime,
+                size_bytes=v.size_bytes,
+                indexed_at=(
+                    v.indexed_at.isoformat() if v.indexed_at is not None else None
+                ),
+                is_current=v.is_current,
+            )
+            for v in state.versions
         ],
     )
 

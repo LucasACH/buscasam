@@ -309,6 +309,42 @@ async def test_get_draft_reports_is_owner(client, session):
     assert r_coauthor.json()["is_owner"] is False
 
 
+async def test_get_draft_versions_lists_published_excludes_candidate(client, session):
+    """ADR-0011 §4 regression: a manageable caller's draft `versions` lists
+    every previously published row (by 1-based n) and omits a never-public
+    candidate."""
+    uid = await make_user(session)
+    sid = await _seed_session(session, uid)
+    doc_id, _ = await _seed_candidate(session, owner_id=uid)
+    # _seed_candidate's version_no=1 row is the draft's own candidate
+    # (first_published_at IS NULL). Add two previously published rows.
+    await session.execute(
+        text(
+            "INSERT INTO document_versions "
+            "(doc_id, version_no, sha256, original_filename, bytes, mime, "
+            " index_status, is_current, first_published_at) VALUES "
+            "(:d, 2, decode('22', 'hex'), 'published-v1.pdf', 1, 'application/pdf', "
+            " 'indexed', false, now()), "
+            "(:d, 3, decode('33', 'hex'), 'published-v2.pdf', 1, 'application/pdf', "
+            " 'indexed', true, now())"
+        ),
+        {"d": doc_id},
+    )
+    await session.commit()
+
+    r = await client.get(
+        f"/api/documents/{doc_id}/draft",
+        cookies={auth.SID_COOKIE: _sid_cookie(sid)},
+    )
+
+    assert r.status_code == 200
+    versions = r.json()["versions"]
+    assert [(v["n"], v["original_filename"]) for v in versions] == [
+        (1, "published-v1.pdf"),
+        (2, "published-v2.pdf"),
+    ]
+
+
 async def test_publish_processing_candidate_returns_409(client, session):
     uid = await make_user(session)
     sid = await _seed_session(session, uid)
