@@ -12,6 +12,7 @@ import { CandidatePanel } from "./CandidatePanel";
 
 const DOC_ID = 7;
 const replace = vi.fn();
+const discard = vi.fn();
 const refresh = vi.fn();
 
 type Candidate = {
@@ -46,6 +47,7 @@ function wrap(cand: Candidate | null, canPublish = true) {
       canPublish={canPublish}
       candidate={cand}
       replace={replace}
+      discard={discard}
       refresh={refresh}
     />,
   );
@@ -55,6 +57,8 @@ describe("CandidatePanel", () => {
   beforeEach(() => {
     replace.mockReset();
     replace.mockResolvedValue(undefined);
+    discard.mockReset();
+    discard.mockResolvedValue(undefined);
     refresh.mockReset();
     refresh.mockResolvedValue(undefined);
     apiPost.mockReset();
@@ -167,5 +171,43 @@ describe("CandidatePanel", () => {
       params: { path: { doc_id: DOC_ID } },
     });
     await waitFor(() => expect(refresh).toHaveBeenCalled());
+  });
+
+  it.each(["processing", "ready", "failed"] as const)(
+    "offers Descartar in the %s state when canDiscard",
+    (status) => {
+      wrap(candidate({ status, canDiscard: true, canPublish: status === "ready" }));
+
+      expect(
+        screen.getByRole("button", { name: "Descartar" }),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it("hides Descartar when canDiscard is false", () => {
+    wrap(candidate({ status: "processing", canDiscard: false }));
+
+    expect(
+      screen.queryByRole("button", { name: "Descartar" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("delegates a Descartar click to discard()", async () => {
+    const user = userEvent.setup();
+    wrap(candidate({ status: "failed", canDiscard: true }));
+
+    await user.click(screen.getByRole("button", { name: "Descartar" }));
+
+    expect(discard).toHaveBeenCalledOnce();
+  });
+
+  it("toasts when discard() fails", async () => {
+    const user = userEvent.setup();
+    discard.mockResolvedValue("discard_failed");
+    wrap(candidate({ status: "failed", canDiscard: true }));
+
+    await user.click(screen.getByRole("button", { name: "Descartar" }));
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith("No se pudo descartar"));
   });
 });

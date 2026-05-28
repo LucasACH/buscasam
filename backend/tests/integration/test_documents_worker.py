@@ -28,6 +28,9 @@ async def _make_candidate_version(session, *, owner_id: int, doc_id: int | None 
         {"doc_id": doc_id, "uid": owner_id},
     )
     sha = secrets.token_bytes(32)
+    # 'processing' is the precondition the worker establishes via _begin_indexing
+    # before calling write_indexed_candidate / write_headline / mark_failed; the
+    # writers are gated on it (ADR-0011 §5), so seed it directly here.
     version_id = (
         await session.execute(
             text(
@@ -35,7 +38,7 @@ async def _make_candidate_version(session, *, owner_id: int, doc_id: int | None 
                 "(doc_id, version_no, sha256, original_filename, bytes, mime, "
                 " uploaded_by, index_status) "
                 "VALUES (:doc_id, 1, :sha, 'file.pdf', 1024, 'application/pdf', "
-                ":uid, 'pending') RETURNING id"
+                ":uid, 'processing') RETURNING id"
             ),
             {"doc_id": doc_id, "sha": sha, "uid": owner_id},
         )
@@ -145,7 +148,7 @@ async def test_write_indexed_replacement_can_reuse_current_version_chunk_sequenc
                 "(doc_id, version_no, sha256, original_filename, bytes, mime, "
                 " uploaded_by, index_status) "
                 "VALUES (:doc, 2, decode(repeat('02', 32), 'hex'), 'replacement.pdf', "
-                " 1, 'application/pdf', :uid, 'pending') RETURNING id"
+                " 1, 'application/pdf', :uid, 'processing') RETURNING id"
             ),
             {"doc": doc_id, "uid": uid},
         )

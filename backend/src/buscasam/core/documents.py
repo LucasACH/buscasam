@@ -67,6 +67,12 @@ class NoPublishedVersion(Exception):
     (module map §api/documents)."""
 
 
+class NoCandidateToDiscard(Exception):
+    """discard_candidate on a document with no in-flight candidate (→ 404):
+    none ever uploaded, or it was already discarded / published (module map
+    §core/documents, ADR-0011 §9)."""
+
+
 class AttachmentCapExceeded(Exception):
     """The document already holds the maximum of 5 attachments (→ 409)."""
 
@@ -411,6 +417,44 @@ async def replace_main_version(
     return version_id
 
 
+async def discard_candidate(
+    session: AsyncSession, user_ctx: UserCtx, doc_id: int
+) -> None:
+    """Explicit descartar of the in-flight replacement candidate (module map
+    §core/documents, ADR-0011 §9). Manageable-scoped; cross-user →
+    DocumentNotFound. Selects the candidate (is_current=false,
+    index_status<>'discarded', never-public) FOR UPDATE — the same predicate the
+    `document_versions_one_candidate` index admits, so at most one row matches —
+    and raises NoCandidateToDiscard when none. Sets index_status='discarded' and
+    deletes that version's chunks (always is_current=false, so search visibility
+    is unchanged). Leaves the document_versions row and the blob (orphan sweep
+    handles blob cleanup)."""
+    await assert_manageable(session, user_ctx, doc_id)
+    candidate_vid = (
+        await session.execute(
+            text(
+                "SELECT id FROM document_versions "
+                "WHERE doc_id = :doc_id AND is_current = false "
+                "  AND index_status <> 'discarded' AND first_published_at IS NULL "
+                "FOR UPDATE"
+            ),
+            {"doc_id": doc_id},
+        )
+    ).scalar_one_or_none()
+    if candidate_vid is None:
+        raise NoCandidateToDiscard
+    await session.execute(
+        text(
+            "UPDATE document_versions SET index_status = 'discarded' WHERE id = :id"
+        ),
+        {"id": candidate_vid},
+    )
+    await session.execute(
+        text("DELETE FROM chunks WHERE version_id = :id"),
+        {"id": candidate_vid},
+    )
+
+
 async def load_candidate(
     session: AsyncSession, version_id: int
 ) -> CandidateVersion:
@@ -454,7 +498,10 @@ async def _begin_indexing(
     ).scalar_one_or_none()
     if status is None:
         raise DocumentNotFound
-    if status == "indexed":
+    # ADR-0011 §5: 'discarded' is terminal — a descartar committed before the
+    # worker began (or between attempts) aborts indexing with no resurrected
+    # writes. 'indexed' short-circuits the retry-safe duplicate path.
+    if status in ("indexed", "discarded"):
         return None
     await session.execute(
         text("UPDATE document_versions SET index_status = 'processing' WHERE id = :id"),
@@ -473,12 +520,22 @@ async def write_indexed_candidate(
     meta: "IndexableMetadata",
     headline_fingerprint: str,
 ) -> None:
+    # ADR-0011 §5: gate the whole write on index_status='processing'. A descartar
+    # committed after _begin_indexing released its lock leaves the row 'discarded';
+    # the guard then makes the chunk inserts + status flip a clean no-op so no
+    # chunks materialize on a cancelled candidate. FOR UPDATE serializes against a
+    # concurrent descartar that has not yet committed.
     doc_id = (
         await session.execute(
-            text("SELECT doc_id FROM document_versions WHERE id = :id"),
+            text(
+                "SELECT doc_id FROM document_versions "
+                "WHERE id = :id AND index_status = 'processing' FOR UPDATE"
+            ),
             {"id": version_id},
         )
-    ).scalar_one()
+    ).scalar_one_or_none()
+    if doc_id is None:
+        return
 
     all_chunks = [headline, *body]
     for c, emb in zip(all_chunks, embeds):
@@ -562,12 +619,17 @@ async def write_headline(
     updates staged_abstract between embed-time and write-time wins."""
     from buscasam.core.chunk import headline_fingerprint as _compute_fp
 
+    # ADR-0011 §5: gate on index_status='indexed' so a refresh_headline already
+    # in flight when the candidate is descartado no-ops — it neither rewrites the
+    # discarded version's headline chunk nor restamps its fingerprint. The
+    # published current version is always 'indexed', so this is transparent to
+    # the post-publish headline-reindex path.
     row = (
         await session.execute(
             text(
                 "SELECT v.doc_id, v.is_current, d.titulo, v.staged_abstract "
                 "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
-                "WHERE v.id = :id FOR UPDATE OF v"
+                "WHERE v.id = :id AND v.index_status = 'indexed' FOR UPDATE OF v"
             ),
             {"id": version_id},
         )
@@ -623,15 +685,20 @@ async def mark_failed(
     insert is deduped at the unique (user_id, event_key) index.
     """
     cv = await load_candidate(session, version_id)
-    await session.execute(
+    # ADR-0011 §5: 'discarded' is terminal and excluded here too — a terminal
+    # failure handler running after a descartar must not resurrect the row to
+    # 'failed' nor notify. '<> failed' keeps first-write-wins (a later
+    # exhausted-retries reason cannot overwrite an earlier corrupted cause).
+    result = await session.execute(
         text(
             "UPDATE document_versions SET index_status = 'failed', "
             "  index_error = :err "
-            "WHERE id = :id AND index_status <> 'failed'"
+            "WHERE id = :id AND index_status NOT IN ('failed', 'discarded')"
         ),
         {"err": error, "id": version_id},
     )
-    if cv.owner_user_id is None:
+    # No transition (already failed, or discarded mid-flight) → no notification.
+    if result.rowcount == 0 or cv.owner_user_id is None:
         return
     await session.execute(
         text(
