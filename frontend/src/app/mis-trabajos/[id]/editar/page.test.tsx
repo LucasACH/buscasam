@@ -26,6 +26,16 @@ vi.mock("@/components/AttachmentsPanel", () => ({
 vi.mock("@/components/CoauthorsPanel", () => ({
   CoauthorsPanel: () => null,
 }));
+const { candidatePanelMock, versionsPanelMock } = vi.hoisted(() => ({
+  candidatePanelMock: vi.fn((_props: unknown) => null),
+  versionsPanelMock: vi.fn((_props: unknown) => null),
+}));
+vi.mock("@/components/CandidatePanel", () => ({
+  CandidatePanel: (props: unknown) => candidatePanelMock(props),
+}));
+vi.mock("@/components/VersionsPanel", () => ({
+  VersionsPanel: (props: unknown) => versionsPanelMock(props),
+}));
 vi.mock("@/lib/useUser", () => ({
   useUser: () => ({
     user: { user_id: 1 },
@@ -53,6 +63,9 @@ function draft(
       staged_abstract: "resumen extraído",
       staged_keywords: ["redes", "grafos"],
       staged_fecha: "2024-03-01",
+      isOwner: true,
+      candidate: null,
+      versions: [],
       ...over,
       lifecycle: {
         formSeedKey: "indexed",
@@ -80,8 +93,45 @@ describe("editar page", () => {
     refreshDraft.mockReset();
     refreshDraft.mockResolvedValue(undefined);
     push.mockReset();
+    candidatePanelMock.mockClear();
+    versionsPanelMock.mockClear();
   });
   afterEach(() => cleanup());
+
+  it("mounts CandidatePanel with the owner publish flag and VersionsPanel", () => {
+    useDraftStateMock.mockReturnValue(
+      draft({
+        isOwner: true,
+        versions: [
+          {
+            n: 1,
+            original_filename: "v1.pdf",
+            mime: "application/pdf",
+            size_bytes: 10,
+            indexed_at: null,
+            is_current: true,
+          },
+        ],
+      }),
+    );
+    render(<EditarPage />);
+
+    expect(candidatePanelMock).toHaveBeenCalledWith(
+      expect.objectContaining({ docId: 7, canPublish: true }),
+    );
+    expect(versionsPanelMock).toHaveBeenCalledWith(
+      expect.objectContaining({ docId: 7, canManage: true }),
+    );
+  });
+
+  it("forwards a non-owner publish flag to CandidatePanel", () => {
+    useDraftStateMock.mockReturnValue(draft({ isOwner: false }));
+    render(<EditarPage />);
+
+    expect(candidatePanelMock).toHaveBeenCalledWith(
+      expect.objectContaining({ docId: 7, canPublish: false }),
+    );
+  });
 
   it("shows 'Listo para publicar' pill when indexed", () => {
     useDraftStateMock.mockReturnValue(draft());

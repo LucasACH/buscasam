@@ -20,6 +20,7 @@ from buscasam.core.documents import (
     CoauthorStatus,
     DocumentNotFound,
     InvalidCoauthorId,
+    NoPublishedVersion,
     NotOwner,
     PublishConflict,
     add_attachment,
@@ -31,6 +32,7 @@ from buscasam.core.documents import (
     list_own_documents,
     publish,
     remove_attachment,
+    replace_main_version,
     revoke_invitation,
     update_draft_metadata,
 )
@@ -156,6 +158,57 @@ async def upload_main_file(
     return {}
 
 
+@router.post("/documents/{doc_id}/replace", status_code=202)
+async def replace_main_file(
+    doc_id: int,
+    file: UploadFile,
+    user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    # Mirrors /upload's synchronous gate (size → 413, encrypted-PDF / MIME →
+    # 415); the only divergence is replace_main_version (NoPublishedVersion →
+    # 409) replacing attach_main_version. The 413 copy matches the PRD string.
+    try:
+        await assert_manageable(session, user_ctx, doc_id)
+    except DocumentNotFound:
+        raise HTTPException(status_code=404)
+
+    data = await file.read(_MAX_MAIN_BYTES + 1)
+    if len(data) > _MAX_MAIN_BYTES:
+        raise HTTPException(status_code=413, detail="Este archivo supera los 50 MB")
+
+    if data[:4] == b"%PDF":
+        try:
+            probe_encrypted(data)
+        except PDFEncryptionError:
+            raise HTTPException(
+                status_code=415,
+                detail="Este PDF está protegido por contraseña — quitá la protección y reintentá",
+            )
+
+    result = await blob_store.put_stream(_stream_bytes(data), max_bytes=_MAX_MAIN_BYTES)
+
+    if result.sniffed_mime not in _ALLOWED_MIMES:
+        await blob_store.discard_if_unreferenced(session, result.sha256)
+        raise HTTPException(status_code=415, detail="Formato no permitido")
+
+    try:
+        await replace_main_version(
+            session,
+            user_ctx,
+            doc_id,
+            result,
+            original_filename=file.filename or "upload",
+        )
+    except DocumentNotFound:
+        raise HTTPException(status_code=404)
+    except NoPublishedVersion:
+        raise HTTPException(
+            status_code=409, detail="El documento aún no tiene una versión publicada"
+        )
+    return {}
+
+
 class AttachmentDTO(BaseModel):
     id: int
     original_filename: str
@@ -179,6 +232,17 @@ class DraftVersionDTO(BaseModel):
     is_current: bool
 
 
+class CandidateStateDTO(BaseModel):
+    status: Literal["processing", "ready", "failed"]
+    staged_abstract: str | None
+    staged_keywords: list[str]
+    staged_fecha: date | None
+    can_publish: bool
+    can_discard: bool
+    indexed_at: str | None  # ISO datetime; None until indexed.
+    error: str | None
+
+
 class DraftStateDTO(BaseModel):
     title: str
     index_status: str
@@ -191,6 +255,7 @@ class DraftStateDTO(BaseModel):
     attachments: list[AttachmentDTO]
     coauthors: list[CoauthorRowDTO]
     versions: list[DraftVersionDTO]
+    candidate: CandidateStateDTO | None
 
 
 class InviteCoauthorRequest(BaseModel):
@@ -257,6 +322,24 @@ async def get_draft(
             )
             for v in state.versions
         ],
+        candidate=(
+            CandidateStateDTO(
+                status=state.candidate.status,
+                staged_abstract=state.candidate.staged_abstract,
+                staged_keywords=state.candidate.staged_keywords,
+                staged_fecha=state.candidate.staged_fecha,
+                can_publish=state.candidate.can_publish,
+                can_discard=state.candidate.can_discard,
+                indexed_at=(
+                    state.candidate.indexed_at.isoformat()
+                    if state.candidate.indexed_at is not None
+                    else None
+                ),
+                error=state.candidate.error,
+            )
+            if state.candidate is not None
+            else None
+        ),
     )
 
 

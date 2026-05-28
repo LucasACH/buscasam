@@ -11,7 +11,9 @@ import { toast } from "sonner";
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { AttachmentsPanel } from "@/components/AttachmentsPanel";
+import { CandidatePanel } from "@/components/CandidatePanel";
 import { CoauthorsPanel } from "@/components/CoauthorsPanel";
+import { VersionsPanel } from "@/components/VersionsPanel";
 import { useUser } from "@/lib/useUser";
 import { useDraftState, type DraftState } from "../../useDraftState";
 
@@ -207,6 +209,14 @@ function EditarForm({
             </Suggestion>
           </dl>
         </section>
+      </div>
+
+      <div className="mt-8">
+        <CandidatePanel docId={docId} canPublish={state.isOwner} />
+      </div>
+
+      <div className="mt-8">
+        <VersionsPanel docId={docId} versions={state.versions} canManage />
       </div>
 
       <div className="mt-8">
