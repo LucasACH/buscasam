@@ -203,6 +203,7 @@ async def replace_main_file(
     except DocumentNotFound:
         raise HTTPException(status_code=404)
     except NoPublishedVersion:
+        await blob_store.discard_if_unreferenced(session, result.sha256)
         raise HTTPException(
             status_code=409, detail="El documento aún no tiene una versión publicada"
         )

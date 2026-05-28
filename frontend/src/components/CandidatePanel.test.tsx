@@ -2,15 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-const { useDraftStateMock, replace, refresh } = vi.hoisted(() => ({
-  useDraftStateMock: vi.fn(),
-  replace: vi.fn(),
-  refresh: vi.fn(),
-}));
-vi.mock("@/app/mis-trabajos/useDraftState", () => ({
-  useDraftState: useDraftStateMock,
-}));
-
 const { apiPost } = vi.hoisted(() => ({ apiPost: vi.fn() }));
 vi.mock("@/api/client", () => ({ api: { POST: apiPost } }));
 
@@ -20,6 +11,8 @@ vi.mock("sonner", () => ({ toast: { error: toastError } }));
 import { CandidatePanel } from "./CandidatePanel";
 
 const DOC_ID = 7;
+const replace = vi.fn();
+const refresh = vi.fn();
 
 type Candidate = {
   status: "processing" | "ready" | "failed";
@@ -47,17 +40,19 @@ function candidate(over: Partial<Candidate> = {}): Candidate {
 }
 
 function wrap(cand: Candidate | null, canPublish = true) {
-  useDraftStateMock.mockReturnValue({
-    state: { candidate: cand, versions: [] },
-    replace,
-    refresh,
-  });
-  return render(<CandidatePanel docId={DOC_ID} canPublish={canPublish} />);
+  return render(
+    <CandidatePanel
+      docId={DOC_ID}
+      canPublish={canPublish}
+      candidate={cand}
+      replace={replace}
+      refresh={refresh}
+    />,
+  );
 }
 
 describe("CandidatePanel", () => {
   beforeEach(() => {
-    useDraftStateMock.mockReset();
     replace.mockReset();
     replace.mockResolvedValue(undefined);
     refresh.mockReset();

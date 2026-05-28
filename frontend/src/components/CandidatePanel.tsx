@@ -5,9 +5,9 @@ import { toast } from "sonner";
 
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
-import {
-  useDraftState,
-  type ReplaceMutationError,
+import type {
+  Candidate,
+  ReplaceMutationError,
 } from "@/app/mis-trabajos/useDraftState";
 
 const ACCEPT = ".pdf,.docx,.odt";
@@ -24,16 +24,18 @@ const REPLACE_ERROR_COPY: Record<ReplaceMutationError, string> = {
 export function CandidatePanel({
   docId,
   canPublish,
+  candidate,
+  replace,
+  refresh,
 }: {
   docId: number;
   canPublish: boolean;
+  candidate: Candidate | null;
+  replace: (file: File) => Promise<ReplaceMutationError | undefined>;
+  refresh: () => Promise<void>;
 }) {
-  const { state, replace, refresh } = useDraftState(docId);
   const [error, setError] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
-
-  if (!state) return null;
-  const candidate = state.candidate;
 
   async function onPick(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
