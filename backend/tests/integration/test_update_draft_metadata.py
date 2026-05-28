@@ -179,3 +179,87 @@ async def test_processing_candidate_staged_but_not_reindexed(session):
     # concurrent refresh is enqueued for it; the indexed published version is.
     assert candidate_id not in refreshed
     assert published_id in refreshed
+
+
+async def _headline_fingerprint(session, version_id: int) -> str:
+    return (
+        await session.execute(
+            text("SELECT headline_fingerprint FROM document_versions WHERE id = :id"),
+            {"id": version_id},
+        )
+    ).scalar_one()
+
+
+async def test_frozen_historical_version_excluded_from_fan_out(session):
+    # Republished shape: a frozen historical version (v1, was public, now
+    # superseded), the published current (v2), and a fresh indexed candidate (v3).
+    uid = await make_user(session)
+    doc_id = await make_document(
+        session, publication_status="published", titulo="Título original"
+    )
+    await make_document_author(session, doc_id, user_id=uid, status="owner")
+    historical_id = await _insert_version(
+        session, doc_id, uid, version_no=1, is_current=False, first_published=True,
+        titulo="Título original", staged_abstract="resumen histórico",
+    )
+    published_id = await _insert_version(
+        session, doc_id, uid, version_no=2, is_current=True, first_published=True,
+        titulo="Título original", staged_abstract="resumen publicado",
+    )
+    candidate_id = await _insert_version(
+        session, doc_id, uid, version_no=3, is_current=False, first_published=False,
+        titulo="Título original", staged_abstract="resumen candidato",
+    )
+    historical_fp_before = await _headline_fingerprint(session, historical_id)
+
+    await documents.update_draft_metadata(
+        session, _ctx(uid), doc_id, title="Título nuevo", abstract="resumen unificado"
+    )
+
+    # The frozen historical version is left entirely untouched: no staged_*
+    # move, no fingerprint change, no reindex (PRD #56 forbids retroactive edits
+    # to historic versions).
+    assert await _staged_abstract(session, historical_id) == "resumen histórico"
+    assert await _headline_fingerprint(session, historical_id) == historical_fp_before
+    refreshed = await _enqueued_refresh_version_ids(session)
+    assert historical_id not in refreshed
+    # The published current and the candidate both receive the fan-out.
+    assert await _staged_abstract(session, published_id) == "resumen unificado"
+    assert await _staged_abstract(session, candidate_id) == "resumen unificado"
+    assert {published_id, candidate_id} <= refreshed
+
+
+async def _staged_keywords(session, version_id: int) -> list[str] | None:
+    return (
+        await session.execute(
+            text("SELECT staged_keywords FROM document_versions WHERE id = :id"),
+            {"id": version_id},
+        )
+    ).scalar_one()
+
+
+async def _staged_fecha(session, version_id: int) -> date | None:
+    return (
+        await session.execute(
+            text("SELECT staged_fecha FROM document_versions WHERE id = :id"),
+            {"id": version_id},
+        )
+    ).scalar_one()
+
+
+async def test_keywords_and_fecha_fan_to_both_versions(session):
+    uid, doc_id, published_id, candidate_id = await _seed_published_with_candidate(
+        session
+    )
+
+    await documents.update_draft_metadata(
+        session,
+        _ctx(uid),
+        doc_id,
+        keywords=["redes", "grafos"],
+        fecha=date(2025, 6, 1),
+    )
+
+    for version_id in (published_id, candidate_id):
+        assert await _staged_keywords(session, version_id) == ["redes", "grafos"]
+        assert await _staged_fecha(session, version_id) == date(2025, 6, 1)
