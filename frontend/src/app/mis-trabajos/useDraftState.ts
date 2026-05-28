@@ -52,6 +52,8 @@ export type ReplaceMutationError =
 
 export type DiscardMutationError = "discard_failed";
 
+export type SoftDeleteMutationError = "delete_failed";
+
 export const POLL_INTERVAL_MS = 3000;
 
 const MAX_ATTACHMENTS = 5;
@@ -182,6 +184,17 @@ export function useDraftState(docId: number) {
     return undefined;
   }
 
+  async function softDelete(): Promise<SoftDeleteMutationError | undefined> {
+    const { error } = await api.DELETE("/api/documents/{doc_id}", {
+      params: { path: { doc_id: docId } },
+    });
+    if (error) return "delete_failed";
+    // The doc leaves Mis trabajos (manageable_where excludes soft-deleted); the
+    // page routes there, so invalidating the list is enough to drop the row.
+    await queryClient.invalidateQueries({ queryKey: ["me", "documents"] });
+    return undefined;
+  }
+
   return {
     state: query.data ? projectDraftState(query.data) : undefined,
     isLoading: query.isLoading,
@@ -191,6 +204,7 @@ export function useDraftState(docId: number) {
     },
     replace,
     discard,
+    softDelete,
   };
 }
 
