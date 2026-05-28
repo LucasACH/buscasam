@@ -19,6 +19,16 @@ _WRITE_RE = re.compile(
     r"(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+document_versions", re.IGNORECASE
 )
 
+# soft_deleted_at is a column, not a table: a write is an UPDATE assignment
+# (SET clause containing `soft_deleted_at =`, in any column position) or the
+# bootstrap INSERT into documents listing it. The read predicates
+# (`soft_deleted_at IS NULL`/`IS NOT NULL`) and purge's `soft_deleted_at <`
+# comparison are not matched, since the assignment requires `=`.
+_SOFT_DELETE_WRITE_RE = re.compile(
+    r"(SET\b[^;]*?\bsoft_deleted_at\s*=|INSERT\s+INTO\s+documents\b[^;]*?\bsoft_deleted_at\b)",
+    re.IGNORECASE,
+)
+
 
 def _request_path_python_files():
     for p in SRC_ROOT.rglob("*.py"):
@@ -37,5 +47,19 @@ def test_document_versions_written_only_by_core_documents():
     ]
     assert offenders == [], (
         "document_versions write SQL found outside core/documents: "
+        + ", ".join(str(p.relative_to(SRC_ROOT)) for p in offenders)
+    )
+
+
+def test_soft_deleted_at_written_only_by_core_documents():
+    """Story 36 / module map §core/documents: the deletion clock has a single
+    writer, so the stamp-once and owner-only rules cannot drift."""
+    offenders = [
+        p
+        for p in _request_path_python_files()
+        if _SOFT_DELETE_WRITE_RE.search(p.read_text(encoding="utf-8"))
+    ]
+    assert offenders == [], (
+        "soft_deleted_at write SQL found outside core/documents: "
         + ", ".join(str(p.relative_to(SRC_ROOT)) for p in offenders)
     )
