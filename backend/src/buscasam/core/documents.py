@@ -697,24 +697,30 @@ async def update_draft_metadata(
     area_path: str | None = None,
     document_type: str | None = None,
 ) -> None:
-    """Writes top-level fields to `documents`, staged_* to the candidate version,
-    and enqueues refresh_headline when title or abstract changed (module map
-    §core/documents). Manageable-scoped; cross-user → DocumentNotFound."""
+    """Writes top-level fields to `documents` and staged_* to the published
+    current version plus any in-flight candidate, enqueuing refresh_headline per
+    version when title or abstract changed (module map §core/documents). Frozen
+    historical versions and a discarded candidate are left untouched.
+    Manageable-scoped; cross-user → DocumentNotFound."""
     await assert_manageable(session, user_ctx, doc_id)
 
-    # Pre-update candidate state: drives change-detection and the index_status
-    # guard on the headline reindex enqueue below.
-    current = (
+    # Edit-relevant versions: the published current (is_current) and the
+    # never-published candidate (first_published_at IS NULL). A discarded
+    # candidate and frozen historical versions (first_published_at set, not
+    # current) are excluded — their staged_* must not move and they get no
+    # reindex. Pre-update staged_abstract drives per-version change detection.
+    rows = (
         await session.execute(
             text(
                 "SELECT v.id AS version_id, v.index_status, v.staged_abstract, "
                 "       d.titulo "
                 "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
-                "WHERE v.doc_id = :doc_id ORDER BY v.version_no DESC LIMIT 1"
+                "WHERE v.doc_id = :doc_id AND v.index_status <> 'discarded' "
+                "  AND (v.is_current = true OR v.first_published_at IS NULL)"
             ),
             {"doc_id": doc_id},
         )
-    ).mappings().one_or_none()
+    ).mappings().all()
 
     doc_sets: list[str] = []
     doc_params: dict = {"doc_id": doc_id}
@@ -736,40 +742,46 @@ async def update_draft_metadata(
             doc_params,
         )
 
-    if current is None:
+    if not rows:
         return
-    version_id = current["version_id"]
+    # titulo is shared across versions (joined from documents), so the change is
+    # the same for every row; the two headline reindexes are independent per
+    # ADR-0008 §3 (`headline:v{id}` locks).
+    title_changed = title is not None and title != rows[0]["titulo"]
 
-    ver_sets: list[str] = []
-    ver_params: dict = {"vid": version_id}
-    if abstract is not None:
-        ver_sets.append("staged_abstract = :abstract")
-        ver_params["abstract"] = abstract
-    if keywords is not None:
-        ver_sets.append("staged_keywords = :keywords")
-        ver_params["keywords"] = keywords
-    if not isinstance(fecha, _Unset):
-        ver_sets.append("staged_fecha = :fecha")
-        ver_params["fecha"] = fecha
-    if ver_sets:
-        await session.execute(
-            text(
-                f"UPDATE document_versions SET {', '.join(ver_sets)} WHERE id = :vid"
-            ),
-            ver_params,
+    for row in rows:
+        version_id = row["version_id"]
+        ver_sets: list[str] = []
+        ver_params: dict = {"vid": version_id}
+        if abstract is not None:
+            ver_sets.append("staged_abstract = :abstract")
+            ver_params["abstract"] = abstract
+        if keywords is not None:
+            ver_sets.append("staged_keywords = :keywords")
+            ver_params["keywords"] = keywords
+        if not isinstance(fecha, _Unset):
+            ver_sets.append("staged_fecha = :fecha")
+            ver_params["fecha"] = fecha
+        if ver_sets:
+            await session.execute(
+                text(
+                    f"UPDATE document_versions SET {', '.join(ver_sets)} "
+                    "WHERE id = :vid"
+                ),
+                ver_params,
+            )
+
+        # Reindex only when a headline input actually changed AND this version is
+        # already indexed: while still processing, index_document builds the
+        # headline from the current title, so a concurrent refresh would
+        # duplicate it.
+        abstract_changed = abstract is not None and abstract != (
+            row["staged_abstract"] or ""
         )
+        if row["index_status"] == "indexed" and (title_changed or abstract_changed):
+            from buscasam.core import jobs
 
-    # Reindex only when a headline input actually changed AND the candidate is
-    # already indexed: while still processing, index_document builds the headline
-    # from the current title, so a concurrent refresh would duplicate it.
-    title_changed = title is not None and title != current["titulo"]
-    abstract_changed = abstract is not None and abstract != (
-        current["staged_abstract"] or ""
-    )
-    if current["index_status"] == "indexed" and (title_changed or abstract_changed):
-        from buscasam.core import jobs
-
-        await jobs.enqueue_refresh_headline(session, version_id)
+            await jobs.enqueue_refresh_headline(session, version_id)
 
 
 async def publish(session: AsyncSession, user_ctx: UserCtx, doc_id: int) -> None:
