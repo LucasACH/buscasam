@@ -20,10 +20,12 @@ _WRITE_RE = re.compile(
 )
 
 # soft_deleted_at is a column, not a table: a write is an UPDATE assignment
-# (SET soft_deleted_at) or the bootstrap INSERT into documents listing it. The
-# read predicates (`soft_deleted_at IS NULL`/`IS NOT NULL`) are not matched.
+# (SET clause containing `soft_deleted_at =`, in any column position) or the
+# bootstrap INSERT into documents listing it. The read predicates
+# (`soft_deleted_at IS NULL`/`IS NOT NULL`) and purge's `soft_deleted_at <`
+# comparison are not matched, since the assignment requires `=`.
 _SOFT_DELETE_WRITE_RE = re.compile(
-    r"(SET\s+soft_deleted_at|INSERT\s+INTO\s+documents\b[^;]*?\bsoft_deleted_at\b)",
+    r"(SET\b[^;]*?\bsoft_deleted_at\s*=|INSERT\s+INTO\s+documents\b[^;]*?\bsoft_deleted_at\b)",
     re.IGNORECASE,
 )
 
