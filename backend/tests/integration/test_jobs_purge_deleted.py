@@ -7,12 +7,12 @@ are untouched; the run is idempotent (ADR-0006 §12).
 """
 from __future__ import annotations
 
-from sqlalchemy import text
-
 import secrets
 
+from sqlalchemy import text
+
 from buscasam.core import jobs
-from tests.factories import make_chunk, make_document, make_user
+from tests.factories import make_document, make_user
 
 
 async def _set_soft_deleted_days_ago(session, doc_id: int, days: int) -> None:

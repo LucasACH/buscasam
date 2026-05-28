@@ -248,7 +248,7 @@ async def _run_purge_deleted(session: AsyncSession) -> int:
     (ADR-0006 §12, module map §core/jobs). `ON DELETE CASCADE` collects
     versions, attachments, and chunks. In-window and never-deleted documents
     are untouched; idempotent (a retried run deletes only rows still matching
-    the predicate). Returns the rowcount for the structured operator log."""
+    the predicate). Returns the rowcount the worker logs for operators."""
     result = await session.execute(
         text(
             "DELETE FROM documents "
@@ -269,7 +269,7 @@ async def _run_sweep_orphan_blobs(session: AsyncSession) -> int:
     map §core/jobs). Drives `blob_store.iter_orphan_candidates` into the
     existing per-sha `discard_if_unreferenced`, which skips a still-referenced
     sha and unlinks missing_ok — so a retried run neither double-deletes nor
-    errors. Returns the candidate count for the structured operator log."""
+    errors. Returns the candidate count the worker logs for operators."""
     count = 0
     async for sha in blob_store.iter_orphan_candidates(min_age=_BLOB_GRACE):
         await blob_store.discard_if_unreferenced(session, sha)
@@ -374,16 +374,18 @@ async def refresh_headline(context: JobContext, version_id: int) -> None:
     )
 
 
-async def _run_maintenance(runner) -> None:
+async def _run_maintenance(name: str, runner) -> None:
     """Shared body for the periodic maintenance tasks: open a worker session,
-    take the maintenance advisory lock, run the core, commit. The advisory lock
-    releases with the transaction (ADR-0008 §9)."""
+    take the maintenance advisory lock, run the core, commit, and log the count
+    (these jobs are silent to authors but observable to operators). The advisory
+    lock releases with the transaction (ADR-0008 §9)."""
     sm, _ = _get_worker_resources()
     async with sm() as session:
         try:
             async with _with_maintenance_lock(session):
-                await runner(session)
+                count = await runner(session)
             await session.commit()
+            logger.info("maintenance %s count=%s", name, count)
         except Exception:
             await session.rollback()
             raise
@@ -392,13 +394,13 @@ async def _run_maintenance(runner) -> None:
 @app.periodic(cron=_PURGE_CRON)
 @app.task(queue="default", retry=_MAINT_RETRY)
 async def purge_deleted(timestamp: int) -> None:
-    await _run_maintenance(_run_purge_deleted)
+    await _run_maintenance("purge_deleted", _run_purge_deleted)
 
 
 @app.periodic(cron=_SWEEP_CRON)
 @app.task(queue="default", retry=_MAINT_RETRY)
 async def sweep_orphan_blobs(timestamp: int) -> None:
-    await _run_maintenance(_run_sweep_orphan_blobs)
+    await _run_maintenance("sweep_orphan_blobs", _run_sweep_orphan_blobs)
 
 
 @app.task(queue="default", retry=_DEFAULT_RETRY)
