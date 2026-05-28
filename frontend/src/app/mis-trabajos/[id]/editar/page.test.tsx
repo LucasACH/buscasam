@@ -7,14 +7,21 @@ import {
   waitFor,
 } from "@testing-library/react";
 
-const { useDraftStateMock, apiPatch, apiPost, toastError, refreshDraft } =
-  vi.hoisted(() => ({
-    useDraftStateMock: vi.fn(),
-    apiPatch: vi.fn(),
-    apiPost: vi.fn(),
-    toastError: vi.fn(),
-    refreshDraft: vi.fn(),
-  }));
+const {
+  useDraftStateMock,
+  apiPatch,
+  apiPost,
+  toastError,
+  refreshDraft,
+  softDeleteMock,
+} = vi.hoisted(() => ({
+  useDraftStateMock: vi.fn(),
+  apiPatch: vi.fn(),
+  apiPost: vi.fn(),
+  toastError: vi.fn(),
+  refreshDraft: vi.fn(),
+  softDeleteMock: vi.fn(),
+}));
 vi.mock("../../useDraftState", () => ({
   useDraftState: () => useDraftStateMock(),
 }));
@@ -79,6 +86,7 @@ function draft(
     isLoading: false,
     isError: false,
     refresh: refreshDraft,
+    softDelete: softDeleteMock,
   };
 }
 
@@ -92,6 +100,8 @@ describe("editar page", () => {
     toastError.mockReset();
     refreshDraft.mockReset();
     refreshDraft.mockResolvedValue(undefined);
+    softDeleteMock.mockReset();
+    softDeleteMock.mockResolvedValue(undefined);
     push.mockReset();
     candidatePanelMock.mockClear();
     versionsPanelMock.mockClear();
@@ -328,5 +338,38 @@ describe("editar page", () => {
     await waitFor(() => expect(apiPatch).toHaveBeenCalled());
     const opts = apiPatch.mock.calls[0]![1];
     expect(opts.body).toMatchObject({ keywords: ["redes", "grafos"] });
+  });
+
+  it("shows the Eliminar affordance to the owner", () => {
+    useDraftStateMock.mockReturnValue(draft({ isOwner: true }));
+    render(<EditarPage />);
+    expect(
+      screen.getByRole("button", { name: /eliminar/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("hides Eliminar from a non-owner", () => {
+    useDraftStateMock.mockReturnValue(draft({ isOwner: false }));
+    render(<EditarPage />);
+    expect(
+      screen.queryByRole("button", { name: /eliminar/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("deletes and navigates to /mis-trabajos on success", async () => {
+    useDraftStateMock.mockReturnValue(draft({ isOwner: true }));
+    render(<EditarPage />);
+    fireEvent.click(screen.getByRole("button", { name: /eliminar/i }));
+    await waitFor(() => expect(softDeleteMock).toHaveBeenCalled());
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/mis-trabajos"));
+  });
+
+  it("toasts and stays on the page if the delete fails", async () => {
+    softDeleteMock.mockResolvedValue("delete_failed");
+    useDraftStateMock.mockReturnValue(draft({ isOwner: true }));
+    render(<EditarPage />);
+    fireEvent.click(screen.getByRole("button", { name: /eliminar/i }));
+    await waitFor(() => expect(toastError).toHaveBeenCalled());
+    expect(push).not.toHaveBeenCalled();
   });
 });
