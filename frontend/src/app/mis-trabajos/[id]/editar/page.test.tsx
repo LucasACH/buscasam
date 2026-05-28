@@ -27,8 +27,8 @@ vi.mock("@/components/CoauthorsPanel", () => ({
   CoauthorsPanel: () => null,
 }));
 const { candidatePanelMock, versionsPanelMock } = vi.hoisted(() => ({
-  candidatePanelMock: vi.fn((_props: unknown) => null),
-  versionsPanelMock: vi.fn((_props: unknown) => null),
+  candidatePanelMock: vi.fn<(props: unknown) => null>(() => null),
+  versionsPanelMock: vi.fn<(props: unknown) => null>(() => null),
 }));
 vi.mock("@/components/CandidatePanel", () => ({
   CandidatePanel: (props: unknown) => candidatePanelMock(props),
@@ -131,6 +131,30 @@ describe("editar page", () => {
     expect(candidatePanelMock).toHaveBeenCalledWith(
       expect.objectContaining({ docId: 7, canPublish: false }),
     );
+  });
+
+  it("hides the form Publicar once the doc has a published version", () => {
+    // CandidatePanel owns the candidate Publicar after the first publish; the
+    // form button is the initial-publication affordance only.
+    useDraftStateMock.mockReturnValue(
+      draft({
+        versions: [
+          {
+            n: 1,
+            original_filename: "v1.pdf",
+            mime: "application/pdf",
+            size_bytes: 10,
+            indexed_at: null,
+            is_current: true,
+          },
+        ],
+      }),
+    );
+    render(<EditarPage />);
+
+    expect(
+      screen.queryByRole("button", { name: /publicar/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows 'Listo para publicar' pill when indexed", () => {

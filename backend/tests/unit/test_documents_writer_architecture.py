@@ -31,7 +31,9 @@ def _request_path_python_files():
 
 def test_document_versions_written_only_by_core_documents():
     offenders = [
-        p for p in _request_path_python_files() if _WRITE_RE.search(p.read_text())
+        p
+        for p in _request_path_python_files()
+        if _WRITE_RE.search(p.read_text(encoding="utf-8"))
     ]
     assert offenders == [], (
         "document_versions write SQL found outside core/documents: "
