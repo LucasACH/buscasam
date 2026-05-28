@@ -505,13 +505,13 @@ export interface paths {
             cookie?: never;
         };
         /** Download Version */
-        get: operations["download_version_api_docs__doc_id__versions__n__download_head"];
+        get: operations["download_version_api_docs__doc_id__versions__n__download_get"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         /** Download Version */
-        head: operations["download_version_api_docs__doc_id__versions__n__download_head"];
+        head: operations["download_version_api_docs__doc_id__versions__n__download_get"];
         patch?: never;
         trace?: never;
     };
@@ -1808,7 +1808,7 @@ export interface operations {
             };
         };
     };
-    download_version_api_docs__doc_id__versions__n__download_head: {
+    download_version_api_docs__doc_id__versions__n__download_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1840,7 +1840,7 @@ export interface operations {
             };
         };
     };
-    download_version_api_docs__doc_id__versions__n__download_head: {
+    download_version_api_docs__doc_id__versions__n__download_get: {
         parameters: {
             query?: never;
             header?: never;

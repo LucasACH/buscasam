@@ -80,6 +80,12 @@ def _index_inputs(title: str = "Tesis", abstract: str = "Resumen"):
 
 
 async def test_write_indexed_candidate_aborts_when_discarded_mid_flight(session):
+    # Single-session model: exercises the gate's `WHERE index_status='processing'`
+    # predicate, not real two-connection lock contention. In production the
+    # worker holds the `_begin_indexing` FOR UPDATE lock through its IO window, so
+    # a concurrent descartar blocks until the worker commits rather than
+    # interleaving here (see discard_candidate's liveness caveat). The end state
+    # asserted below is what the gate guarantees once that lock is released.
     owner = await make_user(session)
     doc_id, candidate_vid = await _seed_published_with_candidate(
         session, owner_user_id=owner, candidate_status="pending"
