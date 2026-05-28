@@ -17,6 +17,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import IntegrityError
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 ADMIN_URL = os.environ.get(
@@ -214,7 +215,7 @@ def test_0014_partial_unique_blocks_two_non_discarded_candidates(isolated_db):
                 {"doc": doc_id},
             )
         # Second non-discarded candidate on same doc: must fail.
-        with pytest.raises(Exception):
+        with pytest.raises(IntegrityError, match="document_versions_one_candidate"):
             with eng.begin() as c:
                 c.execute(
                     text(
