@@ -428,7 +428,18 @@ async def discard_candidate(
     and raises NoCandidateToDiscard when none. Sets index_status='discarded' and
     deletes that version's chunks (always is_current=false, so search visibility
     is unchanged). Leaves the document_versions row and the blob (orphan sweep
-    handles blob cleanup)."""
+    handles blob cleanup).
+
+    Liveness caveat: the worker holds the candidate row's `_begin_indexing`
+    FOR UPDATE lock through its whole extract/OCR IO window without an
+    intervening commit (jobs.py `_run_attempt`), so this FOR UPDATE blocks until
+    an actively-indexing worker commits — up to the OCR timeout (ADR-0008 §11).
+    End state stays correct (the worker commits indexed+chunks, then the
+    unblocked descartar discards the row and deletes those chunks), but the
+    request can hang for the IO duration. ADR-0011 §5's "between the lock release
+    and the commit" window assumes a post-`_begin_indexing` commit that the
+    worker does not yet do; until then the gate's no-op is reached via this lock
+    wait rather than via concurrent contention."""
     await assert_manageable(session, user_ctx, doc_id)
     candidate_vid = (
         await session.execute(
