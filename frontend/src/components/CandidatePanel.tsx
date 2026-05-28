@@ -7,6 +7,7 @@ import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import type {
   Candidate,
+  DiscardMutationError,
   ReplaceMutationError,
 } from "@/app/mis-trabajos/useDraftState";
 
@@ -26,16 +27,29 @@ export function CandidatePanel({
   canPublish,
   candidate,
   replace,
+  discard,
   refresh,
 }: {
   docId: number;
   canPublish: boolean;
   candidate: Candidate | null;
   replace: (file: File) => Promise<ReplaceMutationError | undefined>;
+  discard: () => Promise<DiscardMutationError | undefined>;
   refresh: () => Promise<void>;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
+
+  async function onDiscard() {
+    setDiscarding(true);
+    try {
+      const err = await discard();
+      if (err) toast.error("No se pudo descartar");
+    } finally {
+      setDiscarding(false);
+    }
+  }
 
   async function onPick(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -94,6 +108,9 @@ export function CandidatePanel({
         <div className="mt-3 space-y-2">
           <StatusPill>{candidate.statusLabel}</StatusPill>
           <ReplaceButton label="Reemplazar" onPick={onPick} />
+          {candidate.canDiscard && (
+            <DiscardButton onClick={onDiscard} disabled={discarding} />
+          )}
         </div>
       )}
 
@@ -113,6 +130,9 @@ export function CandidatePanel({
           >
             Publicar
           </Button>
+          {candidate.canDiscard && (
+            <DiscardButton onClick={onDiscard} disabled={discarding} />
+          )}
         </div>
       )}
 
@@ -127,9 +147,26 @@ export function CandidatePanel({
               {candidate.error}
             </p>
           )}
+          {candidate.canDiscard && (
+            <DiscardButton onClick={onDiscard} disabled={discarding} />
+          )}
         </div>
       )}
     </section>
+  );
+}
+
+function DiscardButton({
+  onClick,
+  disabled,
+}: {
+  onClick: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <Button variant="outline" size="sm" onClick={onClick} disabled={disabled}>
+      Descartar
+    </Button>
   );
 }
 

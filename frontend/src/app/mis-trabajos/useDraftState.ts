@@ -50,6 +50,8 @@ export type ReplaceMutationError =
   | "no_published_version"
   | "replace_failed";
 
+export type DiscardMutationError = "discard_failed";
+
 export const POLL_INTERVAL_MS = 3000;
 
 const MAX_ATTACHMENTS = 5;
@@ -159,6 +161,27 @@ export function useDraftState(docId: number) {
     return undefined;
   }
 
+  async function discard(): Promise<DiscardMutationError | undefined> {
+    // Optimistically drop the candidate so the panel snaps back to the
+    // no-candidate state (Reemplazar re-enabled) without waiting for a poll.
+    queryClient.setQueryData<DraftStateDTO>(draftQueryKey(docId), (current) =>
+      current ? { ...current, candidate: null } : current,
+    );
+    const { error, response } = await api.DELETE(
+      "/api/documents/{doc_id}/candidate",
+      { params: { path: { doc_id: docId } } },
+    );
+    if (error) {
+      // 404 is a race — the candidate was already discarded/published. The
+      // optimistic removal already reflects that; just re-sync. Any other
+      // failure also re-syncs so the panel matches the server.
+      await queryClient.invalidateQueries({ queryKey: draftQueryKey(docId) });
+      if (response?.status === 404) return undefined;
+      return "discard_failed";
+    }
+    return undefined;
+  }
+
   return {
     state: query.data ? projectDraftState(query.data) : undefined,
     isLoading: query.isLoading,
@@ -167,6 +190,7 @@ export function useDraftState(docId: number) {
       await queryClient.invalidateQueries({ queryKey: draftQueryKey(docId) });
     },
     replace,
+    discard,
   };
 }
 

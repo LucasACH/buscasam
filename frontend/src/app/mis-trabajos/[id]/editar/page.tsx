@@ -17,6 +17,7 @@ import { VersionsPanel } from "@/components/VersionsPanel";
 import { useUser } from "@/lib/useUser";
 import {
   useDraftState,
+  type DiscardMutationError,
   type DraftState,
   type ReplaceMutationError,
 } from "../../useDraftState";
@@ -35,7 +36,7 @@ export default function EditarPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const docId = Number(params.id);
-  const { state, isLoading, refresh, replace } = useDraftState(docId);
+  const { state, isLoading, refresh, replace, discard } = useDraftState(docId);
 
   useEffect(() => {
     if (isInvitado) router.replace(`/login?next=/mis-trabajos/${docId}/editar`);
@@ -54,6 +55,7 @@ export default function EditarPage() {
       state={state}
       refresh={refresh}
       replace={replace}
+      discard={discard}
     />
   );
 }
@@ -63,11 +65,13 @@ function EditarForm({
   state,
   refresh,
   replace,
+  discard,
 }: {
   docId: number;
   state: DraftState;
   refresh: () => Promise<void>;
   replace: (file: File) => Promise<ReplaceMutationError | undefined>;
+  discard: () => Promise<DiscardMutationError | undefined>;
 }) {
   const router = useRouter();
   const [publishing, setPublishing] = useState(false);
@@ -224,6 +228,7 @@ function EditarForm({
           canPublish={state.isOwner}
           candidate={state.candidate}
           replace={replace}
+          discard={discard}
           refresh={refresh}
         />
       </div>

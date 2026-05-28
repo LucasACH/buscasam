@@ -276,6 +276,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/documents/{doc_id}/candidate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Discard Candidate Endpoint */
+        delete: operations["discard_candidate_endpoint_api_documents__doc_id__candidate_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/documents/{doc_id}/draft": {
         parameters: {
             query?: never;
@@ -488,13 +505,13 @@ export interface paths {
             cookie?: never;
         };
         /** Download Version */
-        get: operations["download_version_api_docs__doc_id__versions__n__download_get"];
+        get: operations["download_version_api_docs__doc_id__versions__n__download_head"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         /** Download Version */
-        head: operations["download_version_api_docs__doc_id__versions__n__download_get"];
+        head: operations["download_version_api_docs__doc_id__versions__n__download_head"];
         patch?: never;
         trace?: never;
     };
@@ -1396,6 +1413,35 @@ export interface operations {
             };
         };
     };
+    discard_candidate_endpoint_api_documents__doc_id__candidate_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_draft_api_documents__doc_id__draft_get: {
         parameters: {
             query?: never;
@@ -1762,7 +1808,7 @@ export interface operations {
             };
         };
     };
-    download_version_api_docs__doc_id__versions__n__download_get: {
+    download_version_api_docs__doc_id__versions__n__download_head: {
         parameters: {
             query?: never;
             header?: never;
@@ -1794,7 +1840,7 @@ export interface operations {
             };
         };
     };
-    download_version_api_docs__doc_id__versions__n__download_get: {
+    download_version_api_docs__doc_id__versions__n__download_head: {
         parameters: {
             query?: never;
             header?: never;
