@@ -214,11 +214,11 @@ async def test_get_detail_manageable_branch_populates_versions_for_owner(session
         text(
             "INSERT INTO document_versions "
             "(doc_id, version_no, sha256, original_filename, bytes, mime, "
-            " index_status, is_current, indexed_at) VALUES "
+            " index_status, is_current, indexed_at, first_published_at) VALUES "
             "(:d, 1, decode('11', 'hex'), 'v1.pdf', 100, 'application/pdf', "
-            " 'indexed', false, CAST('2024-01-01T10:00:00Z' AS timestamptz)), "
+            " 'indexed', false, CAST('2024-01-01T10:00:00Z' AS timestamptz), now()), "
             "(:d, 2, decode('22', 'hex'), 'v2.pdf', 200, 'application/pdf', "
-            " 'indexed', true, CAST('2024-02-01T10:00:00Z' AS timestamptz))"
+            " 'indexed', true, CAST('2024-02-01T10:00:00Z' AS timestamptz), now())"
         ),
         {"d": doc_id},
     )
@@ -237,3 +237,32 @@ async def test_get_detail_manageable_branch_populates_versions_for_owner(session
     assert detail.versions[0].indexed_at == datetime(
         2024, 1, 1, 10, 0, tzinfo=timezone.utc
     )
+
+
+async def test_get_detail_versions_excludes_never_published_candidate(session):
+    """ADR-0011 §4: the manager Versiones list filters on first_published_at
+    IS NOT NULL. A never-public candidate (failed, discarded, or in-flight
+    ready) does not appear, and the published rows keep their 1-based n."""
+    doc_id = await make_document(session, visibility="privado")
+    owner_id = await make_user(session, name="Owner")
+    await make_document_author(session, doc_id, user_id=owner_id, status="owner")
+    await session.execute(
+        text(
+            "INSERT INTO document_versions "
+            "(doc_id, version_no, sha256, original_filename, bytes, mime, "
+            " index_status, is_current, first_published_at) VALUES "
+            "(:d, 1, decode('11', 'hex'), 'published.pdf', 100, 'application/pdf', "
+            " 'indexed', true, now()), "
+            "(:d, 2, decode('22', 'hex'), 'candidate.pdf', 200, 'application/pdf', "
+            " 'indexed', false, NULL)"
+        ),
+        {"d": doc_id},
+    )
+    await session.commit()
+
+    detail = await documents.get_detail(session, doc_id, _student(owner_id))
+
+    assert detail is not None and detail.versions is not None
+    assert [(v.n, v.original_filename) for v in detail.versions] == [
+        (1, "published.pdf"),
+    ]

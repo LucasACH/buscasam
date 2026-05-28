@@ -35,8 +35,8 @@ async def _seed_current_version(
         text(
             "INSERT INTO document_versions "
             "(doc_id, version_no, sha256, original_filename, bytes, mime, "
-            " index_status, is_current) "
-            "VALUES (:d, 1, decode(:sha, 'hex'), :name, :b, :m, 'indexed', true)"
+            " index_status, is_current, first_published_at) "
+            "VALUES (:d, 1, decode(:sha, 'hex'), :name, :b, :m, 'indexed', true, now())"
         ),
         {"d": doc_id, "sha": sha_hex, "name": original_filename, "b": bytes_, "m": mime},
     )
@@ -52,13 +52,16 @@ async def _seed_version(
     is_current: bool = False,
     bytes_: int = 1024,
     mime: str = "application/pdf",
+    index_status: str = "indexed",
+    first_published: bool = True,
 ) -> None:
     await session.execute(
         text(
             "INSERT INTO document_versions "
             "(doc_id, version_no, sha256, original_filename, bytes, mime, "
-            " index_status, is_current) "
-            "VALUES (:d, :vn, decode(:sha, 'hex'), :name, :b, :m, 'indexed', :cur)"
+            " index_status, is_current, first_published_at) "
+            "VALUES (:d, :vn, decode(:sha, 'hex'), :name, :b, :m, :st, :cur, "
+            "        CASE WHEN :fp THEN now() ELSE NULL END)"
         ),
         {
             "d": doc_id,
@@ -68,6 +71,8 @@ async def _seed_version(
             "b": bytes_,
             "m": mime,
             "cur": is_current,
+            "st": index_status,
+            "fp": first_published,
         },
     )
 
@@ -260,6 +265,36 @@ async def test_version_out_of_range_returns_none(session, bad_n):
         await documents.get_manageable_version_file(session, doc_id, bad_n, _docente(owner))
         is None
     )
+
+
+@pytest.mark.parametrize("index_status", ["pending", "processing", "indexed", "failed"])
+async def test_version_never_published_returns_none_for_manager(session, index_status):
+    """ADR-0011 §4: a candidate that was never the public current
+    (first_published_at IS NULL) is not downloadable through the historic-version
+    lookup, regardless of its index_status or the caller's role."""
+    doc_id = await make_document(session, visibility="privado")
+    owner = await make_user(session)
+    await make_document_author(session, doc_id, user_id=owner, status="owner")
+    # version_no=1 is the published current; the candidate is version_no=2.
+    await _seed_version(
+        session, doc_id, version_no=1, original_filename="published.pdf",
+        sha_hex="11" * 32, is_current=True,
+    )
+    await _seed_version(
+        session, doc_id, version_no=2, original_filename="candidate.pdf",
+        sha_hex="33" * 32, index_status=index_status, first_published=False,
+    )
+
+    # The candidate is filtered out before row_number() runs, so n=2 resolves
+    # to no row while the published current keeps n=1.
+    assert (
+        await documents.get_manageable_version_file(session, doc_id, 2, _docente(owner))
+        is None
+    )
+    published = await documents.get_manageable_version_file(
+        session, doc_id, 1, _docente(owner)
+    )
+    assert published is not None and published.original_filename == "published.pdf"
 
 
 async def test_version_n_ordering_matches_get_detail(session):

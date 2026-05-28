@@ -54,8 +54,8 @@ async def _seed_current_version(
         text(
             "INSERT INTO document_versions "
             "(doc_id, version_no, sha256, original_filename, bytes, mime, "
-            " index_status, is_current) "
-            "VALUES (:d, 1, decode(:sha, 'hex'), :name, :b, :m, 'indexed', true)"
+            " index_status, is_current, first_published_at) "
+            "VALUES (:d, 1, decode(:sha, 'hex'), :name, :b, :m, 'indexed', true, now())"
         ),
         {"d": doc_id, "sha": sha_hex, "name": original_filename, "b": bytes_, "m": mime},
     )
@@ -72,15 +72,18 @@ async def _seed_version(
     bytes_: int = 1024,
     mime: str = "application/pdf",
     indexed_at: str | None = None,
+    index_status: str = "indexed",
+    first_published: bool = True,
 ) -> int:
     return (
         await session.execute(
             text(
                 "INSERT INTO document_versions "
                 "(doc_id, version_no, sha256, original_filename, bytes, mime, "
-                " index_status, is_current, indexed_at) "
-                "VALUES (:d, :vn, decode(:sha, 'hex'), :name, :b, :m, 'indexed', "
-                "        :cur, CAST(:idx AS timestamptz)) RETURNING id"
+                " index_status, is_current, indexed_at, first_published_at) "
+                "VALUES (:d, :vn, decode(:sha, 'hex'), :name, :b, :m, :st, "
+                "        :cur, CAST(:idx AS timestamptz), "
+                "        CASE WHEN :fp THEN now() ELSE NULL END) RETURNING id"
             ),
             {
                 "d": doc_id,
@@ -91,6 +94,8 @@ async def _seed_version(
                 "m": mime,
                 "cur": is_current,
                 "idx": indexed_at,
+                "st": index_status,
+                "fp": first_published,
             },
         )
     ).scalar_one()
@@ -746,6 +751,42 @@ async def test_version_download_manager_each_n_returns_x_accel(
         r2.headers["content-disposition"]
         == "attachment; filename*=UTF-8''tesis_v2.pdf"
     )
+
+
+@pytest.mark.parametrize("index_status", ["pending", "processing", "indexed", "failed"])
+async def test_version_download_never_published_candidate_returns_404(
+    client, session, index_status
+):
+    """ADR-0011 §4: a candidate that was never the public current
+    (first_published_at IS NULL) returns 404 with no X-Accel leak even to the
+    owner, while the published current still downloads. The candidate is also
+    excluded from the n-ordering, so the published row keeps n=1."""
+    doc_id = await make_document(session, visibility="privado")
+    owner_id = await make_user(session)
+    await make_document_author(session, doc_id, user_id=owner_id, status="owner")
+    await _seed_version(
+        session, doc_id, version_no=1, original_filename="published.pdf",
+        sha_hex="11" * 32, is_current=True,
+    )
+    await _seed_version(
+        session, doc_id, version_no=2, original_filename="candidate.pdf",
+        sha_hex="33" * 32, index_status=index_status, first_published=False,
+    )
+    sid = await _sid_cookie(session, owner_id)
+    await session.commit()
+
+    cookies = {"sid": sid}
+    candidate = await client.get(
+        f"/api/docs/{doc_id}/versions/2/download", cookies=cookies
+    )
+    assert candidate.status_code == 404
+    assert "x-accel-redirect" not in {k.lower() for k in candidate.headers}
+
+    published = await client.get(
+        f"/api/docs/{doc_id}/versions/1/download", cookies=cookies
+    )
+    assert published.status_code == 200
+    assert published.headers["x-accel-redirect"] == "/_blobs/11/11/" + "11" * 32
 
 
 @pytest.mark.parametrize(

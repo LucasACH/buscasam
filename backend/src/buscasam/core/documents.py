@@ -120,6 +120,7 @@ class DraftState:
     is_owner: bool
     attachments: list[AttachmentInfo]
     coauthors: list[CoauthorRow]
+    versions: list[DetailVersion]
 
 
 def _publish_gate_reason(index_status: str, fingerprint_matches: bool) -> str | None:
@@ -699,8 +700,16 @@ async def publish(session: AsyncSession, user_ctx: UserCtx, doc_id: int) -> None
         text("UPDATE chunks SET is_current = true WHERE version_id = :v"),
         {"v": version_id},
     )
+    # ADR-0011 §3: stamp first_published_at on the candidate the first time it
+    # is promoted. Immutable once set; a republish does not re-stamp. Stamping
+    # here also lifts the row out of `document_versions_one_candidate` so the
+    # next replacement's candidate insert is admitted.
     await session.execute(
-        text("UPDATE document_versions SET is_current = true WHERE id = :v"),
+        text(
+            "UPDATE document_versions SET is_current = true, "
+            "  first_published_at = COALESCE(first_published_at, now()) "
+            "WHERE id = :v"
+        ),
         {"v": version_id},
     )
     await session.execute(
@@ -993,6 +1002,20 @@ async def get_draft_state(
             {"doc_id": doc_id},
         )
     ).mappings().all()
+    # ADR-0011 §4: the editar Versiones list mirrors get_detail.versions —
+    # only previously-public rows, by the same 1-based n ordering.
+    version_rows = (
+        await session.execute(
+            text(
+                "SELECT row_number() OVER (ORDER BY id) AS n, "
+                "       original_filename, mime, bytes, indexed_at, is_current "
+                "FROM document_versions "
+                "WHERE doc_id = :doc_id AND first_published_at IS NOT NULL "
+                "ORDER BY id"
+            ),
+            {"doc_id": doc_id},
+        )
+    ).mappings().all()
     # Owner row first, then insertion order. The CASE keeps the owner pinned
     # regardless of the row id; document_authors.id is monotonic per insert so
     # ordering by id is the insertion order the module map prescribes.
@@ -1039,6 +1062,17 @@ async def get_draft_state(
                 status=c["status"],
             )
             for c in coauthor_rows
+        ],
+        versions=[
+            DetailVersion(
+                n=v["n"],
+                original_filename=v["original_filename"],
+                mime=v["mime"],
+                size_bytes=v["bytes"],
+                indexed_at=v["indexed_at"],
+                is_current=v["is_current"],
+            )
+            for v in version_rows
         ],
     )
 
@@ -1182,12 +1216,18 @@ async def get_detail(
 
     versions: list[DetailVersion] | None = None
     if manageable:
+        # ADR-0011 §4: the audit list shows only versions that were at some
+        # point the public current. The same first_published_at filter narrows
+        # get_manageable_version_file, so the 1-based n stays aligned with the
+        # version-download route.
         version_rows = (
             await session.execute(
                 text(
                     "SELECT row_number() OVER (ORDER BY id) AS n, "
                     "       original_filename, mime, bytes, indexed_at, is_current "
-                    "FROM document_versions WHERE doc_id = :d ORDER BY id"
+                    "FROM document_versions "
+                    "WHERE doc_id = :d AND first_published_at IS NOT NULL "
+                    "ORDER BY id"
                 ),
                 {"d": doc_id},
             )
@@ -1356,6 +1396,11 @@ async def get_manageable_version_file(
     `get_detail`'s `version_rows` query.
     """
     where, params = manageable_where("d", user_ctx)
+    # ADR-0011 §4: only versions that were at some point the public current
+    # (first_published_at IS NOT NULL) are downloadable here. Failed, discarded,
+    # and in-flight ready candidates uniformly resolve to None → 404. The filter
+    # lives in the subquery so the row_number() ordering (shared with get_detail)
+    # is computed over the same narrowed set.
     row = (
         await session.execute(
             text(
@@ -1365,7 +1410,8 @@ async def get_manageable_version_file(
                 "JOIN ("
                 "  SELECT doc_id, sha256, original_filename, mime, "
                 "         row_number() OVER (PARTITION BY doc_id ORDER BY id) AS n "
-                "  FROM document_versions WHERE doc_id = :doc_id"
+                "  FROM document_versions "
+                "  WHERE doc_id = :doc_id AND first_published_at IS NOT NULL"
                 ") v ON v.doc_id = d.id "
                 f"WHERE d.id = :doc_id AND v.n = :n AND ({where})"
             ),

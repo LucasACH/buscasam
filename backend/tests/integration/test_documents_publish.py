@@ -347,6 +347,51 @@ async def test_patch_title_after_publish_reindexes_and_stays_published(session):
     assert status == "published"
 
 
+async def test_publish_stamps_first_published_at_once_and_does_not_restamp(session):
+    """ADR-0011 §3: publish sets first_published_at on the candidate row only
+    when its current value is NULL; a republish leaves the stamp untouched."""
+    owner = await make_user(session, role="estudiante")
+    doc_id, version_id = await _seed_candidate(session, owner_user_id=owner)
+    ctx = UserCtx(user_id=owner, is_unsam=True, role="estudiante")
+
+    before = (
+        await session.execute(
+            text(
+                "SELECT first_published_at FROM document_versions WHERE id = :id"
+            ),
+            {"id": version_id},
+        )
+    ).scalar_one()
+    assert before is None
+
+    await documents.publish(session, ctx, doc_id)
+
+    stamped = (
+        await session.execute(
+            text(
+                "SELECT first_published_at FROM document_versions WHERE id = :id"
+            ),
+            {"id": version_id},
+        )
+    ).scalar_one()
+    assert stamped is not None
+
+    # Re-publish the same already-current version: the publish flow re-runs
+    # against the same row (still last by version_no, still indexed) and must
+    # leave first_published_at frozen.
+    await documents.publish(session, ctx, doc_id)
+
+    after = (
+        await session.execute(
+            text(
+                "SELECT first_published_at FROM document_versions WHERE id = :id"
+            ),
+            {"id": version_id},
+        )
+    ).scalar_one()
+    assert after == stamped
+
+
 async def test_completed_published_headline_refresh_remains_searchable(session):
     owner = await make_user(session)
     doc_id, version_id = await _seed_candidate(

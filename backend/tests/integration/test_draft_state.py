@@ -85,6 +85,43 @@ async def test_get_draft_state_indexed_and_matched_is_publishable(session):
     assert state.staged_abstract == "resumen"
 
 
+async def test_get_draft_state_versions_lists_published_excludes_candidate(session):
+    """ADR-0011 §4: the editar Versiones list mirrors get_detail — only rows
+    that were at some point the public current appear, by 1-based n. A draft's
+    own never-published candidate is excluded; previously published rows stay."""
+    uid = await make_user(session)
+    doc_id = await make_document(session, publication_status="published", titulo="T")
+    await session.execute(
+        text(
+            "INSERT INTO document_authors (doc_id, user_id, display_name, status) "
+            "VALUES (:doc_id, :uid, 'Owner', 'owner')"
+        ),
+        {"doc_id": doc_id, "uid": uid},
+    )
+    # Two previously published versions + an in-flight candidate (NULL stamp).
+    await session.execute(
+        text(
+            "INSERT INTO document_versions "
+            "(doc_id, version_no, sha256, original_filename, bytes, mime, "
+            " index_status, is_current, first_published_at, headline_fingerprint) VALUES "
+            "(:d, 1, decode('11', 'hex'), 'v1.pdf', 1, 'application/pdf', "
+            " 'indexed', false, now(), 'fp1'), "
+            "(:d, 2, decode('22', 'hex'), 'v2.pdf', 1, 'application/pdf', "
+            " 'indexed', true, now(), 'fp2'), "
+            "(:d, 3, decode('33', 'hex'), 'candidate.pdf', 1, 'application/pdf', "
+            " 'indexed', false, NULL, 'fp3')"
+        ),
+        {"d": doc_id},
+    )
+
+    state = await documents.get_draft_state(session, _ctx(uid), doc_id)
+
+    assert [(v.n, v.original_filename) for v in state.versions] == [
+        (1, "v1.pdf"),
+        (2, "v2.pdf"),
+    ]
+
+
 async def test_get_draft_state_processing_gates_with_processing(session):
     uid, doc_id, version_id = await _seed_candidate(session, index_status="processing")
 

@@ -36,6 +36,7 @@ function returns(state: Partial<DraftStateDTO>) {
     is_owner: true,
     attachments: [],
     coauthors: [],
+    versions: [],
     ...state,
   };
   apiGet.mockResolvedValue({ data: body, error: undefined });
