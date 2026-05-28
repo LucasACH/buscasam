@@ -950,6 +950,47 @@ async def publish(session: AsyncSession, user_ctx: UserCtx, doc_id: int) -> None
     await jobs.enqueue_fan_out_coauthor_invites(session, doc_id)
 
 
+async def soft_delete(
+    session: AsyncSession, user_ctx: UserCtx, doc_id: int
+) -> None:
+    """Owner-only logical deletion (module map §core/documents, issue #65).
+
+    Owner-only via the `publish` inline-owner-SELECT precedent: a missing row or
+    a non-owner (accepted coautor or stranger) raises DocumentNotFound — the two
+    are indistinguishable, so there is no existence leak. The owner SELECT
+    carries no moderation_hidden_at and no soft_deleted_at filter, so a
+    moderation-hidden document is still deletable and an already-deleted document
+    still passes the gate.
+
+    Stamp-once clock: the UPDATE only matches a row whose soft_deleted_at IS
+    NULL, so re-deleting is a harmless no-op that never moves the timestamp — the
+    180-día retention window counts from the first deletion. Touches neither
+    publication_status nor moderation_hidden_at; the lifecycle lives entirely in
+    soft_deleted_at (ADR-0010 §10, ADR-0006 §11). The inherited exclusion
+    (soft_deleted_at IS NULL in every read predicate) makes the document
+    immediately invisible to every reader surface.
+    """
+    owner_user_id = (
+        await session.execute(
+            text(
+                "SELECT user_id FROM document_authors "
+                "WHERE doc_id = :doc_id AND status = 'owner' LIMIT 1"
+            ),
+            {"doc_id": doc_id},
+        )
+    ).scalar_one_or_none()
+    if owner_user_id is None or owner_user_id != user_ctx.user_id:
+        raise DocumentNotFound
+
+    await session.execute(
+        text(
+            "UPDATE documents SET soft_deleted_at = now() "
+            "WHERE id = :doc_id AND soft_deleted_at IS NULL"
+        ),
+        {"doc_id": doc_id},
+    )
+
+
 async def _assert_owner(
     session: AsyncSession, user_ctx: UserCtx, doc_id: int
 ) -> None:

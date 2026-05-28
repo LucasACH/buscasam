@@ -293,6 +293,36 @@ describe("useDraftState", () => {
 
     expect(await result.current.discard()).toBe("discard_failed");
   });
+
+  it("softDelete deletes the document through the typed endpoint", async () => {
+    returns({});
+    apiDelete.mockResolvedValue({ error: undefined, response: { status: 204 } });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    const error = await result.current.softDelete();
+
+    expect(error).toBeUndefined();
+    expect(apiDelete).toHaveBeenCalledWith("/api/documents/{doc_id}", {
+      params: { path: { doc_id: 1 } },
+    });
+  });
+
+  it("softDelete surfaces a typed error on failure", async () => {
+    returns({});
+    apiDelete.mockResolvedValue({
+      error: { detail: "boom" },
+      response: { status: 500 },
+    });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(await result.current.softDelete()).toBe("delete_failed");
+  });
 });
 
 describe("useDraftAttachments", () => {

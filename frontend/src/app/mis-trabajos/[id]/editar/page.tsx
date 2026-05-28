@@ -20,6 +20,7 @@ import {
   type DiscardMutationError,
   type DraftState,
   type ReplaceMutationError,
+  type SoftDeleteMutationError,
 } from "../../useDraftState";
 
 const formSchema = z.object({
@@ -36,7 +37,8 @@ export default function EditarPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const docId = Number(params.id);
-  const { state, isLoading, refresh, replace, discard } = useDraftState(docId);
+  const { state, isLoading, refresh, replace, discard, softDelete } =
+    useDraftState(docId);
 
   useEffect(() => {
     if (isInvitado) router.replace(`/login?next=/mis-trabajos/${docId}/editar`);
@@ -56,6 +58,7 @@ export default function EditarPage() {
       refresh={refresh}
       replace={replace}
       discard={discard}
+      softDelete={softDelete}
     />
   );
 }
@@ -66,15 +69,18 @@ function EditarForm({
   refresh,
   replace,
   discard,
+  softDelete,
 }: {
   docId: number;
   state: DraftState;
   refresh: () => Promise<void>;
   replace: (file: File) => Promise<ReplaceMutationError | undefined>;
   discard: () => Promise<DiscardMutationError | undefined>;
+  softDelete: () => Promise<SoftDeleteMutationError | undefined>;
 }) {
   const router = useRouter();
   const [publishing, setPublishing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const { register, getValues, formState } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     mode: "onBlur",
@@ -138,6 +144,24 @@ function EditarForm({
       toast.error("No se pudo publicar");
     } finally {
       setPublishing(false);
+    }
+  }
+
+  async function onDelete() {
+    setDeleting(true);
+    // finally re-enables the button (its disabled state doubles as the
+    // double-click guard) so a thrown DELETE never leaves the user stuck.
+    try {
+      const error = await softDelete();
+      if (error) {
+        toast.error("No se pudo eliminar");
+        return;
+      }
+      router.push("/mis-trabajos");
+    } catch {
+      toast.error("No se pudo eliminar");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -267,6 +291,16 @@ function EditarForm({
               {lifecycle.gateMessage}
             </p>
           )}
+        </div>
+      )}
+
+      {/* Eliminar is owner-only and lives only here (not on Mis trabajos rows),
+          keeping the delete mutation single-copy (module map §Frontend Papelera). */}
+      {state.isOwner && (
+        <div className="mt-8 border-t pt-8">
+          <Button variant="destructive" disabled={deleting} onClick={onDelete}>
+            Eliminar
+          </Button>
         </div>
       )}
     </main>

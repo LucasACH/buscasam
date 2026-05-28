@@ -36,6 +36,7 @@ from buscasam.core.documents import (
     remove_attachment,
     replace_main_version,
     revoke_invitation,
+    soft_delete,
     update_draft_metadata,
 )
 from buscasam.core.extract import PDFEncryptionError, probe_encrypted
@@ -435,6 +436,19 @@ async def publish_document(
         raise HTTPException(status_code=404)
     except PublishConflict:
         raise HTTPException(status_code=409)
+    return Response(status_code=204)
+
+
+@router.delete("/documents/{doc_id}", status_code=204)
+async def delete_document(
+    doc_id: int,
+    user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    try:
+        await soft_delete(session, user_ctx, doc_id)
+    except DocumentNotFound:
+        raise HTTPException(status_code=404)
     return Response(status_code=204)
 
 
