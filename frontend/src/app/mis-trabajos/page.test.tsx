@@ -94,6 +94,15 @@ describe("/mis-trabajos page", () => {
     expect(pub).toHaveTextContent(/2024/);
   });
 
+  it("links to the Papelera", async () => {
+    apiGet.mockResolvedValue({ data: [] });
+
+    wrap(<MisTrabajosPage />);
+
+    const link = await screen.findByRole("link", { name: /Papelera/ });
+    expect(link).toHaveAttribute("href", "/mis-trabajos/papelera");
+  });
+
   it("renders the empty-state copy in each section when the user has no documents", async () => {
     apiGet.mockResolvedValue({ data: [] });
 

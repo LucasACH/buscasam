@@ -107,3 +107,28 @@ def manageable_where(alias: str, user_ctx: UserCtx) -> tuple[str, dict]:
         f")"
     )
     return where, {"mgmt_user_id": user_ctx.user_id}
+
+
+def restorable_where(alias: str, user_ctx: UserCtx) -> tuple[str, dict]:
+    """`WHERE`-clause body + bind params selecting the caller's OWN soft-deleted
+    documents — the deliberate inverse of the four exclusion predicates above.
+
+    Owner-scoped (`status = 'owner'` only — NOT the manageable owner|accepted
+    set, because delete/restore are owner-only, PRD stories 18-20) AND
+    `soft_deleted_at IS NOT NULL`. The only predicate in the module that
+    *selects* soft-deleted rows; consumed by `restore` and
+    `list_deleted_documents` (module map §core/document_access, issue #66).
+
+    Bind key is `:restore_user_id`, distinct from `manageable_where`'s
+    `:mgmt_user_id`, so a statement can compose both without collision.
+    """
+    where = (
+        f"{alias}.soft_deleted_at IS NOT NULL "
+        f"AND EXISTS ("
+        f"SELECT 1 FROM document_authors da "
+        f"WHERE da.doc_id = {alias}.id "
+        f"AND da.user_id = :restore_user_id "
+        f"AND da.status = 'owner'"
+        f")"
+    )
+    return where, {"restore_user_id": user_ctx.user_id}
