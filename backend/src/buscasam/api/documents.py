@@ -20,6 +20,7 @@ from buscasam.core.documents import (
     CoauthorStatus,
     DocumentNotFound,
     InvalidCoauthorId,
+    NoCandidateToDiscard,
     NoPublishedVersion,
     NotOwner,
     PublishConflict,
@@ -27,6 +28,7 @@ from buscasam.core.documents import (
     assert_manageable,
     attach_main_version,
     create_draft,
+    discard_candidate,
     get_draft_state,
     invite_coauthor,
     list_own_documents,
@@ -208,6 +210,22 @@ async def replace_main_file(
             status_code=409, detail="El documento aún no tiene una versión publicada"
         )
     return {}
+
+
+@router.delete("/documents/{doc_id}/candidate", status_code=204)
+async def discard_candidate_endpoint(
+    doc_id: int,
+    user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    # Singular by contract: at most one candidate per document, identified by
+    # doc_id alone (ADR-0011 §9). Cross-user manageable miss and absent candidate
+    # both map to 404 (no existence leak).
+    try:
+        await discard_candidate(session, user_ctx, doc_id)
+    except (DocumentNotFound, NoCandidateToDiscard):
+        raise HTTPException(status_code=404)
+    return Response(status_code=204)
 
 
 class AttachmentDTO(BaseModel):
