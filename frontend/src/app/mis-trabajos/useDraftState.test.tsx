@@ -245,6 +245,54 @@ describe("useDraftState", () => {
     (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ status: 409 });
     expect(await result.current.replace(file)).toBe("no_published_version");
   });
+
+  it("discard optimistically removes the candidate on success", async () => {
+    returns({ candidate: candidate({ status: "failed" }) });
+    apiDelete.mockResolvedValue({ error: undefined, response: { status: 204 } });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(result.current.state?.candidate).not.toBeNull();
+
+    const error = await result.current.discard();
+
+    expect(error).toBeUndefined();
+    expect(apiDelete).toHaveBeenCalledWith(
+      "/api/documents/{doc_id}/candidate",
+      { params: { path: { doc_id: 1 } } },
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(result.current.state?.candidate).toBeNull();
+  });
+
+  it("discard treats a 404 race as success", async () => {
+    returns({ candidate: candidate({ status: "failed" }) });
+    apiDelete.mockResolvedValue({
+      error: { detail: "x" },
+      response: { status: 404 },
+    });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(await result.current.discard()).toBeUndefined();
+  });
+
+  it("discard surfaces a typed error on other failures", async () => {
+    returns({ candidate: candidate({ status: "failed" }) });
+    apiDelete.mockResolvedValue({
+      error: { detail: "boom" },
+      response: { status: 500 },
+    });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(await result.current.discard()).toBe("discard_failed");
+  });
 });
 
 describe("useDraftAttachments", () => {
