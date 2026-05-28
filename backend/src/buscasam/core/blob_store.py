@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import hashlib
 import os
+import time
 import uuid
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 from typing import AsyncIterator
 
@@ -99,6 +101,27 @@ def local_path(sha256: str) -> Path:
 
 async def exists(sha256: str) -> bool:
     return _sharded_path(sha256).exists()
+
+
+async def iter_orphan_candidates(*, min_age: timedelta) -> AsyncIterator[str]:
+    """Yield the sha256 of every stored blob whose final-path mtime is older
+    than `min_age` (ADR-0006 §12 orphan sweep). Walks the two-level sharded
+    tree (ab/cd/abcd…), skipping the `.tmp/` staging dir. The mtime grace is
+    the argument, not baked in; reference checking + unlink stay on
+    `discard_if_unreferenced`.
+    """
+    cutoff = time.time() - min_age.total_seconds()
+    if not BLOB_ROOT.exists():
+        return
+    for shard1 in BLOB_ROOT.iterdir():
+        if not shard1.is_dir() or shard1.name == ".tmp":
+            continue
+        for shard2 in shard1.iterdir():
+            if not shard2.is_dir():
+                continue
+            for blob in shard2.iterdir():
+                if blob.is_file() and blob.stat().st_mtime < cutoff:
+                    yield blob.name
 
 
 async def discard_if_unreferenced(session: AsyncSession, sha256: str) -> None:

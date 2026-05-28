@@ -77,3 +77,25 @@ async def test_enqueue_index_document_twice_is_no_op(session):
         )
     ).scalar_one()
     assert count == 1
+
+
+async def test_enqueue_maintenance_jobs_defer_with_periodic_timestamp_arg(session):
+    await jobs.enqueue_purge_deleted(session)
+    await jobs.enqueue_sweep_orphan_blobs(session)
+
+    rows = (
+        await session.execute(
+            text(
+                "SELECT task_name, args FROM procrastinate_jobs "
+                "WHERE status = 'todo' AND task_name LIKE '%jobs.%' "
+                "AND (task_name LIKE '%purge_deleted' "
+                "  OR task_name LIKE '%sweep_orphan_blobs')"
+            )
+        )
+    ).mappings().all()
+
+    by_task = {r["task_name"].rsplit(".", 1)[-1]: r["args"] for r in rows}
+    assert set(by_task) == {"purge_deleted", "sweep_orphan_blobs"}
+    # The periodic-task `timestamp` arg must be present, or the body errors.
+    assert by_task["purge_deleted"]["timestamp"] == 0
+    assert by_task["sweep_orphan_blobs"]["timestamp"] == 0
