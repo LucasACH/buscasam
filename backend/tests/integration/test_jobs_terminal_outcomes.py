@@ -155,7 +155,7 @@ async def test_index_exhausted_marks_failed_and_notifies(
     assert notif_count == 1
 
 
-async def test_index_retries_remaining_leaves_candidate_untouched(
+async def test_index_retries_remaining_leaves_candidate_in_processing(
     session, blob_root, worker_resources, monkeypatch
 ):
     sha_hex, sha_bytes = _persist_blob(blob_root, b"%PDF-1.4 x")
@@ -179,9 +179,11 @@ async def test_index_retries_remaining_leaves_candidate_untouched(
             {"id": version_id},
         )
     ).mappings().one()
-    # Worker session rolled back: the `processing` flip from _begin_indexing is
-    # undone, so the row stays where the test seeded it.
-    assert row["index_status"] == "pending"
+    # ADR-0011 §5: the claim transaction commits pending→processing before the
+    # extract IO (so the row lock releases). A transient IO failure with retries
+    # remaining no longer rolls that flip back — the row stays 'processing' and a
+    # retry re-claims it. No terminal write, no notification.
+    assert row["index_status"] == "processing"
     assert row["index_error"] is None
 
     notif_count = (

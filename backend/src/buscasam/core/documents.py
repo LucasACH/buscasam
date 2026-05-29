@@ -440,16 +440,14 @@ async def discard_candidate(
     is unchanged). Leaves the document_versions row and the blob (orphan sweep
     handles blob cleanup).
 
-    Liveness caveat: the worker holds the candidate row's `_begin_indexing`
-    FOR UPDATE lock through its whole extract/OCR IO window without an
-    intervening commit (jobs.py `_run_attempt`), so this FOR UPDATE blocks until
-    an actively-indexing worker commits — up to the OCR timeout (ADR-0008 §11).
-    End state stays correct (the worker commits indexed+chunks, then the
-    unblocked descartar discards the row and deletes those chunks), but the
-    request can hang for the IO duration. ADR-0011 §5's "between the lock release
-    and the commit" window assumes a post-`_begin_indexing` commit that the
-    worker does not yet do; until then the gate's no-op is reached via this lock
-    wait rather than via concurrent contention."""
+    Liveness: the worker no longer holds the candidate row lock across its
+    extract/OCR IO. `jobs._claim` commits the pending→processing flip in a short
+    transaction, releasing `_begin_indexing`'s FOR UPDATE before the IO begins,
+    and finalizes through the `WHERE index_status='processing'` guard (ADR-0011
+    §5). So this FOR UPDATE contends only with the brief claim and finalize
+    transactions, not the IO window — descartar commits while indexing work is
+    in flight, and the worker's guarded write then no-ops against the discarded
+    row. The only remaining wait is the sub-second overlap with claim/finalize."""
     await assert_manageable(session, user_ctx, doc_id)
     candidate_vid = (
         await session.execute(

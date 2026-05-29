@@ -81,3 +81,22 @@ async def session(engine):
         ) as s:
             yield s
         await conn.rollback()
+
+
+@pytest_asyncio.fixture
+async def worker_sm(session):
+    """Sessionmaker for the worker `_run_*` cores, which now span several short
+    transactions (claim / finalize). Each call joins the test connection via its
+    own savepoint, so the runner's per-phase commits are observable on `session`
+    and still roll back at teardown (mirrors test_jobs_terminal_outcomes'
+    worker_resources factory)."""
+    conn = await session.connection()
+
+    def factory():
+        return AsyncSession(
+            bind=conn,
+            join_transaction_mode="create_savepoint",
+            expire_on_commit=False,
+        )
+
+    return factory

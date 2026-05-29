@@ -294,7 +294,7 @@ async def test_update_on_failed_candidate_persists_and_stays_failed(session):
     assert state.publish_gate_reason == "processing_failed"
 
 
-async def test_title_edited_during_processing_self_enqueues_reindex(session):
+async def test_title_edited_during_processing_self_enqueues_reindex(session, worker_sm):
     """R006: a título PATCH inside the index window leaves write_indexed_candidate
     stamping a fingerprint from the pre-edit title. It must detect the drift and
     enqueue a refresh, or the publish gate sticks on reindexing_headline forever."""
@@ -327,14 +327,14 @@ async def test_title_edited_during_processing_self_enqueues_reindex(session):
     assert mid.publish_gate_reason == "reindexing_headline"
 
     tei = _tei_mock()
-    await jobs._run_refresh_headline(session, tei, version_id)
+    await jobs._run_refresh_headline(worker_sm, tei, version_id)
     await tei.aclose()
 
     after = await documents.get_draft_state(session, ctx, doc_id)
     assert after.publish_gate_reason is None
 
 
-async def test_reindex_round_trip_clears_the_gate(session):
+async def test_reindex_round_trip_clears_the_gate(session, worker_sm):
     uid, doc_id, version_id = await _seed_candidate(
         session, titulo="Viejo título", staged_abstract="abs", index_status="indexed"
     )
@@ -345,7 +345,7 @@ async def test_reindex_round_trip_clears_the_gate(session):
     assert mid.publish_gate_reason == "reindexing_headline"
 
     tei = _tei_mock()
-    await jobs._run_refresh_headline(session, tei, version_id)
+    await jobs._run_refresh_headline(worker_sm, tei, version_id)
     await tei.aclose()
 
     after = await documents.get_draft_state(session, ctx, doc_id)

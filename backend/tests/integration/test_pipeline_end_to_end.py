@@ -86,7 +86,7 @@ async def _seed_sid(session, user_id: int) -> str:
     return base64.urlsafe_b64encode(sid).rstrip(b"=").decode()
 
 
-async def test_pipeline_pending_to_indexed_for_text_layer_pdf(client, session, blob_root):
+async def test_pipeline_pending_to_indexed_for_text_layer_pdf(client, session, blob_root, worker_sm):
     uid = await make_user(session)
     sid = await _seed_sid(session, uid)
     cookies = {auth.SID_COOKIE: sid}
@@ -128,7 +128,7 @@ async def test_pipeline_pending_to_indexed_for_text_layer_pdf(client, session, b
 
     # Simulate the worker picking up that job.
     tei = _tei_mock()
-    await jobs._run_index_document(session, tei, version_id)
+    await jobs._run_index_document(worker_sm, tei, version_id)
     await tei.aclose()
 
     row = (
