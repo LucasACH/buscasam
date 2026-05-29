@@ -191,23 +191,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/moderation/reports": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create Report */
-        post: operations["create_report_api_moderation_reports_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/coauthor_invitations/{doc_id}/accept": {
         parameters: {
             query?: never;
@@ -557,13 +540,30 @@ export interface paths {
             cookie?: never;
         };
         /** Download Version */
-        get: operations["download_version_api_docs__doc_id__versions__n__download_head"];
+        get: operations["download_version_api_docs__doc_id__versions__n__download_get"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         /** Download Version */
-        head: operations["download_version_api_docs__doc_id__versions__n__download_head"];
+        head: operations["download_version_api_docs__doc_id__versions__n__download_get"];
+        patch?: never;
+        trace?: never;
+    };
+    "/api/moderation/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Report */
+        post: operations["create_report_api_moderation_reports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
         patch?: never;
         trace?: never;
     };
@@ -584,19 +584,99 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/moderation/reports/{report_id}/document": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect Document */
+        get: operations["inspect_document_api_moderation_reports__report_id__document_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/moderation/reports/{report_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect Download */
+        get: operations["inspect_download_api_moderation_reports__report_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/moderation/reports/{report_id}/hide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Hide Report */
+        post: operations["hide_report_api_moderation_reports__report_id__hide_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/moderation/reports/{report_id}/unhide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Unhide Report */
+        post: operations["unhide_report_api_moderation_reports__report_id__unhide_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/moderation/reports/{report_id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Dismiss Report */
+        post: operations["dismiss_report_api_moderation_reports__report_id__dismiss_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** ReportBody */
-        ReportBody: {
-            /** Doc Id */
-            doc_id: number;
-            /**
-             * Reason
-             * @enum {string}
-             */
-            reason: "spam" | "contenido_inadecuado" | "plagio" | "error";
+        /** ActionBody */
+        ActionBody: {
+            /** Reason */
+            reason?: string | null;
         };
         /** AreaDTO */
         AreaDTO: {
@@ -848,6 +928,26 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** HideBody */
+        HideBody: {
+            /** Reason */
+            reason: string;
+        };
+        /** InspectMetadataDTO */
+        InspectMetadataDTO: {
+            /** Titulo */
+            titulo: string;
+            /** Abstract */
+            abstract: string;
+            /** Palabras Clave */
+            palabras_clave: string[];
+            /** Autores */
+            autores: components["schemas"]["AuthorDisplayDTO"][];
+            /** Tipo */
+            tipo: string;
+            /** Area Path */
+            area_path: string;
+        };
         /** InvitationBannerDTO */
         InvitationBannerDTO: {
             /** Inviter Display Name */
@@ -952,6 +1052,8 @@ export interface components {
         QueueEntryDTO: {
             /** Doc Id */
             doc_id: number;
+            /** Report Id */
+            report_id: number;
             /** Title */
             title: string;
             /** Reasons */
@@ -988,6 +1090,16 @@ export interface components {
             tipo: string;
             /** Fecha */
             fecha: string | null;
+        };
+        /** ReportBody */
+        ReportBody: {
+            /** Doc Id */
+            doc_id: number;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "spam" | "contenido_inadecuado" | "plagio" | "error";
         };
         /** ResultDTO */
         ResultDTO: {
@@ -1363,37 +1475,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MarkAllReadResponse"];
-                };
-            };
-        };
-    };
-    create_report_api_moderation_reports_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReportBody"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -2036,7 +2117,7 @@ export interface operations {
             };
         };
     };
-    download_version_api_docs__doc_id__versions__n__download_head: {
+    download_version_api_docs__doc_id__versions__n__download_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2068,7 +2149,7 @@ export interface operations {
             };
         };
     };
-    download_version_api_docs__doc_id__versions__n__download_head: {
+    download_version_api_docs__doc_id__versions__n__download_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2088,6 +2169,37 @@ export interface operations {
                 content: {
                     "application/json": unknown;
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_report_api_moderation_reports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -2116,6 +2228,167 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QueueResponse"];
+                };
+            };
+        };
+    };
+    inspect_document_api_moderation_reports__report_id__document_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InspectMetadataDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    inspect_download_api_moderation_reports__report_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    hide_report_api_moderation_reports__report_id__hide_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HideBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unhide_report_api_moderation_reports__report_id__unhide_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActionBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dismiss_report_api_moderation_reports__report_id__dismiss_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActionBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

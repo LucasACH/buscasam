@@ -55,6 +55,7 @@ async def file_report(
 @dataclass(frozen=True)
 class QueueEntry:
     doc_id: int
+    report_id: int  # a representative open report, for report-scoped inspect/action
     title: str
     reasons: list[str]  # distinct reasons across open reports, sorted
     first_reported_at: datetime
@@ -73,7 +74,7 @@ async def list_open_reports(session: AsyncSession) -> list[QueueEntry]:
     rows = (
         await session.execute(
             text(
-                "SELECT r.doc_id, d.titulo, "
+                "SELECT r.doc_id, max(r.id) AS report_id, d.titulo, "
                 "       array_agg(DISTINCT r.reason ORDER BY r.reason) AS reasons, "
                 "       min(r.created_at) AS first_reported_at, "
                 "       max(r.created_at) AS last_reported_at, "
@@ -88,6 +89,7 @@ async def list_open_reports(session: AsyncSession) -> list[QueueEntry]:
     return [
         QueueEntry(
             doc_id=r["doc_id"],
+            report_id=r["report_id"],
             title=r["titulo"],
             reasons=list(r["reasons"]),
             first_reported_at=r["first_reported_at"],

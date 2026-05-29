@@ -29,6 +29,7 @@ function returns(entries: unknown[], isLoading = false) {
 
 const ENTRY = {
   doc_id: 7,
+  report_id: 42,
   title: "Trabajo reportado",
   reasons: ["plagio", "spam"],
   first_reported_at: "2026-01-01T00:00:00Z",
@@ -54,6 +55,16 @@ describe("/moderacion queue page", () => {
     expect(screen.getByText("Trabajo reportado")).toBeInTheDocument();
     expect(screen.getByText(/plagio, spam/)).toBeInTheDocument();
     expect(screen.getByText(/3 reportes/)).toBeInTheDocument();
+  });
+
+  it("links each row to its report-scoped inspect view", () => {
+    returns([ENTRY]);
+
+    render(<ModeracionPage />);
+
+    expect(
+      screen.getByRole("link", { name: /Trabajo reportado/ }),
+    ).toHaveAttribute("href", "/moderacion/42");
   });
 
   it("redirects an invitado to login", () => {

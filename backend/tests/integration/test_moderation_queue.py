@@ -21,15 +21,17 @@ async def _file_report(
     *,
     status: str = "open",
     created_at: datetime | None = None,
-) -> None:
-    await session.execute(
-        text(
-            "INSERT INTO document_reports "
-            "(doc_id, reporter_user_id, reason, status, created_at) "
-            "VALUES (:d, :u, :r, :s, COALESCE(:c, now()))"
-        ),
-        {"d": doc_id, "u": reporter_user_id, "r": reason, "s": status, "c": created_at},
-    )
+) -> int:
+    return (
+        await session.execute(
+            text(
+                "INSERT INTO document_reports "
+                "(doc_id, reporter_user_id, reason, status, created_at) "
+                "VALUES (:d, :u, :r, :s, COALESCE(:c, now())) RETURNING id"
+            ),
+            {"d": doc_id, "u": reporter_user_id, "r": reason, "s": status, "c": created_at},
+        )
+    ).scalar_one()
 
 
 async def test_one_entry_per_doc_with_multi_reporter_count_and_fields(session):
@@ -51,6 +53,16 @@ async def test_one_entry_per_doc_with_multi_reporter_count_and_fields(session):
     assert e.reasons == ["plagio", "spam"]
     assert e.first_reported_at == t1
     assert e.last_reported_at == t2
+
+
+async def test_entry_carries_a_representative_open_report_id(session):
+    doc = await make_document(session, titulo="Doc A")
+    id1 = await _file_report(session, doc, await make_user(session), "spam")
+    id2 = await _file_report(session, doc, await make_user(session), "plagio")
+
+    [entry] = await list_open_reports(session)
+
+    assert entry.report_id == max(id1, id2)
 
 
 async def test_mixed_open_and_resolved_reports_aggregate_only_open(session):
