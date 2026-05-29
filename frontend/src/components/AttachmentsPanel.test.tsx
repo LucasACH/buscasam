@@ -2,23 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-const { useDraftAttachmentsMock, addAttachment, removeAttachment } = vi.hoisted(
-  () => ({
-    useDraftAttachmentsMock: vi.fn(),
-    addAttachment: vi.fn(),
-    removeAttachment: vi.fn(),
-  }),
-);
-vi.mock("@/app/mis-trabajos/useDraftState", () => ({
-  useDraftAttachments: useDraftAttachmentsMock,
-}));
+const addAttachment = vi.fn();
+const removeAttachment = vi.fn();
 
 const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { error: toastError } }));
 
 import { AttachmentsPanel } from "./AttachmentsPanel";
-
-const DOC_ID = 42;
 
 type Attachment = {
   id: number;
@@ -32,18 +22,17 @@ function att(id: number, name: string): Attachment {
 }
 
 function wrap(attachments: Attachment[], canManage = true) {
-  useDraftAttachmentsMock.mockReturnValue({
-    attachments,
-    atCapacity: attachments.length >= 5,
-    addAttachment,
-    removeAttachment,
-  });
-  return render(<AttachmentsPanel docId={DOC_ID} canManage={canManage} />);
+  return render(
+    <AttachmentsPanel
+      attachments={attachments}
+      actions={{ add: addAttachment, remove: removeAttachment }}
+      canManage={canManage}
+    />,
+  );
 }
 
 describe("AttachmentsPanel", () => {
   beforeEach(() => {
-    useDraftAttachmentsMock.mockReset();
     addAttachment.mockReset();
     addAttachment.mockResolvedValue(undefined);
     removeAttachment.mockReset();
