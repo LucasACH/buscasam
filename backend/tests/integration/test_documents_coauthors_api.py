@@ -14,7 +14,7 @@ from sqlalchemy import text
 from buscasam.api.app import create_app
 from buscasam.api.deps import get_session
 from buscasam.core import auth
-from buscasam.core.jobs import coauthor_invite_event_key
+from buscasam.core.notifications import coauthor_invite_event_key
 from buscasam.settings import settings
 from tests.factories import (
     make_document,

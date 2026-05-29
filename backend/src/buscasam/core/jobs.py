@@ -25,6 +25,7 @@ from buscasam.core import chunk as chunkmod
 from buscasam.core import documents
 from buscasam.core import embed as embedmod
 from buscasam.core import extract as extractmod
+from buscasam.core import notifications
 from buscasam.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -65,13 +66,6 @@ def _headline_lock(version_id: int) -> str:
 
 def _coauthor_lock(doc_id: int) -> str:
     return f"coauthors:d{doc_id}"
-
-
-def coauthor_invite_event_key(doc_id: int, user_id: int) -> str:
-    """Dedup key for coauthor-invite notifications (module map §core/jobs,
-    ADR-0010 §9). The single producer/consumer format: the fan-out inserts
-    under it; core/documents.accept_invitation/decline_invitation mark it read."""
-    return f"coauthor_invite:{doc_id}:{user_id}"
 
 
 # --- Plain async cores (callable by tests + by the task body wrapper). ---
@@ -250,22 +244,12 @@ async def _run_fan_out_coauthor_invites(session: AsyncSession, doc_id: int) -> N
         )
     ).mappings().all()
     for r in rows:
-        await session.execute(
-            text(
-                "INSERT INTO notifications (user_id, event_key, kind, payload_json) "
-                "VALUES (:uid, :ek, 'coauthor_invite', "
-                "        jsonb_build_object('doc_title', cast(:doc_title as text), "
-                "                           'doc_id', cast(:doc_id as bigint), "
-                "                           'inviter', cast(:inviter as text))) "
-                "ON CONFLICT (user_id, event_key) DO NOTHING"
-            ),
-            {
-                "uid": r["user_id"],
-                "ek": coauthor_invite_event_key(doc_id, r["user_id"]),
-                "doc_title": r["doc_title"],
-                "doc_id": doc_id,
-                "inviter": r["inviter"],
-            },
+        await notifications.notify_coauthor_invite(
+            session,
+            user_id=r["user_id"],
+            doc_id=doc_id,
+            doc_title=r["doc_title"],
+            inviter=r["inviter"],
         )
 
 

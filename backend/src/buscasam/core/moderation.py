@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Literal
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from buscasam.core import notifications
 from buscasam.core.document_access import readable_where
 
 if TYPE_CHECKING:
@@ -106,9 +107,13 @@ class ActionOutcome:
     doc_id: int
 
 
-# hide/unhide notify registered authors; dismiss notifies no one. The event_key
-# format `{kind}:{action_id}` is owned here (the single producer).
-_NOTIFY_KIND = {"hide": "document_hidden", "unhide": "document_unhidden"}
+# hide/unhide notify registered authors; dismiss notifies no one. The notification
+# kind/event-key/payload shape lives in core/notifications; this map is just the
+# moderation-action → kind decision.
+_NOTIFY_KIND = {
+    "hide": notifications.DOCUMENT_HIDDEN,
+    "unhide": notifications.DOCUMENT_UNHIDDEN,
+}
 
 
 async def hide(
@@ -209,21 +214,28 @@ async def _act(
 async def _notify_authors(
     session: AsyncSession, *, action_id: int, doc_id: int, kind: str, reason: Reason | None
 ) -> None:
-    """Insert one in-app notification per registered author (owner + accepted,
-    `user_id NOT NULL`); external authors are skipped. `ON CONFLICT
-    (user_id, event_key) DO NOTHING` with `event_key = f"{kind}:{action_id}"`,
-    so a retry of the same action never double-notifies any recipient."""
-    await session.execute(
-        text(
-            "INSERT INTO notifications (user_id, event_key, kind, payload_json) "
-            "SELECT da.user_id, :ek, :kind, "
-            "       jsonb_build_object('doc_id', cast(:doc_id as bigint), "
-            "                          'doc_title', d.titulo, "
-            "                          'reason', cast(:reason as text)) "
-            "FROM document_authors da JOIN documents d ON d.id = da.doc_id "
-            "WHERE da.doc_id = :doc_id AND da.status IN ('owner', 'accepted') "
-            "  AND da.user_id IS NOT NULL "
-            "ON CONFLICT (user_id, event_key) DO NOTHING"
-        ),
-        {"ek": f"{kind}:{action_id}", "kind": kind, "doc_id": doc_id, "reason": reason},
-    )
+    """Notify every registered author (owner + accepted, `user_id NOT NULL`);
+    external authors are skipped. Moderation owns who-to-notify; the per-author
+    insert (event-key, payload, ON CONFLICT idempotency) is delegated to
+    core/notifications so a retry of the same action never double-notifies."""
+    rows = (
+        await session.execute(
+            text(
+                "SELECT da.user_id, d.titulo "
+                "FROM document_authors da JOIN documents d ON d.id = da.doc_id "
+                "WHERE da.doc_id = :doc_id AND da.status IN ('owner', 'accepted') "
+                "  AND da.user_id IS NOT NULL"
+            ),
+            {"doc_id": doc_id},
+        )
+    ).mappings().all()
+    for r in rows:
+        await notifications.notify_moderation_action(
+            session,
+            user_id=r["user_id"],
+            kind=kind,
+            action_id=action_id,
+            doc_id=doc_id,
+            doc_title=r["titulo"],
+            reason=reason,
+        )

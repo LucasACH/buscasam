@@ -9,6 +9,7 @@ import numpy as np
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from buscasam.core import notifications
 from buscasam.core.document_access import (
     manageable_where,
     pending_invitation_disclosure_where,
@@ -719,22 +720,12 @@ async def mark_failed(
     # No transition (already failed, or discarded mid-flight) → no notification.
     if result.rowcount == 0 or cv.owner_user_id is None:
         return
-    await session.execute(
-        text(
-            "INSERT INTO notifications (user_id, event_key, kind, payload_json) "
-            "VALUES (:uid, :ek, 'processing_failed', "
-            "        jsonb_build_object('doc_id', cast(:doc_id as bigint), "
-            "                           'version_id', cast(:vid as bigint), "
-            "                           'error', cast(:err as text))) "
-            "ON CONFLICT (user_id, event_key) DO NOTHING"
-        ),
-        {
-            "uid": cv.owner_user_id,
-            "ek": f"processing_failed:{version_id}",
-            "doc_id": cv.doc_id,
-            "vid": version_id,
-            "err": error,
-        },
+    await notifications.notify_indexing_failed(
+        session,
+        user_id=cv.owner_user_id,
+        doc_id=cv.doc_id,
+        version_id=version_id,
+        error=error,
     )
 
 
@@ -751,22 +742,12 @@ async def mark_headline_refresh_failed(
     cv = await load_candidate(session, version_id)
     if cv.owner_user_id is None:
         return
-    await session.execute(
-        text(
-            "INSERT INTO notifications (user_id, event_key, kind, payload_json) "
-            "VALUES (:uid, :ek, 'processing_failed', "
-            "        jsonb_build_object('doc_id', cast(:doc_id as bigint), "
-            "                           'version_id', cast(:vid as bigint), "
-            "                           'error', cast(:err as text))) "
-            "ON CONFLICT (user_id, event_key) DO NOTHING"
-        ),
-        {
-            "uid": cv.owner_user_id,
-            "ek": f"headline_refresh_failed:{version_id}",
-            "doc_id": cv.doc_id,
-            "vid": version_id,
-            "err": reason,
-        },
+    await notifications.notify_headline_refresh_failed(
+        session,
+        user_id=cv.owner_user_id,
+        doc_id=cv.doc_id,
+        version_id=version_id,
+        error=reason,
     )
 
 
@@ -1117,8 +1098,6 @@ async def revoke_invitation(
     if result.rowcount == 0:
         raise CoauthorNotPending
 
-    from buscasam.core.jobs import coauthor_invite_event_key
-
     await session.execute(
         text(
             "DELETE FROM notifications "
@@ -1126,7 +1105,7 @@ async def revoke_invitation(
         ),
         {
             "uid": invitee_user_id,
-            "ek": coauthor_invite_event_key(doc_id, invitee_user_id),
+            "ek": notifications.coauthor_invite_event_key(doc_id, invitee_user_id),
         },
     )
 
@@ -1174,8 +1153,6 @@ async def _transition_invitation(
     if flipped.rowcount == 0:
         raise InvitationNotPending
 
-    from buscasam.core.jobs import coauthor_invite_event_key
-
     await session.execute(
         text(
             "UPDATE notifications SET read_at = now() "
@@ -1183,7 +1160,7 @@ async def _transition_invitation(
         ),
         {
             "uid": user_ctx.user_id,
-            "ek": coauthor_invite_event_key(doc_id, user_ctx.user_id),
+            "ek": notifications.coauthor_invite_event_key(doc_id, user_ctx.user_id),
         },
     )
 
