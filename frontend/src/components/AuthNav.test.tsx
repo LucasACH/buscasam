@@ -115,6 +115,36 @@ describe("AuthNav", () => {
     ).toBeInTheDocument();
   });
 
+  it("docente: shows the Moderación link", async () => {
+    asAuthenticated({
+      user_id: 7,
+      role: "docente",
+      name: "Ada Lovelace",
+      picture_url: null,
+      hd: "unsam.edu.ar",
+    });
+    renderAuthNav();
+
+    const link = await screen.findByRole("link", { name: "Moderación" });
+    expect(link.getAttribute("href")).toBe("/moderacion");
+  });
+
+  it("estudiante: hides the Moderación link", async () => {
+    asAuthenticated({
+      user_id: 7,
+      role: "estudiante",
+      name: "Ada Lovelace",
+      picture_url: null,
+      hd: "estudiantes.unsam.edu.ar",
+    });
+    renderAuthNav();
+
+    await screen.findByText("Ada Lovelace");
+    expect(
+      screen.queryByRole("link", { name: "Moderación" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("logout POSTs /api/auth/logout then router.replace('/')", async () => {
     asAuthenticated({
       user_id: 7,
