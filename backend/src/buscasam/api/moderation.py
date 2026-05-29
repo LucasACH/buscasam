@@ -73,6 +73,7 @@ async def create_report(
 
 class QueueEntryDTO(BaseModel):
     doc_id: int
+    report_id: int
     title: str
     reasons: list[str]
     first_reported_at: datetime
