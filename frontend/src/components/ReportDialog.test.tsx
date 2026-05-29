@@ -69,6 +69,18 @@ describe("ReportDialog", () => {
     expect(await screen.findByText(/recibimos tu reporte/i)).toBeInTheDocument();
   });
 
+  it("shows an alert and no confirmation when the request fails", async () => {
+    asAuthenticated();
+    apiPost.mockResolvedValue({ error: { detail: "not_found" } });
+    render(<ReportDialog docId={7} />);
+    await userEvent.click(screen.getByRole("button", { name: /Reportar/i }));
+    await userEvent.click(screen.getByRole("radio", { name: /Spam/i }));
+    await userEvent.click(screen.getByRole("button", { name: /Enviar/i }));
+
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.queryByText(/recibimos tu reporte/i)).not.toBeInTheDocument();
+  });
+
   it("confirms silently on the duplicate no-op (204) with no error", async () => {
     asAuthenticated();
     apiPost.mockResolvedValue({ response: { status: 204 } });
