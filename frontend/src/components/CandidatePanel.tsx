@@ -3,11 +3,10 @@
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import type {
   Candidate,
-  DiscardMutationError,
+  DraftWorkspaceActions,
   ReplaceMutationError,
 } from "@/app/mis-trabajos/useDraftState";
 
@@ -23,19 +22,11 @@ const REPLACE_ERROR_COPY: Record<ReplaceMutationError, string> = {
 };
 
 export function CandidatePanel({
-  docId,
-  canPublish,
   candidate,
-  replace,
-  discard,
-  refresh,
+  actions,
 }: {
-  docId: number;
-  canPublish: boolean;
   candidate: Candidate | null;
-  replace: (file: File) => Promise<ReplaceMutationError | undefined>;
-  discard: () => Promise<DiscardMutationError | undefined>;
-  refresh: () => Promise<void>;
+  actions: Pick<DraftWorkspaceActions, "publish" | "replace" | "discard">;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
@@ -44,7 +35,7 @@ export function CandidatePanel({
   async function onDiscard() {
     setDiscarding(true);
     try {
-      const err = await discard();
+      const err = await actions.discard();
       if (err) toast.error("No se pudo descartar");
     } finally {
       setDiscarding(false);
@@ -57,28 +48,17 @@ export function CandidatePanel({
     event.target.value = "";
     if (!file) return;
     setError(null);
-    const err = await replace(file);
+    const err = await actions.replace(file);
     if (err) setError(REPLACE_ERROR_COPY[err]);
   }
 
   async function onPublish() {
     setPublishing(true);
     try {
-      const { error: pubErr, response } = await api.POST(
-        "/api/documents/{doc_id}/publish",
-        { params: { path: { doc_id: docId } } },
-      );
-      if (pubErr) {
-        // 409 is a publish-gate race: refetch so the next poll re-renders the
-        // gate (server is source of truth). Same path as the editar form.
-        if (response?.status === 409) {
-          await refresh();
-          return;
-        }
+      const result = await actions.publish();
+      if (result === "publish_failed") {
         toast.error("No se pudo publicar");
-        return;
       }
-      await refresh();
     } catch {
       toast.error("No se pudo publicar");
     } finally {
@@ -92,7 +72,10 @@ export function CandidatePanel({
         Archivo principal
       </h2>
       {error && (
-        <p data-testid="replace-error" className="text-destructive mt-2 text-sm">
+        <p
+          data-testid="replace-error"
+          className="text-destructive mt-2 text-sm"
+        >
           {error}
         </p>
       )}
@@ -125,7 +108,7 @@ export function CandidatePanel({
             <Staged label="Fecha">{candidate.stagedFecha || "—"}</Staged>
           </dl>
           <Button
-            disabled={!(canPublish && candidate.canPublish) || publishing}
+            disabled={!candidate.canPublish || publishing}
             onClick={onPublish}
           >
             Publicar

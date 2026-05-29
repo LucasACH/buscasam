@@ -36,6 +36,7 @@ export type DraftState = {
   isOwner: boolean;
   candidate: Candidate | null;
   versions: DraftVersion[];
+  attachments: DraftAttachment[];
 };
 
 export type AttachmentMutationError =
@@ -50,13 +51,29 @@ export type ReplaceMutationError =
   | "no_published_version"
   | "replace_failed";
 
+export type PublishMutationResult =
+  | "published"
+  | "refreshed"
+  | "publish_failed";
+
 export type DiscardMutationError = "discard_failed";
 
 export type SoftDeleteMutationError = "delete_failed";
 
-export const POLL_INTERVAL_MS = 3000;
+export type DraftWorkspaceActions = {
+  publish: () => Promise<PublishMutationResult>;
+  replace: (file: File) => Promise<ReplaceMutationError | undefined>;
+  discard: () => Promise<DiscardMutationError | undefined>;
+  softDelete: () => Promise<SoftDeleteMutationError | undefined>;
+  attachments: {
+    add: (file: File) => Promise<AttachmentMutationError | undefined>;
+    remove: (
+      attachment: DraftAttachment,
+    ) => Promise<AttachmentMutationError | undefined>;
+  };
+};
 
-const MAX_ATTACHMENTS = 5;
+export const POLL_INTERVAL_MS = 3000;
 
 const STATUS_PILL: Record<string, string> = {
   pending: "Procesando…",
@@ -134,12 +151,35 @@ function projectDraftState(state: DraftStateDTO): DraftState {
     isOwner: state.is_owner,
     candidate: state.candidate ? projectCandidate(state.candidate) : null,
     versions: state.versions,
+    attachments: state.attachments,
   };
 }
 
 export function useDraftState(docId: number) {
   const query = useDraftQuery(docId);
   const queryClient = useQueryClient();
+
+  async function publish(): Promise<PublishMutationResult> {
+    try {
+      const { error, response } = await api.POST(
+        "/api/documents/{doc_id}/publish",
+        { params: { path: { doc_id: docId } } },
+      );
+      if (error) {
+        if (response?.status === 409) {
+          await queryClient.invalidateQueries({
+            queryKey: draftQueryKey(docId),
+          });
+          return "refreshed";
+        }
+        return "publish_failed";
+      }
+      await queryClient.invalidateQueries({ queryKey: draftQueryKey(docId) });
+      return "published";
+    } catch {
+      return "publish_failed";
+    }
+  }
 
   async function replace(
     file: File,
@@ -195,24 +235,6 @@ export function useDraftState(docId: number) {
     return undefined;
   }
 
-  return {
-    state: query.data ? projectDraftState(query.data) : undefined,
-    isLoading: query.isLoading,
-    isError: query.isError,
-    refresh: async () => {
-      await queryClient.invalidateQueries({ queryKey: draftQueryKey(docId) });
-    },
-    replace,
-    discard,
-    softDelete,
-  };
-}
-
-export function useDraftAttachments(docId: number) {
-  const query = useDraftQuery(docId);
-  const queryClient = useQueryClient();
-  const attachments = query.data?.attachments ?? [];
-
   function updateAttachments(
     update: (current: DraftAttachment[]) => DraftAttachment[],
   ) {
@@ -265,10 +287,24 @@ export function useDraftAttachments(docId: number) {
     return undefined;
   }
 
+  const actions: DraftWorkspaceActions = {
+    publish,
+    replace,
+    discard,
+    softDelete,
+    attachments: {
+      add: addAttachment,
+      remove: removeAttachment,
+    },
+  };
+
   return {
-    attachments,
-    atCapacity: attachments.length >= MAX_ATTACHMENTS,
-    addAttachment,
-    removeAttachment,
+    state: query.data ? projectDraftState(query.data) : undefined,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    refresh: async () => {
+      await queryClient.invalidateQueries({ queryKey: draftQueryKey(docId) });
+    },
+    actions,
   };
 }

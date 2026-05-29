@@ -10,32 +10,36 @@ import {
 const {
   useDraftStateMock,
   apiPatch,
-  apiPost,
   toastError,
   refreshDraft,
+  publishMock,
   softDeleteMock,
+  attachmentActions,
 } = vi.hoisted(() => ({
   useDraftStateMock: vi.fn(),
   apiPatch: vi.fn(),
-  apiPost: vi.fn(),
   toastError: vi.fn(),
   refreshDraft: vi.fn(),
+  publishMock: vi.fn(),
   softDeleteMock: vi.fn(),
+  attachmentActions: { add: vi.fn(), remove: vi.fn() },
 }));
 vi.mock("../../useDraftState", () => ({
   useDraftState: () => useDraftStateMock(),
 }));
-vi.mock("@/api/client", () => ({ api: { PATCH: apiPatch, POST: apiPost } }));
+vi.mock("@/api/client", () => ({ api: { PATCH: apiPatch } }));
 vi.mock("sonner", () => ({ toast: { error: toastError } }));
-vi.mock("@/components/AttachmentsPanel", () => ({
-  AttachmentsPanel: () => null,
-}));
 vi.mock("@/components/CoauthorsPanel", () => ({
   CoauthorsPanel: () => null,
 }));
-const { candidatePanelMock, versionsPanelMock } = vi.hoisted(() => ({
-  candidatePanelMock: vi.fn<(props: unknown) => null>(() => null),
-  versionsPanelMock: vi.fn<(props: unknown) => null>(() => null),
+const { attachmentsPanelMock, candidatePanelMock, versionsPanelMock } =
+  vi.hoisted(() => ({
+    attachmentsPanelMock: vi.fn<(props: unknown) => null>(() => null),
+    candidatePanelMock: vi.fn<(props: unknown) => null>(() => null),
+    versionsPanelMock: vi.fn<(props: unknown) => null>(() => null),
+  }));
+vi.mock("@/components/AttachmentsPanel", () => ({
+  AttachmentsPanel: (props: unknown) => attachmentsPanelMock(props),
 }));
 vi.mock("@/components/CandidatePanel", () => ({
   CandidatePanel: (props: unknown) => candidatePanelMock(props),
@@ -73,6 +77,7 @@ function draft(
       isOwner: true,
       candidate: null,
       versions: [],
+      attachments: [],
       ...over,
       lifecycle: {
         formSeedKey: "indexed",
@@ -86,7 +91,13 @@ function draft(
     isLoading: false,
     isError: false,
     refresh: refreshDraft,
-    softDelete: softDeleteMock,
+    actions: {
+      publish: publishMock,
+      softDelete: softDeleteMock,
+      attachments: attachmentActions,
+      replace: vi.fn(),
+      discard: vi.fn(),
+    },
   };
 }
 
@@ -95,51 +106,65 @@ describe("editar page", () => {
     useDraftStateMock.mockReset();
     apiPatch.mockReset();
     apiPatch.mockResolvedValue({ error: undefined });
-    apiPost.mockReset();
-    apiPost.mockResolvedValue({ error: undefined, response: { status: 204 } });
     toastError.mockReset();
     refreshDraft.mockReset();
     refreshDraft.mockResolvedValue(undefined);
+    publishMock.mockReset();
+    publishMock.mockResolvedValue("published");
     softDeleteMock.mockReset();
     softDeleteMock.mockResolvedValue(undefined);
+    attachmentActions.add.mockReset();
+    attachmentActions.remove.mockReset();
     push.mockReset();
+    attachmentsPanelMock.mockClear();
     candidatePanelMock.mockClear();
     versionsPanelMock.mockClear();
   });
   afterEach(() => cleanup());
 
-  it("mounts CandidatePanel with the owner publish flag and VersionsPanel", () => {
+  it("mounts presentational panels with projected draft state and actions", () => {
+    const versions = [
+      {
+        n: 1,
+        original_filename: "v1.pdf",
+        mime: "application/pdf",
+        size_bytes: 10,
+        indexed_at: null,
+        is_current: true,
+      },
+    ];
+    const attachments = [
+      {
+        id: 2,
+        original_filename: "data.csv",
+        mime: "text/csv",
+        size_bytes: 10,
+      },
+    ];
     useDraftStateMock.mockReturnValue(
       draft({
         isOwner: true,
-        versions: [
-          {
-            n: 1,
-            original_filename: "v1.pdf",
-            mime: "application/pdf",
-            size_bytes: 10,
-            indexed_at: null,
-            is_current: true,
-          },
-        ],
+        versions,
+        attachments,
       }),
     );
     render(<EditarPage />);
 
     expect(candidatePanelMock).toHaveBeenCalledWith(
-      expect.objectContaining({ docId: 7, canPublish: true }),
+      expect.objectContaining({
+        candidate: null,
+        actions: expect.objectContaining({ publish: publishMock }),
+      }),
     );
     expect(versionsPanelMock).toHaveBeenCalledWith(
-      expect.objectContaining({ docId: 7, canManage: true }),
+      expect.objectContaining({ docId: 7, versions, canManage: true }),
     );
-  });
-
-  it("forwards a non-owner publish flag to CandidatePanel", () => {
-    useDraftStateMock.mockReturnValue(draft({ isOwner: false }));
-    render(<EditarPage />);
-
-    expect(candidatePanelMock).toHaveBeenCalledWith(
-      expect.objectContaining({ docId: 7, canPublish: false }),
+    expect(attachmentsPanelMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachments,
+        actions: attachmentActions,
+        canManage: true,
+      }),
     );
   });
 
@@ -220,33 +245,39 @@ describe("editar page", () => {
     useDraftStateMock.mockReturnValue(draft());
     render(<EditarPage />);
     fireEvent.click(screen.getByRole("button", { name: /publicar/i }));
-    await waitFor(() => expect(apiPost).toHaveBeenCalled());
-    const [path, opts] = apiPost.mock.calls[0]!;
-    expect(path).toBe("/api/documents/{doc_id}/publish");
-    expect(opts.params.path).toMatchObject({ doc_id: 7 });
+    await waitFor(() => expect(publishMock).toHaveBeenCalled());
     await waitFor(() => expect(push).toHaveBeenCalledWith("/mis-trabajos"));
   });
 
-  it("on a 409 race, refetches the draft instead of navigating", async () => {
-    apiPost.mockResolvedValue({
-      error: { detail: "conflict" },
-      response: { status: 409 },
-    });
+  it("stays put when the draft action refreshes after a publish race", async () => {
+    publishMock.mockResolvedValue("refreshed");
     useDraftStateMock.mockReturnValue(draft());
     render(<EditarPage />);
     fireEvent.click(screen.getByRole("button", { name: /publicar/i }));
-    await waitFor(() => expect(refreshDraft).toHaveBeenCalled());
+    await waitFor(() => expect(publishMock).toHaveBeenCalled());
     expect(push).not.toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
   });
 
   it("toasts and re-enables the Publicar button if the publish request rejects", async () => {
-    apiPost.mockRejectedValue(new Error("network down"));
+    publishMock.mockRejectedValue(new Error("network down"));
     useDraftStateMock.mockReturnValue(draft());
     render(<EditarPage />);
     const btn = screen.getByRole("button", { name: /publicar/i });
     fireEvent.click(btn);
     await waitFor(() => expect(toastError).toHaveBeenCalled());
     expect(btn).toBeEnabled();
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("toasts when the draft action returns a publish failure", async () => {
+    publishMock.mockResolvedValue("publish_failed");
+    useDraftStateMock.mockReturnValue(draft());
+    render(<EditarPage />);
+    fireEvent.click(screen.getByRole("button", { name: /publicar/i }));
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith("No se pudo publicar"),
+    );
     expect(push).not.toHaveBeenCalled();
   });
 
