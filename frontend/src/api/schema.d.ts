@@ -557,13 +557,30 @@ export interface paths {
             cookie?: never;
         };
         /** Download Version */
-        get: operations["download_version_api_docs__doc_id__versions__n__download_get"];
+        get: operations["download_version_api_docs__doc_id__versions__n__download_head"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         /** Download Version */
-        head: operations["download_version_api_docs__doc_id__versions__n__download_get"];
+        head: operations["download_version_api_docs__doc_id__versions__n__download_head"];
+        patch?: never;
+        trace?: never;
+    };
+    "/api/moderation/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Queue */
+        get: operations["queue_api_moderation_queue_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
         patch?: never;
         trace?: never;
     };
@@ -930,6 +947,32 @@ export interface components {
             visibility: string;
             /** Published At */
             published_at: string | null;
+        };
+        /** QueueEntryDTO */
+        QueueEntryDTO: {
+            /** Doc Id */
+            doc_id: number;
+            /** Title */
+            title: string;
+            /** Reasons */
+            reasons: string[];
+            /**
+             * First Reported At
+             * Format: date-time
+             */
+            first_reported_at: string;
+            /**
+             * Last Reported At
+             * Format: date-time
+             */
+            last_reported_at: string;
+            /** Report Count */
+            report_count: number;
+        };
+        /** QueueResponse */
+        QueueResponse: {
+            /** Items */
+            items: components["schemas"]["QueueEntryDTO"][];
         };
         /** RelatedDTO */
         RelatedDTO: {
@@ -1993,7 +2036,7 @@ export interface operations {
             };
         };
     };
-    download_version_api_docs__doc_id__versions__n__download_get: {
+    download_version_api_docs__doc_id__versions__n__download_head: {
         parameters: {
             query?: never;
             header?: never;
@@ -2025,7 +2068,7 @@ export interface operations {
             };
         };
     };
-    download_version_api_docs__doc_id__versions__n__download_get: {
+    download_version_api_docs__doc_id__versions__n__download_head: {
         parameters: {
             query?: never;
             header?: never;
@@ -2053,6 +2096,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    queue_api_moderation_queue_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueResponse"];
                 };
             };
         };
