@@ -25,8 +25,9 @@ function json(body: unknown, status = 200) {
   };
 }
 
-// Upload → lands on /editar/{id} with Procesando pill + spinner; flips to
-// "Listo para publicar" once the mocked /draft response advances to indexed.
+// Upload → lands on /editar/{id} blocked behind the indexing loader (Procesando
+// pill); unblocks to the edit form once the mocked /draft response advances to
+// indexed and the pill flips to "Listo para publicar".
 test("upload happy path: nuevo → editar pill flips from Procesando to Listo", async ({
   page,
 }) => {
@@ -75,6 +76,12 @@ test("upload happy path: nuevo → editar pill flips from Procesando to Listo", 
           staged_fecha: null,
           index_error: null,
           publish_gate_reason: "processing",
+          is_owner: true,
+          visibility: "publico",
+          attachments: [],
+          coauthors: [],
+          versions: [],
+          candidate: null,
         }),
       );
     }
@@ -87,6 +94,12 @@ test("upload happy path: nuevo → editar pill flips from Procesando to Listo", 
         staged_fecha: "2024-03-01",
         index_error: null,
         publish_gate_reason: null,
+        is_owner: true,
+        visibility: "publico",
+        attachments: [],
+        coauthors: [],
+        versions: [],
+        candidate: null,
       }),
     );
   });
@@ -124,12 +137,13 @@ test("upload happy path: nuevo → editar pill flips from Procesando to Listo", 
   await page.getByRole("button", { name: /Subir trabajo/i }).click();
   await expect(page).toHaveURL(new RegExp(`/mis-trabajos/${DOC_ID}/editar$`));
 
-  // 4. First /draft poll → Procesando… pill + spinner over the suggestions panel.
+  // 4. First /draft poll → page is blocked behind the full-page indexing loader
+  // (initial-publication path), with the Procesando… pill.
   await expect(page.getByTestId("status-pill")).toHaveText(/Procesando…/);
-  await expect(page.getByTestId("suggestions-spinner")).toBeVisible();
+  await expect(page.getByTestId("indexing-block")).toBeVisible();
 
-  // 5. After the mocked worker advances, the pill flips to Listo and suggestions
-  // populate.
+  // 5. After the mocked worker advances, the page unblocks: the pill flips to
+  // Listo and the suggestions populate.
   await expect(page.getByTestId("status-pill")).toHaveText(/Listo para publicar/, {
     timeout: 10_000,
   });

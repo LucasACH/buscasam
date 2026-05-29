@@ -61,6 +61,39 @@ export default function EditarPage() {
   if (userLoading || isInvitado || !user) return null;
   if (isLoading || !state) return null;
 
+  // Initial-publication path: until the first version finishes indexing, block
+  // all interaction behind a single loading state. The work runs server-side,
+  // so the author can leave and return; polling unblocks the page automatically.
+  if (state.lifecycle.initialPhase !== "ready") {
+    return (
+      <BlockedShell statusLabel={state.lifecycle.statusLabel}>
+        {state.lifecycle.initialPhase === "indexing" ? (
+          <div
+            data-testid="indexing-block"
+            className="flex flex-col items-center gap-4 py-24 text-center"
+          >
+            <Loader2 className="text-muted-foreground h-8 w-8 animate-spin" />
+            <p className="text-muted-foreground max-w-md text-sm">
+              Estamos procesando tu archivo. Esto puede tardar unos minutos.
+              Podés cerrar esta página y volver más tarde: el trabajo sigue
+              procesándose.
+            </p>
+          </div>
+        ) : (
+          <div
+            data-testid="failed-block"
+            className="flex flex-col items-center gap-4 py-24 text-center"
+          >
+            <p className="text-destructive max-w-md text-sm">
+              {state.lifecycle.gateMessage ?? "Falló el procesamiento"}
+            </p>
+            {state.isOwner && <DeleteTrabajo softDelete={actions.softDelete} />}
+          </div>
+        )}
+      </BlockedShell>
+    );
+  }
+
   // Re-seed the form when the candidate's status changes (e.g. processing →
   // indexed): RHF captures defaultValues once at mount, so polled staged_*
   // would otherwise never reach the editable inputs.
@@ -88,7 +121,6 @@ function EditarForm({
 }) {
   const router = useRouter();
   const [publishing, setPublishing] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const { register, getValues, formState } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     mode: "onBlur",
@@ -152,22 +184,6 @@ function EditarForm({
       toast.error("No se pudo publicar");
     } finally {
       setPublishing(false);
-    }
-  }
-
-  async function onDelete() {
-    setDeleting(true);
-    try {
-      const error = await actions.softDelete();
-      if (error) {
-        toast.error("No se pudo eliminar");
-        return;
-      }
-      router.push("/mis-trabajos");
-    } catch {
-      toast.error("No se pudo eliminar");
-    } finally {
-      setDeleting(false);
     }
   }
 
@@ -319,40 +335,92 @@ function EditarForm({
           keeping the delete mutation single-copy (module map §Frontend Papelera). */}
       {state.isOwner && (
         <div className="mt-8 border-t pt-8">
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="destructive" disabled={deleting}>
-                Eliminar
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>¿Eliminar este trabajo?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  El trabajo pasará a la papelera. Podés restaurarlo en
-                  cualquier momento durante los próximos 180 días; pasado ese
-                  plazo se eliminará de forma permanente.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel disabled={deleting}>
-                  Cancelar
-                </AlertDialogCancel>
-                <AlertDialogAction
-                  disabled={deleting}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    onDelete();
-                  }}
-                >
-                  Eliminar
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          <DeleteTrabajo softDelete={actions.softDelete} />
         </div>
       )}
     </main>
+  );
+}
+
+function BlockedShell({
+  statusLabel,
+  children,
+}: {
+  statusLabel: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <main className="mx-auto w-full max-w-3xl px-4 py-8">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Editar trabajo
+        </h1>
+        <span
+          data-testid="status-pill"
+          className="bg-muted rounded-full px-3 py-1 text-sm"
+        >
+          {statusLabel}
+        </span>
+      </div>
+      {children}
+    </main>
+  );
+}
+
+function DeleteTrabajo({
+  softDelete,
+}: {
+  softDelete: DraftWorkspaceActions["softDelete"];
+}) {
+  const router = useRouter();
+  const [deleting, setDeleting] = useState(false);
+
+  async function onDelete() {
+    setDeleting(true);
+    try {
+      const error = await softDelete();
+      if (error) {
+        toast.error("No se pudo eliminar");
+        return;
+      }
+      router.push("/mis-trabajos");
+    } catch {
+      toast.error("No se pudo eliminar");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button variant="destructive" disabled={deleting}>
+          Eliminar
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>¿Eliminar este trabajo?</AlertDialogTitle>
+          <AlertDialogDescription>
+            El trabajo pasará a la papelera. Podés restaurarlo en cualquier
+            momento durante los próximos 180 días; pasado ese plazo se eliminará
+            de forma permanente.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={deleting}
+            onClick={(e) => {
+              e.preventDefault();
+              onDelete();
+            }}
+          >
+            Eliminar
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 

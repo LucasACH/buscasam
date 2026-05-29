@@ -97,7 +97,75 @@ describe("useDraftState", () => {
       showSuggestionsSpinner: false,
       gateMessage: null,
       canPublish: true,
+      initialPhase: "ready",
     });
+  });
+
+  it("projects initialPhase for an initial draft still indexing", async () => {
+    returns({ index_status: "processing", versions: [] });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(result.current.state?.lifecycle.initialPhase).toBe("indexing");
+  });
+
+  it("projects initialPhase as indexing while pending", async () => {
+    returns({ index_status: "pending", versions: [] });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(result.current.state?.lifecycle.initialPhase).toBe("indexing");
+  });
+
+  it("projects initialPhase as failed for a failed initial draft", async () => {
+    returns({ index_status: "failed", versions: [] });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(result.current.state?.lifecycle.initialPhase).toBe("failed");
+  });
+
+  it("projects initialPhase as ready once indexed", async () => {
+    returns({ index_status: "indexed", versions: [] });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(result.current.state?.lifecycle.initialPhase).toBe("ready");
+  });
+
+  it("projects initialPhase as ready while a published version exists", async () => {
+    returns({
+      index_status: "processing",
+      versions: [
+        {
+          n: 1,
+          original_filename: "v1.pdf",
+          mime: "application/pdf",
+          size_bytes: 10,
+          indexed_at: null,
+          is_current: true,
+        },
+      ],
+    });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(result.current.state?.lifecycle.initialPhase).toBe("ready");
   });
 
   it("interprets reindexing as blocked publication with Spanish copy", async () => {
@@ -120,6 +188,19 @@ describe("useDraftState", () => {
 
   it("polls every 3s while processing", async () => {
     returns({ index_status: "processing", publish_gate_reason: "processing" });
+    renderHook(() => useDraftState(1), { wrapper: wrapper() });
+
+    await vi.advanceTimersByTimeAsync(0);
+    const initial = apiGet.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(3000);
+
+    expect(apiGet.mock.calls.length).toBeGreaterThan(initial);
+  });
+
+  // The editar page blocks on pending (initialPhase === "indexing"), so polling
+  // must clear it; otherwise the loader never advances to processing.
+  it("polls while pending", async () => {
+    returns({ index_status: "pending", versions: [] });
     renderHook(() => useDraftState(1), { wrapper: wrapper() });
 
     await vi.advanceTimersByTimeAsync(0);
