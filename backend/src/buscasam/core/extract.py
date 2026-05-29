@@ -8,12 +8,16 @@ heuristic, and the encrypted-PDF probe.
 from __future__ import annotations
 
 import io
+import json
 import logging
 import re
 from dataclasses import dataclass, field
 from datetime import date
 
+import httpx
+
 from buscasam.core import blob_store
+from buscasam.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -174,6 +178,48 @@ _NEXT_HEADING = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 _ABSTRACT_WORD_CAP = 300
+_LLM_TEXT_CHAR_CAP = 12000
+_KEYWORD_CAP = 10
+_KEYWORD_BLOCKLIST = {
+    "este trabajo",
+    "el presente trabajo",
+    "presente trabajo",
+    "presente informe",
+    "este informe",
+    "trabajo práctico",
+    "trabajo practico",
+    "la presente investigación",
+    "presente investigación",
+    "presente investigacion",
+    "este documento",
+    "el objetivo",
+    "objetivo general",
+    "universidad nacional",
+    "universidad nacional de san martín",
+    "universidad nacional de san martin",
+    "san martín",
+    "san martin",
+}
+_METADATA_LLM_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "abstract": {"type": "string"},
+        "keywords": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 0,
+            "maxItems": _KEYWORD_CAP,
+        },
+    },
+    "required": ["abstract", "keywords"],
+    "additionalProperties": False,
+}
+_PORTUGUESE_MARKERS = re.compile(
+    r"\b(este documento descreve|previs[aã]o|s[eé]ries temporais|redes neurais|"
+    r"m[eé]dia|avalia[cç][aã]o|utilizando|t[eé]cnicas estoc[aá]sticas|"
+    r"j[aá]|por outro lado|informa[cç][oõ]es|aprendizagem)\b",
+    re.IGNORECASE,
+)
 
 _COVER_TOKENS = re.compile(
     r"\b(tesis|tesina|trabajo|presentado|defendido|publicado)\b",
@@ -189,21 +235,55 @@ def _truncate_words(s: str, cap: int) -> str:
     return " ".join(parts[:cap])
 
 
+def _normalize_phrase(s: str) -> str:
+    cleaned = re.sub(r"\s+", " ", s).strip(" \t\r\n.,;:()[]{}\"'")
+    return cleaned
+
+
+def _clean_keywords(keywords: list[str]) -> list[str]:
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for raw in keywords:
+        phrase = _normalize_phrase(str(raw))
+        key = phrase.casefold()
+        if (
+            not phrase
+            or key in seen
+            or key in _KEYWORD_BLOCKLIST
+            or any(noise in key for noise in _KEYWORD_BLOCKLIST)
+        ):
+            continue
+        if len(phrase.split()) > 5:
+            continue
+        seen.add(key)
+        cleaned.append(phrase)
+        if len(cleaned) >= _KEYWORD_CAP:
+            break
+    return cleaned
+
+
 def _derive_abstract(text: str) -> str:
     if not text.strip():
         return ""
     head = text[: 8000]  # first ~2 pages worth
-    m = _ABSTRACT_HEADING.search(head)
-    if m:
-        body = head[m.end():]
-        nxt = _NEXT_HEADING.search(body)
-        body = body[: nxt.start()] if nxt else body
-        return _truncate_words(body.strip(), _ABSTRACT_WORD_CAP)
+    explicit = _derive_explicit_abstract(head)
+    if explicit is not None:
+        return explicit
     # fallback: first 1-3 paragraphs
     paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
     if not paragraphs:
         return ""
     return _truncate_words(" ".join(paragraphs[:3]), _ABSTRACT_WORD_CAP)
+
+
+def _derive_explicit_abstract(head: str) -> str | None:
+    m = _ABSTRACT_HEADING.search(head)
+    if not m:
+        return None
+    body = head[m.end():]
+    nxt = _NEXT_HEADING.search(body)
+    body = body[: nxt.start()] if nxt else body
+    return _truncate_words(body.strip(), _ABSTRACT_WORD_CAP)
 
 
 def _derive_keywords(text: str) -> list[str]:
@@ -214,7 +294,7 @@ def _derive_keywords(text: str) -> list[str]:
 
         kw = KeywordExtractor(lan="es", n=3, dedupLim=0.7, top=8)
         results = kw.extract_keywords(text)
-        return [phrase for phrase, _score in results][:10]
+        return _clean_keywords([phrase for phrase, _score in results])
     except Exception:
         # YAKE failure must not block indexing (keywords are best-effort
         # suggestions per ADR-0007 §7); log so operators see degraded output.
@@ -279,6 +359,109 @@ def derive_metadata(doc: ExtractedDoc) -> IndexableMetadata:
         keywords=_derive_keywords(doc.text),
         fecha=_derive_fecha(doc),
     )
+
+
+@dataclass(frozen=True)
+class _LlmMetadata:
+    abstract: str
+    keywords: list[str]
+
+
+def _metadata_prompt(doc: ExtractedDoc, fallback: IndexableMetadata) -> str:
+    return (
+        "Sos un asistente local para limpiar metadatos académicos.\n"
+        "Devolvé solo JSON válido con esta forma exacta: "
+        '{"abstract": "string", "keywords": ["string"]}.\n'
+        "Reglas: abstract en español, máximo 300 palabras; keywords 3 a 10, "
+        "frases académicas específicas, sin nombres de plantilla institucional.\n"
+        "Idioma obligatorio: español. No uses portugués ni inglés. Traduce "
+        "términos del texto fuente al español cuando haga falta.\n"
+        "No inventes datos que no estén en el texto.\n\n"
+        f"Abstract heurístico:\n{fallback.abstract}\n\n"
+        f"Keywords candidatas:\n{', '.join(fallback.keywords)}\n\n"
+        "Texto extraído entre delimitadores. No copies JSON, código ni tablas "
+        "desde el texto fuente.\n"
+        "<texto>\n"
+        f"{doc.text[:_LLM_TEXT_CHAR_CAP]}\n"
+        "</texto>"
+    )
+
+
+def _parse_llm_metadata(raw: str) -> _LlmMetadata:
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise ValueError("metadata LLM returned invalid JSON") from e
+    if not isinstance(payload, dict):
+        raise ValueError("metadata LLM returned non-object JSON")
+    abstract = payload.get("abstract")
+    keywords = payload.get("keywords")
+    if not isinstance(abstract, str) or not isinstance(keywords, list):
+        raise ValueError("metadata LLM returned invalid schema")
+    if not all(isinstance(k, str) for k in keywords):
+        raise ValueError("metadata LLM returned invalid keyword schema")
+    return _LlmMetadata(
+        abstract=_truncate_words(abstract.strip(), _ABSTRACT_WORD_CAP),
+        keywords=_clean_keywords(keywords),
+    )
+
+
+def _looks_portuguese(value: str) -> bool:
+    return bool(_PORTUGUESE_MARKERS.search(value))
+
+
+async def _call_metadata_llm(
+    client: httpx.AsyncClient, doc: ExtractedDoc, fallback: IndexableMetadata
+) -> _LlmMetadata:
+    response = await client.post(
+        "/api/generate",
+        json={
+            "model": settings.metadata_llm_model,
+            "prompt": _metadata_prompt(doc, fallback),
+            "stream": False,
+            "format": _METADATA_LLM_SCHEMA,
+        },
+        timeout=settings.metadata_llm_timeout_s,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    raw = payload.get("response") if isinstance(payload, dict) else None
+    if not isinstance(raw, str):
+        raise ValueError("metadata LLM response missing response string")
+    return _parse_llm_metadata(raw)
+
+
+async def suggest_metadata(
+    doc: ExtractedDoc, client: httpx.AsyncClient | None = None
+) -> IndexableMetadata:
+    """Best-effort staged metadata path.
+
+    Heuristics always produce the fallback. The local LLM may clean up fallback
+    output, but any timeout/outage/malformed output is non-fatal.
+    """
+    fallback = derive_metadata(doc)
+    if not settings.metadata_llm_enabled:
+        return fallback
+
+    owns_client = client is None
+    if client is None:
+        client = httpx.AsyncClient(base_url=settings.metadata_llm_url)
+    try:
+        llm = await _call_metadata_llm(client, doc, fallback)
+    except (httpx.TimeoutException, httpx.HTTPError, ValueError):
+        logger.warning("metadata_llm_failed", exc_info=True)
+        return fallback
+    finally:
+        if owns_client:
+            await client.aclose()
+
+    explicit = _derive_explicit_abstract(doc.text[:8000])
+    abstract = explicit if explicit is not None else llm.abstract or fallback.abstract
+    keywords = _clean_keywords(llm.keywords) or fallback.keywords
+    if _looks_portuguese(" ".join([abstract, *keywords])):
+        logger.warning("metadata_llm_non_spanish")
+        return fallback
+    return IndexableMetadata(abstract=abstract, keywords=keywords, fecha=fallback.fecha)
 
 
 async def extract(sha256: str, mime: str) -> ExtractedDoc:

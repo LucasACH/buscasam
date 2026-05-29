@@ -28,11 +28,17 @@ BUSCASAM_OIDC_CLIENT_SECRET=<your-client-secret>
 BUSCASAM_BLOB_ROOT=./var/blobs
 BUSCASAM_EMBED_QUERY_TIMEOUT_S=5
 BUSCASAM_SERVE_BLOBS_INLINE=1
+BUSCASAM_METADATA_LLM_ENABLED=0
+BUSCASAM_METADATA_LLM_URL=http://localhost:11434
+BUSCASAM_METADATA_LLM_MODEL=llama3.2:3b
+BUSCASAM_METADATA_LLM_TIMEOUT_S=60
 ```
 
 `BUSCASAM_EMBED_QUERY_TIMEOUT_S=5` overrides the prod default of `0.5` so semantic search actually fires on Apple Silicon (TEI runs amd64-emulated and easily blows past 500 ms).
 
 `BUSCASAM_SERVE_BLOBS_INLINE=1` makes download endpoints stream the blob from disk instead of emitting `X-Accel-Redirect` for nginx (which doesn't exist locally). Leave unset in prod.
+
+Optional staged metadata cleanup uses a local Ollama-compatible model. Install Ollama, run `ollama pull llama3.2:3b`, keep `ollama serve` listening on `http://localhost:11434`, then set `BUSCASAM_METADATA_LLM_ENABLED=1`. The worker calls `/api/generate` with `BUSCASAM_METADATA_LLM_MODEL` and a hard `BUSCASAM_METADATA_LLM_TIMEOUT_S=60`; timeout, outage, invalid JSON, or invalid schema falls back to deterministic extraction + YAKE and indexing still completes.
 
 ## Bring up infra
 
