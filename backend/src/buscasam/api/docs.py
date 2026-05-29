@@ -12,15 +12,14 @@ returning `RelatedDTO[]` or the uniform 404 envelope.
 from __future__ import annotations
 
 from typing import Annotated, Literal
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, model_serializer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from buscasam.api._blob import download_response
 from buscasam.api.deps import get_session
-from buscasam.core import auth, blob_store
+from buscasam.core import auth
 from buscasam.core.documents import (
     DetailRow,
     get_detail,
@@ -126,31 +125,6 @@ DocDetailResponse = Annotated[
 
 def _not_found() -> HTTPException:
     return HTTPException(status_code=404, detail="not_found")
-
-
-def _content_disposition(original_filename: str) -> str:
-    encoded = quote(original_filename, safe="")
-    return f"attachment; filename*=UTF-8''{encoded}"
-
-
-def _download_response(*, sha_hex: str, original_filename: str, mime: str) -> Response:
-    # Prod ships an empty body and lets nginx serve the file via
-    # X-Accel-Redirect. Local-dev runs uvicorn directly without nginx, so
-    # `serve_blobs_inline` flips to streaming the blob from disk instead.
-    if settings.serve_blobs_inline:
-        return FileResponse(
-            blob_store.local_path(sha_hex),
-            media_type=mime,
-            headers={"Content-Disposition": _content_disposition(original_filename)},
-        )
-    return Response(
-        status_code=200,
-        headers={
-            "X-Accel-Redirect": blob_store.internal_path(sha_hex),
-            "Content-Type": mime,
-            "Content-Disposition": _content_disposition(original_filename),
-        },
-    )
 
 
 def _detail_fields(detail: DetailRow) -> dict:
@@ -280,7 +254,7 @@ async def download_main_file(
     file = await get_readable_main_file(session, doc_id, user_ctx)
     if file is None:
         raise _not_found()
-    return _download_response(
+    return download_response(
         sha_hex=file.sha_hex, original_filename=file.original_filename, mime=file.mime
     )
 
@@ -295,7 +269,7 @@ async def download_attachment(
     file = await get_readable_attachment(session, doc_id, att_id, user_ctx)
     if file is None:
         raise _not_found()
-    return _download_response(
+    return download_response(
         sha_hex=file.sha_hex,
         original_filename=file.original_filename,
         # Attachments can have NULL mime per migration 0010; fall back to a
@@ -324,6 +298,6 @@ async def download_version(
     file = await get_manageable_version_file(session, doc_id, version_n, user_ctx)
     if file is None:
         raise _not_found()
-    return _download_response(
+    return download_response(
         sha_hex=file.sha_hex, original_filename=file.original_filename, mime=file.mime
     )
