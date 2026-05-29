@@ -53,6 +53,27 @@ async def test_one_entry_per_doc_with_multi_reporter_count_and_fields(session):
     assert e.last_reported_at == t2
 
 
+async def test_mixed_open_and_resolved_reports_aggregate_only_open(session):
+    doc = await make_document(session, titulo="Mixed doc")
+    t1 = datetime(2026, 1, 3, tzinfo=timezone.utc)
+    t2 = datetime(2026, 1, 7, tzinfo=timezone.utc)
+    await _file_report(session, doc, await make_user(session), "spam", created_at=t1)
+    await _file_report(session, doc, await make_user(session), "plagio", created_at=t2)
+    await _file_report(
+        session, doc, await make_user(session), "ofensivo",
+        status="resolved", created_at=datetime(2026, 1, 20, tzinfo=timezone.utc),
+    )
+
+    entries = await list_open_reports(session)
+
+    assert len(entries) == 1
+    e = entries[0]
+    assert e.report_count == 2
+    assert e.reasons == ["plagio", "spam"]
+    assert e.first_reported_at == t1
+    assert e.last_reported_at == t2
+
+
 async def test_resolved_only_document_does_not_appear(session):
     resolved = await make_document(session, titulo="Resolved doc")
     rr = await make_user(session)
