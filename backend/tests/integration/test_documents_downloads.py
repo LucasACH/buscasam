@@ -313,3 +313,26 @@ async def test_version_n_ordering_matches_get_detail(session):
         file = await documents.get_manageable_version_file(session, doc_id, v.n, ctx)
         assert file is not None
         assert file.original_filename == v.original_filename
+
+
+async def test_version_n_ordering_matches_get_draft_state(session):
+    """get_draft_state.versions, get_detail.versions, and the download lookup all
+    read the one _published_version_history projection, so their 1-based n must
+    agree — the editar Versiones panel cannot download a different file than the
+    row it shows."""
+    doc_id = await make_document(session, visibility="privado")
+    owner = await make_user(session)
+    await make_document_author(session, doc_id, user_id=owner, status="owner")
+    await _seed_two_versions(session, doc_id)
+    ctx = _docente(owner)
+
+    draft = await documents.get_draft_state(session, ctx, doc_id)
+    detail = await documents.get_detail(session, doc_id, ctx)
+    assert detail is not None and detail.versions is not None
+    assert [(v.n, v.original_filename, v.is_current) for v in draft.versions] == [
+        (v.n, v.original_filename, v.is_current) for v in detail.versions
+    ]
+    for v in draft.versions:
+        file = await documents.get_manageable_version_file(session, doc_id, v.n, ctx)
+        assert file is not None
+        assert file.original_filename == v.original_filename
