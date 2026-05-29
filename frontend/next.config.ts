@@ -5,6 +5,7 @@ const backendUrl = process.env.BUSCASAM_API_URL ?? "http://127.0.0.1:8000";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  allowedDevOrigins: ["192.168.*.*"],
   turbopack: {
     root: path.resolve(__dirname),
   },
