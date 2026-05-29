@@ -13,8 +13,9 @@ export default function InspectPage() {
   const router = useRouter();
   const params = useParams<{ reportId: string }>();
   const reportId = Number(params.reportId);
-  const { metadata, isLoading: inspectLoading, hide, unhide, dismiss } =
-    useInspect(reportId);
+  const isDocente = user?.role === "docente";
+  const { metadata, isLoading: inspectLoading, isError, hide, unhide, dismiss } =
+    useInspect(reportId, isDocente && !Number.isNaN(reportId));
 
   useEffect(() => {
     if (isInvitado) {
@@ -26,7 +27,8 @@ export default function InspectPage() {
 
   if (isLoading || isInvitado) return null;
   if (!user || user.role !== "docente") return null;
-  if (inspectLoading || !metadata) return null;
+  if (inspectLoading) return null;
+  if (isError || !metadata) return <NotFound />;
 
   return (
     <InspectView
@@ -128,6 +130,16 @@ function InspectView({
           </Button>
         </div>
       </div>
+    </main>
+  );
+}
+
+function NotFound() {
+  return (
+    <main className="mx-auto w-full max-w-3xl px-4 py-8">
+      <p className="text-muted-foreground text-sm">
+        No se pudo cargar el reporte
+      </p>
     </main>
   );
 }

@@ -45,7 +45,7 @@ describe("useInspect", () => {
   it("fetches the report-scoped document metadata", async () => {
     apiGet.mockResolvedValue({ data: META, error: undefined });
 
-    const { result } = renderHook(() => useInspect(42), { wrapper: wrapper() });
+    const { result } = renderHook(() => useInspect(42, true), { wrapper: wrapper() });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.metadata).toEqual(META);
@@ -55,6 +55,14 @@ describe("useInspect", () => {
     );
   });
 
+  it("does not fetch while disabled", () => {
+    apiGet.mockResolvedValue({ data: META, error: undefined });
+
+    renderHook(() => useInspect(42, false), { wrapper: wrapper() });
+
+    expect(apiGet).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["hide", "/api/moderation/reports/{report_id}/hide"],
     ["unhide", "/api/moderation/reports/{report_id}/unhide"],
@@ -62,7 +70,7 @@ describe("useInspect", () => {
   ] as const)("%s POSTs the reason to its endpoint and invalidates the queue", async (action, path) => {
     apiGet.mockResolvedValue({ data: META, error: undefined });
     apiPost.mockResolvedValue({ error: undefined });
-    const { result } = renderHook(() => useInspect(42), { wrapper: wrapper() });
+    const { result } = renderHook(() => useInspect(42, true), { wrapper: wrapper() });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     const invalidate = vi.spyOn(QueryClient.prototype, "invalidateQueries");
@@ -82,7 +90,7 @@ describe("useInspect", () => {
   it("surfaces a failed action as action_failed without invalidating", async () => {
     apiGet.mockResolvedValue({ data: META, error: undefined });
     apiPost.mockResolvedValue({ error: { detail: "x" } });
-    const { result } = renderHook(() => useInspect(42), { wrapper: wrapper() });
+    const { result } = renderHook(() => useInspect(42, true), { wrapper: wrapper() });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     expect(await result.current.hide("r")).toBe("action_failed");
