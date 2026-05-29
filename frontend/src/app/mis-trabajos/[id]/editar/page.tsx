@@ -32,6 +32,12 @@ import {
   type DraftState,
 } from "../../useDraftState";
 
+const VISIBILITIES = [
+  { value: "publico", label: "Público" },
+  { value: "interno", label: "Interno" },
+  { value: "privado", label: "Privado" },
+] as const;
+
 const formSchema = z.object({
   titulo: z.string().min(1, "El título es obligatorio"),
   abstract: z.string(),
@@ -114,6 +120,18 @@ function EditarForm({
     });
     if (error) {
       toast.error("No se pudo guardar el cambio");
+      return;
+    }
+    await refresh();
+  }
+
+  async function patchVisibility(visibility: string) {
+    const { error } = await api.PATCH("/api/documents/{doc_id}", {
+      params: { path: { doc_id: docId } },
+      body: { visibility: visibility as DraftState["visibility"] },
+    });
+    if (error) {
+      toast.error("No se pudo cambiar la visibilidad");
       return;
     }
     await refresh();
@@ -206,6 +224,24 @@ function EditarForm({
               {...register("fecha", { onBlur: () => patchField("fecha") })}
             />
           </Field>
+          {/* Visibility is owner-only (ADR-0010 §8); accepted coautores edit
+              metadata but cannot change who can read the trabajo. */}
+          {state.isOwner && (
+            <Field label="Visibilidad" htmlFor="visibility">
+              <select
+                id="visibility"
+                className="w-full rounded-md border px-3 py-2 text-sm"
+                defaultValue={state.visibility}
+                onChange={(e) => patchVisibility(e.target.value)}
+              >
+                {VISIBILITIES.map((v) => (
+                  <option key={v.value} value={v.value}>
+                    {v.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
         </form>
 
         <section className="bg-muted/30 relative rounded-lg border p-4">
