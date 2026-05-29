@@ -2,14 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-const { apiDelete, apiGet } = vi.hoisted(() => ({
+const { apiDelete, apiGet, apiPost } = vi.hoisted(() => ({
   apiDelete: vi.fn(),
   apiGet: vi.fn(),
+  apiPost: vi.fn(),
 }));
-vi.mock("@/api/client", () => ({ api: { DELETE: apiDelete, GET: apiGet } }));
+vi.mock("@/api/client", () => ({
+  api: { DELETE: apiDelete, GET: apiGet, POST: apiPost },
+}));
 
 import type { components } from "@/api/schema";
-import { useDraftAttachments, useDraftState } from "./useDraftState";
+import { useDraftState } from "./useDraftState";
 
 type DraftStateDTO = components["schemas"]["DraftStateDTO"];
 
@@ -65,6 +68,8 @@ describe("useDraftState", () => {
     apiDelete.mockReset();
     apiDelete.mockResolvedValue({ error: undefined });
     apiGet.mockReset();
+    apiPost.mockReset();
+    apiPost.mockResolvedValue({ error: undefined, response: { status: 204 } });
     vi.stubGlobal("fetch", vi.fn());
   });
   afterEach(() => {
@@ -221,7 +226,7 @@ describe("useDraftState", () => {
     const file = new File(["%PDF-1.4"], "nueva.pdf", {
       type: "application/pdf",
     });
-    const error = await result.current.replace(file);
+    const error = await result.current.actions.replace(file);
 
     expect(error).toBeUndefined();
     expect(fetch).toHaveBeenCalledWith(
@@ -239,23 +244,59 @@ describe("useDraftState", () => {
     const file = new File(["x"], "f.pdf", { type: "application/pdf" });
 
     (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ status: 413 });
-    expect(await result.current.replace(file)).toBe("too_large");
+    expect(await result.current.actions.replace(file)).toBe("too_large");
     (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ status: 415 });
-    expect(await result.current.replace(file)).toBe("unsupported_type");
+    expect(await result.current.actions.replace(file)).toBe("unsupported_type");
     (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ status: 409 });
-    expect(await result.current.replace(file)).toBe("no_published_version");
+    expect(await result.current.actions.replace(file)).toBe(
+      "no_published_version",
+    );
+  });
+
+  it("publish posts through the draft action interface", async () => {
+    returns({});
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(await result.current.actions.publish()).toBe("published");
+    expect(apiPost).toHaveBeenCalledWith("/api/documents/{doc_id}/publish", {
+      params: { path: { doc_id: 1 } },
+    });
+  });
+
+  it("publish absorbs a 409 race by refreshing draft state", async () => {
+    returns({});
+    apiPost.mockResolvedValue({
+      error: { detail: "conflict" },
+      response: { status: 409 },
+    });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    const callsBeforePublish = apiGet.mock.calls.length;
+
+    expect(await result.current.actions.publish()).toBe("refreshed");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(apiGet.mock.calls.length).toBeGreaterThan(callsBeforePublish);
   });
 
   it("discard optimistically removes the candidate on success", async () => {
     returns({ candidate: candidate({ status: "failed" }) });
-    apiDelete.mockResolvedValue({ error: undefined, response: { status: 204 } });
+    apiDelete.mockResolvedValue({
+      error: undefined,
+      response: { status: 204 },
+    });
     const { result } = renderHook(() => useDraftState(1), {
       wrapper: wrapper(),
     });
     await vi.advanceTimersByTimeAsync(0);
     expect(result.current.state?.candidate).not.toBeNull();
 
-    const error = await result.current.discard();
+    const error = await result.current.actions.discard();
 
     expect(error).toBeUndefined();
     expect(apiDelete).toHaveBeenCalledWith(
@@ -277,7 +318,7 @@ describe("useDraftState", () => {
     });
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(await result.current.discard()).toBeUndefined();
+    expect(await result.current.actions.discard()).toBeUndefined();
   });
 
   it("discard surfaces a typed error on other failures", async () => {
@@ -291,18 +332,21 @@ describe("useDraftState", () => {
     });
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(await result.current.discard()).toBe("discard_failed");
+    expect(await result.current.actions.discard()).toBe("discard_failed");
   });
 
   it("softDelete deletes the document through the typed endpoint", async () => {
     returns({});
-    apiDelete.mockResolvedValue({ error: undefined, response: { status: 204 } });
+    apiDelete.mockResolvedValue({
+      error: undefined,
+      response: { status: 204 },
+    });
     const { result } = renderHook(() => useDraftState(1), {
       wrapper: wrapper(),
     });
     await vi.advanceTimersByTimeAsync(0);
 
-    const error = await result.current.softDelete();
+    const error = await result.current.actions.softDelete();
 
     expect(error).toBeUndefined();
     expect(apiDelete).toHaveBeenCalledWith("/api/documents/{doc_id}", {
@@ -321,11 +365,11 @@ describe("useDraftState", () => {
     });
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(await result.current.softDelete()).toBe("delete_failed");
+    expect(await result.current.actions.softDelete()).toBe("delete_failed");
   });
 });
 
-describe("useDraftAttachments", () => {
+describe("draft attachment actions", () => {
   beforeEach(() => {
     apiDelete.mockReset();
     apiDelete.mockResolvedValue({ error: undefined });
@@ -348,12 +392,12 @@ describe("useDraftAttachments", () => {
         mime: "text/csv",
       }),
     });
-    const { result } = renderHook(() => useDraftAttachments(1), {
+    const { result } = renderHook(() => useDraftState(1), {
       wrapper: wrapper(),
     });
-    await waitFor(() => expect(result.current.attachments).toEqual([]));
+    await waitFor(() => expect(result.current.state?.attachments).toEqual([]));
 
-    await result.current.addAttachment(
+    await result.current.actions.attachments.add(
       new File(["a,b\n"], "new.csv", { type: "text/csv" }),
     );
 
@@ -363,7 +407,7 @@ describe("useDraftAttachments", () => {
     );
     await waitFor(() =>
       expect(
-        result.current.attachments.map(
+        result.current.state?.attachments.map(
           (attachment) => attachment.original_filename,
         ),
       ).toEqual(["new.csv"]),
@@ -390,15 +434,17 @@ describe("useDraftAttachments", () => {
           resolveDelete = resolve;
         }),
     );
-    const { result } = renderHook(() => useDraftAttachments(1), {
+    const { result } = renderHook(() => useDraftState(1), {
       wrapper: wrapper(),
     });
-    await waitFor(() => expect(result.current.attachments).toHaveLength(1));
-
-    const deleting = result.current.removeAttachment(
-      result.current.attachments[0]!,
+    await waitFor(() =>
+      expect(result.current.state?.attachments).toHaveLength(1),
     );
-    await waitFor(() => expect(result.current.attachments).toEqual([]));
+
+    const deleting = result.current.actions.attachments.remove(
+      result.current.state?.attachments[0]!,
+    );
+    await waitFor(() => expect(result.current.state?.attachments).toEqual([]));
     expect(apiDelete).toHaveBeenCalledWith(
       "/api/documents/{doc_id}/attachments/{att_id}",
       { params: { path: { doc_id: 1, att_id: 2 } } },
@@ -406,6 +452,8 @@ describe("useDraftAttachments", () => {
     resolveDelete?.({ error: { detail: "failed" } });
     await deleting;
 
-    await waitFor(() => expect(result.current.attachments).toHaveLength(1));
+    await waitFor(() =>
+      expect(result.current.state?.attachments).toHaveLength(1),
+    );
   });
 });

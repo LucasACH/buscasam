@@ -1273,19 +1273,8 @@ async def get_draft_state(
         )
     ).mappings().all()
     # ADR-0011 §4: the editar Versiones list mirrors get_detail.versions —
-    # only previously-public rows, by the same 1-based n ordering.
-    version_rows = (
-        await session.execute(
-            text(
-                "SELECT row_number() OVER (ORDER BY id) AS n, "
-                "       original_filename, mime, bytes, indexed_at, is_current "
-                "FROM document_versions "
-                "WHERE doc_id = :doc_id AND first_published_at IS NOT NULL "
-                "ORDER BY id"
-            ),
-            {"doc_id": doc_id},
-        )
-    ).mappings().all()
+    # one projection (_published_version_history) so both stay aligned.
+    version_history = await _published_version_history(session, doc_id)
     # ADR-0011 §9: the in-flight replacement candidate, if any. The partial
     # unique index admits at most one (never-public, non-discarded, non-current)
     # row, so one_or_none is the contract, not a LIMIT.
@@ -1367,17 +1356,7 @@ async def get_draft_state(
             )
             for c in coauthor_rows
         ],
-        versions=[
-            DetailVersion(
-                n=v["n"],
-                original_filename=v["original_filename"],
-                mime=v["mime"],
-                size_bytes=v["bytes"],
-                indexed_at=v["indexed_at"],
-                is_current=v["is_current"],
-            )
-            for v in version_rows
-        ],
+        versions=[_to_detail_version(v) for v in version_history],
         candidate=candidate,
     )
 
@@ -1473,6 +1452,69 @@ class DetailVersion:
 
 
 @dataclass(frozen=True)
+class _PublishedVersion:
+    """One row of the published version-history projection (ADR-0011 §4): a
+    version that was at some point the public current. Carries `sha_hex` for the
+    download lookup on top of the DetailVersion fields the list projections need."""
+    n: int
+    sha_hex: str
+    original_filename: str
+    mime: str
+    size_bytes: int
+    indexed_at: datetime | None
+    is_current: bool
+
+
+async def _published_version_history(
+    session: AsyncSession, doc_id: int
+) -> list[_PublishedVersion]:
+    """Single locality for the published version-history projection (ADR-0011 §4,
+    §11). Owns the three rules every consumer agrees on: the `first_published_at
+    IS NOT NULL` gate (only previously-public versions), the stable 1-based
+    `n = row_number() OVER (ORDER BY id)` ordering (shared with the version-download
+    route so the visible list and the n->file mapping cannot drift), and the
+    `is_current` marker. Reused by get_draft_state and get_detail (mapped to
+    DetailVersion) and by get_manageable_version_file (resolved by n). Access
+    gating is the caller's responsibility; this projection does not gate."""
+    rows = (
+        await session.execute(
+            text(
+                "SELECT row_number() OVER (ORDER BY id) AS n, "
+                "       encode(sha256, 'hex') AS sha, original_filename, mime, "
+                "       bytes, indexed_at, is_current "
+                "FROM document_versions "
+                "WHERE doc_id = :doc_id AND first_published_at IS NOT NULL "
+                "ORDER BY id"
+            ),
+            {"doc_id": doc_id},
+        )
+    ).mappings().all()
+    return [
+        _PublishedVersion(
+            n=r["n"],
+            sha_hex=r["sha"],
+            original_filename=r["original_filename"],
+            mime=r["mime"],
+            size_bytes=r["bytes"],
+            indexed_at=r["indexed_at"],
+            is_current=r["is_current"],
+        )
+        for r in rows
+    ]
+
+
+def _to_detail_version(v: _PublishedVersion) -> DetailVersion:
+    return DetailVersion(
+        n=v.n,
+        original_filename=v.original_filename,
+        mime=v.mime,
+        size_bytes=v.size_bytes,
+        indexed_at=v.indexed_at,
+        is_current=v.is_current,
+    )
+
+
+@dataclass(frozen=True)
 class DetailRow:
     doc_id: int
     titulo: str
@@ -1555,31 +1597,12 @@ async def get_detail(
     versions: list[DetailVersion] | None = None
     if manageable:
         # ADR-0011 §4: the audit list shows only versions that were at some
-        # point the public current. The same first_published_at filter narrows
-        # get_manageable_version_file, so the 1-based n stays aligned with the
-        # version-download route.
-        version_rows = (
-            await session.execute(
-                text(
-                    "SELECT row_number() OVER (ORDER BY id) AS n, "
-                    "       original_filename, mime, bytes, indexed_at, is_current "
-                    "FROM document_versions "
-                    "WHERE doc_id = :d AND first_published_at IS NOT NULL "
-                    "ORDER BY id"
-                ),
-                {"d": doc_id},
-            )
-        ).mappings().all()
+        # point the public current. _published_version_history owns the gate +
+        # ordering shared with get_manageable_version_file, so the 1-based n stays
+        # aligned with the version-download route.
         versions = [
-            DetailVersion(
-                n=v["n"],
-                original_filename=v["original_filename"],
-                mime=v["mime"],
-                size_bytes=v["bytes"],
-                indexed_at=v["indexed_at"],
-                is_current=v["is_current"],
-            )
-            for v in version_rows
+            _to_detail_version(v)
+            for v in await _published_version_history(session, doc_id)
         ]
 
     return DetailRow(
@@ -1730,34 +1753,31 @@ async def get_manageable_version_file(
     """Historical-version lookup gated by `manageable_where` (story 26).
 
     `n` is the 1-based row_number ordering shared with `get_detail`. Any
-    out-of-range value returns `None`. The ordering (`ORDER BY id`) must match
-    `get_detail`'s `version_rows` query.
+    out-of-range value returns `None`. The ordering is owned by
+    `_published_version_history`, so it matches `get_detail`'s versions list.
     """
     where, params = manageable_where("d", user_ctx)
-    # ADR-0011 §4: only versions that were at some point the public current
-    # (first_published_at IS NOT NULL) are downloadable here. Failed, discarded,
-    # and in-flight ready candidates uniformly resolve to None → 404. The filter
-    # lives in the subquery so the row_number() ordering (shared with get_detail)
-    # is computed over the same narrowed set.
-    row = (
+    manageable = (
         await session.execute(
-            text(
-                "SELECT encode(v.sha256, 'hex') AS sha, "
-                "       v.original_filename, v.mime "
-                "FROM documents d "
-                "JOIN ("
-                "  SELECT doc_id, sha256, original_filename, mime, "
-                "         row_number() OVER (PARTITION BY doc_id ORDER BY id) AS n "
-                "  FROM document_versions "
-                "  WHERE doc_id = :doc_id AND first_published_at IS NOT NULL"
-                ") v ON v.doc_id = d.id "
-                f"WHERE d.id = :doc_id AND v.n = :n AND ({where})"
-            ),
-            {"doc_id": doc_id, "n": n, **params},
+            text(f"SELECT 1 FROM documents d WHERE d.id = :doc_id AND ({where})"),
+            {"doc_id": doc_id, **params},
         )
-    ).first()
-    if row is None:
+    ).scalar_one_or_none() is not None
+    if not manageable:
+        return None
+    # ADR-0011 §4: only versions that were at some point the public current are
+    # downloadable here. _published_version_history applies the gate + the
+    # row_number() ordering shared with get_detail, so `n` resolves to the same
+    # file the manager clicked. Failed, discarded, and in-flight ready candidates
+    # are absent from the projection, so an out-of-range n returns None (404).
+    match = next(
+        (v for v in await _published_version_history(session, doc_id) if v.n == n),
+        None,
+    )
+    if match is None:
         return None
     return DownloadableFile(
-        sha_hex=row.sha, original_filename=row.original_filename, mime=row.mime
+        sha_hex=match.sha_hex,
+        original_filename=match.original_filename,
+        mime=match.mime,
     )

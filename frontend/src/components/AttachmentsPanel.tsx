@@ -3,24 +3,26 @@
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import {
-  useDraftAttachments,
-  type DraftAttachment,
-  type AttachmentMutationError,
+import type {
+  AttachmentMutationError,
+  DraftAttachment,
+  DraftWorkspaceActions,
 } from "@/app/mis-trabajos/useDraftState";
 import { formatBytes } from "@/lib/utils";
 
 const ACCEPT = ".csv,.json,.txt,.py,.ipynb,.png,.jpg,.jpeg,.gif,.zip";
+const MAX_ATTACHMENTS = 5;
 
 export function AttachmentsPanel({
-  docId,
   canManage,
+  attachments,
+  actions,
 }: {
-  docId: number;
   canManage: boolean;
+  attachments: DraftAttachment[];
+  actions: DraftWorkspaceActions["attachments"];
 }) {
-  const { attachments, atCapacity, addAttachment, removeAttachment } =
-    useDraftAttachments(docId);
+  const atCapacity = attachments.length >= MAX_ATTACHMENTS;
 
   async function onAdd(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -28,7 +30,7 @@ export function AttachmentsPanel({
     event.target.value = "";
     if (!file) return;
 
-    const error = await addAttachment(file);
+    const error = await actions.add(file);
     if (error === "too_large") {
       toast.error("Este adjunto pasa los 20 MB. Probá uno más chico.");
       return;
@@ -44,7 +46,7 @@ export function AttachmentsPanel({
 
   async function onRemove(attachment: DraftAttachment) {
     const error: AttachmentMutationError | undefined =
-      await removeAttachment(attachment);
+      await actions.remove(attachment);
     if (error === "remove_failed") {
       toast.error("No se pudo quitar el adjunto");
     }
