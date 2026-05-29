@@ -10,6 +10,17 @@ import { toast } from "sonner";
 
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 import { AttachmentsPanel } from "@/components/AttachmentsPanel";
 import { CandidatePanel } from "@/components/CandidatePanel";
 import { CoauthorsPanel } from "@/components/CoauthorsPanel";
@@ -272,9 +283,37 @@ function EditarForm({
           keeping the delete mutation single-copy (module map §Frontend Papelera). */}
       {state.isOwner && (
         <div className="mt-8 border-t pt-8">
-          <Button variant="destructive" disabled={deleting} onClick={onDelete}>
-            Eliminar
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" disabled={deleting}>
+                Eliminar
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>¿Eliminar este trabajo?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  El trabajo pasará a la papelera. Podés restaurarlo en
+                  cualquier momento durante los próximos 180 días; pasado ese
+                  plazo se eliminará de forma permanente.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={deleting}>
+                  Cancelar
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={deleting}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onDelete();
+                  }}
+                >
+                  Eliminar
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       )}
     </main>
