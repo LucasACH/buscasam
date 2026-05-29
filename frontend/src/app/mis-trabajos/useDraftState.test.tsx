@@ -97,7 +97,75 @@ describe("useDraftState", () => {
       showSuggestionsSpinner: false,
       gateMessage: null,
       canPublish: true,
+      initialPhase: "ready",
     });
+  });
+
+  it("projects initialPhase for an initial draft still indexing", async () => {
+    returns({ index_status: "processing", versions: [] });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(result.current.state?.lifecycle.initialPhase).toBe("indexing");
+  });
+
+  it("projects initialPhase as indexing while pending", async () => {
+    returns({ index_status: "pending", versions: [] });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(result.current.state?.lifecycle.initialPhase).toBe("indexing");
+  });
+
+  it("projects initialPhase as failed for a failed initial draft", async () => {
+    returns({ index_status: "failed", versions: [] });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(result.current.state?.lifecycle.initialPhase).toBe("failed");
+  });
+
+  it("projects initialPhase as ready once indexed", async () => {
+    returns({ index_status: "indexed", versions: [] });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(result.current.state?.lifecycle.initialPhase).toBe("ready");
+  });
+
+  it("projects initialPhase as ready while a published version exists", async () => {
+    returns({
+      index_status: "processing",
+      versions: [
+        {
+          n: 1,
+          original_filename: "v1.pdf",
+          mime: "application/pdf",
+          size_bytes: 10,
+          indexed_at: null,
+          is_current: true,
+        },
+      ],
+    });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(result.current.state?.lifecycle.initialPhase).toBe("ready");
   });
 
   it("interprets reindexing as blocked publication with Spanish copy", async () => {

@@ -32,6 +32,7 @@ export type DraftState = {
     showSuggestionsSpinner: boolean;
     gateMessage: string | null;
     canPublish: boolean;
+    initialPhase: "indexing" | "failed" | "ready";
   };
   isOwner: boolean;
   visibility: DraftStateDTO["visibility"];
@@ -134,6 +135,17 @@ function useDraftQuery(docId: number) {
   });
 }
 
+// The initial-publication path blocks the whole edit page until the first
+// version finishes indexing; once any published version exists the page is
+// driven by the candidate flow instead and is never blocked.
+function initialPhase(state: DraftStateDTO): "indexing" | "failed" | "ready" {
+  if (state.versions.length > 0) return "ready";
+  if (state.index_status === "pending" || state.index_status === "processing")
+    return "indexing";
+  if (state.index_status === "failed") return "failed";
+  return "ready";
+}
+
 function projectDraftState(state: DraftStateDTO): DraftState {
   return {
     title: state.title,
@@ -148,6 +160,7 @@ function projectDraftState(state: DraftStateDTO): DraftState {
         ? (GATE_COPY[state.publish_gate_reason] ?? state.publish_gate_reason)
         : null,
       canPublish: state.publish_gate_reason === null && state.is_owner,
+      initialPhase: initialPhase(state),
     },
     isOwner: state.is_owner,
     visibility: state.visibility,
