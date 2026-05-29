@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,8 +25,11 @@ from buscasam.core.document_access import moderation_inspection_where
 from buscasam.core.moderation import (
     DocumentNotReadable,
     Reason,
+    dismiss,
     file_report,
+    hide,
     list_open_reports,
+    unhide,
 )
 
 router = APIRouter(prefix="/api/moderation")
@@ -160,3 +163,47 @@ async def inspect_download(
     return download_response(
         sha_hex=row.sha, original_filename=row.original_filename, mime=row.mime
     )
+
+
+class HideBody(BaseModel):
+    reason: str = Field(min_length=1)
+
+
+class ActionBody(BaseModel):
+    reason: str | None = None
+
+
+@router.post("/reports/{report_id}/hide", status_code=204)
+async def hide_report(
+    report_id: int,
+    body: HideBody,
+    docente_ctx: auth.UserCtx = Depends(auth.require_docente),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    if await hide(session, docente_ctx, report_id, body.reason) is None:
+        raise _not_found()
+    return Response(status_code=204)
+
+
+@router.post("/reports/{report_id}/unhide", status_code=204)
+async def unhide_report(
+    report_id: int,
+    body: ActionBody,
+    docente_ctx: auth.UserCtx = Depends(auth.require_docente),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    if await unhide(session, docente_ctx, report_id, body.reason) is None:
+        raise _not_found()
+    return Response(status_code=204)
+
+
+@router.post("/reports/{report_id}/dismiss", status_code=204)
+async def dismiss_report(
+    report_id: int,
+    body: ActionBody,
+    docente_ctx: auth.UserCtx = Depends(auth.require_docente),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    if await dismiss(session, docente_ctx, report_id, body.reason) is None:
+        raise _not_found()
+    return Response(status_code=204)

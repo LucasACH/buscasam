@@ -96,3 +96,144 @@ async def list_open_reports(session: AsyncSession) -> list[QueueEntry]:
         )
         for r in rows
     ]
+
+
+@dataclass(frozen=True)
+class ActionOutcome:
+    action_id: int
+    doc_id: int
+
+
+# hide/unhide notify registered authors; dismiss notifies no one. The event_key
+# format `{kind}:{action_id}` is owned here (the single producer).
+_NOTIFY_KIND = {"hide": "document_hidden", "unhide": "document_unhidden"}
+
+
+async def hide(
+    session: AsyncSession, docente_ctx: UserCtx, report_id: int, reason: str
+) -> ActionOutcome | None:
+    """Stamp `documents.moderation_hidden_at`, append a `hide` action, resolve
+    all open reports on the doc, and notify every registered author — one
+    transaction. None when the report is unknown or its doc is author-soft-
+    deleted (router → 404). require_docente upstream."""
+    return await _act(session, docente_ctx, report_id, "hide", reason)
+
+
+async def unhide(
+    session: AsyncSession, docente_ctx: UserCtx, report_id: int, reason: str | None = None
+) -> ActionOutcome | None:
+    """Clear `moderation_hidden_at`, append an `unhide` action, resolve all open
+    reports, and notify every registered author — one transaction. None on an
+    unknown/author-soft-deleted case."""
+    return await _act(session, docente_ctx, report_id, "unhide", reason)
+
+
+async def dismiss(
+    session: AsyncSession, docente_ctx: UserCtx, report_id: int, reason: str | None = None
+) -> ActionOutcome | None:
+    """Append a `dismiss` action and resolve all open reports — the matter is
+    settled for the document — without touching `moderation_hidden_at` and
+    without notifying anyone. None on an unknown/author-soft-deleted case."""
+    return await _act(session, docente_ctx, report_id, "dismiss", reason)
+
+
+async def _act(
+    session: AsyncSession,
+    docente_ctx: UserCtx,
+    report_id: int,
+    action: str,
+    reason: str | None,
+) -> ActionOutcome | None:
+    """Shared resolve-all-open + audit-append. Sole writer of
+    `documents.moderation_hidden_at` (arch test); touches no other `documents`
+    column."""
+    doc_id = (
+        await session.execute(
+            text(
+                "SELECT r.doc_id FROM document_reports r "
+                "JOIN documents d ON d.id = r.doc_id "
+                "WHERE r.id = :rid AND d.soft_deleted_at IS NULL"
+            ),
+            {"rid": report_id},
+        )
+    ).scalar_one_or_none()
+    if doc_id is None:
+        return None
+
+    if action == "hide":
+        await session.execute(
+            text("UPDATE documents SET moderation_hidden_at = now() WHERE id = :d"),
+            {"d": doc_id},
+        )
+    elif action == "unhide":
+        await session.execute(
+            text("UPDATE documents SET moderation_hidden_at = NULL WHERE id = :d"),
+            {"d": doc_id},
+        )
+
+    action_id = (
+        await session.execute(
+            text(
+                "INSERT INTO moderation_actions "
+                "(report_id, docente_user_id, action, reason) "
+                "VALUES (:rid, :uid, :action, :reason) RETURNING id"
+            ),
+            {
+                "rid": report_id,
+                "uid": docente_ctx.user_id,
+                "action": action,
+                "reason": reason,
+            },
+        )
+    ).scalar_one()
+
+    await session.execute(
+        text(
+            "UPDATE document_reports SET status = 'resolved' "
+            "WHERE doc_id = :d AND status = 'open'"
+        ),
+        {"d": doc_id},
+    )
+
+    kind = _NOTIFY_KIND.get(action)
+    if kind is not None:
+        await _notify_authors(session, action_id=action_id, doc_id=doc_id, kind=kind)
+
+    return ActionOutcome(action_id=action_id, doc_id=doc_id)
+
+
+async def _notify_authors(
+    session: AsyncSession, *, action_id: int, doc_id: int, kind: str
+) -> None:
+    """Insert one in-app notification per registered author (owner + accepted,
+    `user_id NOT NULL`); external authors are skipped. `ON CONFLICT
+    (user_id, event_key) DO NOTHING` with `event_key = f"{kind}:{action_id}"`,
+    so a retry of the same action never double-notifies any recipient."""
+    rows = (
+        await session.execute(
+            text(
+                "SELECT da.user_id AS user_id, d.titulo AS doc_title "
+                "FROM document_authors da JOIN documents d ON d.id = da.doc_id "
+                "WHERE da.doc_id = :d AND da.status IN ('owner', 'accepted') "
+                "  AND da.user_id IS NOT NULL"
+            ),
+            {"d": doc_id},
+        )
+    ).mappings().all()
+    for r in rows:
+        await session.execute(
+            text(
+                "INSERT INTO notifications (user_id, event_key, kind, payload_json) "
+                "VALUES (:uid, :ek, :kind, "
+                "        jsonb_build_object('doc_title', cast(:doc_title as text), "
+                "                           'doc_id', cast(:doc_id as bigint))) "
+                "ON CONFLICT (user_id, event_key) DO NOTHING"
+            ),
+            {
+                "uid": r["user_id"],
+                "ek": f"{kind}:{action_id}",
+                "kind": kind,
+                "doc_title": r["doc_title"],
+                "doc_id": doc_id,
+            },
+        )
