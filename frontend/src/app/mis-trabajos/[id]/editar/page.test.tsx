@@ -85,6 +85,7 @@ function draft(
         showSuggestionsSpinner: false,
         gateMessage: null,
         canPublish: true,
+        initialPhase: "ready",
         ...lifecycle,
       },
     },
@@ -121,6 +122,81 @@ describe("editar page", () => {
     versionsPanelMock.mockClear();
   });
   afterEach(() => cleanup());
+
+  it("blocks the page with a loader while the initial version is indexing", () => {
+    useDraftStateMock.mockReturnValue(
+      draft(
+        { staged_abstract: null, staged_keywords: [], staged_fecha: null },
+        {
+          initialPhase: "indexing",
+          statusLabel: "Procesando…",
+          canPublish: false,
+        },
+      ),
+    );
+    render(<EditarPage />);
+
+    expect(screen.getByTestId("status-pill")).toHaveTextContent("Procesando…");
+    expect(screen.getByTestId("indexing-block")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Título")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /publicar/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /eliminar/i }),
+    ).not.toBeInTheDocument();
+    expect(candidatePanelMock).not.toHaveBeenCalled();
+    expect(versionsPanelMock).not.toHaveBeenCalled();
+    expect(attachmentsPanelMock).not.toHaveBeenCalled();
+  });
+
+  it("shows the failure message and Eliminar for a failed initial draft", () => {
+    useDraftStateMock.mockReturnValue(
+      draft(
+        { isOwner: true },
+        {
+          initialPhase: "failed",
+          statusLabel: "Falló el procesamiento",
+          gateMessage: "Falló el procesamiento — revisá tu archivo",
+          canPublish: false,
+        },
+      ),
+    );
+    render(<EditarPage />);
+
+    expect(screen.getByTestId("failed-block")).toHaveTextContent(
+      "Falló el procesamiento — revisá tu archivo",
+    );
+    expect(
+      screen.getByRole("button", { name: /eliminar/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Título")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /publicar/i }),
+    ).not.toBeInTheDocument();
+    expect(candidatePanelMock).not.toHaveBeenCalled();
+    expect(attachmentsPanelMock).not.toHaveBeenCalled();
+  });
+
+  it("dismisses the loader and shows the prefilled form once indexing finishes", () => {
+    useDraftStateMock.mockReturnValue(
+      draft(
+        { staged_abstract: null, staged_keywords: [], staged_fecha: null },
+        { initialPhase: "indexing", statusLabel: "Procesando…" },
+      ),
+    );
+    const { rerender } = render(<EditarPage />);
+    expect(screen.getByTestId("indexing-block")).toBeInTheDocument();
+
+    useDraftStateMock.mockReturnValue(
+      draft({ title: "Mi tesis", staged_abstract: "resumen extraído" }),
+    );
+    rerender(<EditarPage />);
+
+    expect(screen.queryByTestId("indexing-block")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Título")).toHaveValue("Mi tesis");
+    expect(screen.getByLabelText("Resumen")).toHaveValue("resumen extraído");
+  });
 
   it("mounts presentational panels with projected draft state and actions", () => {
     const versions = [
@@ -390,7 +466,7 @@ describe("editar page", () => {
   it("deletes and navigates to /mis-trabajos on success", async () => {
     useDraftStateMock.mockReturnValue(draft({ isOwner: true }));
     render(<EditarPage />);
-    fireEvent.click(screen.getByRole("button", { name: /eliminar/i }));
+    await confirmDelete();
     await waitFor(() => expect(softDeleteMock).toHaveBeenCalled());
     await waitFor(() => expect(push).toHaveBeenCalledWith("/mis-trabajos"));
   });
@@ -399,8 +475,15 @@ describe("editar page", () => {
     softDeleteMock.mockResolvedValue("delete_failed");
     useDraftStateMock.mockReturnValue(draft({ isOwner: true }));
     render(<EditarPage />);
-    fireEvent.click(screen.getByRole("button", { name: /eliminar/i }));
+    await confirmDelete();
     await waitFor(() => expect(toastError).toHaveBeenCalled());
     expect(push).not.toHaveBeenCalled();
   });
 });
+
+// Eliminar lives behind an AlertDialog: open it, then click the confirm action.
+async function confirmDelete() {
+  fireEvent.click(screen.getByRole("button", { name: /eliminar/i }));
+  const buttons = await screen.findAllByRole("button", { name: /eliminar/i });
+  fireEvent.click(buttons[buttons.length - 1]!);
+}

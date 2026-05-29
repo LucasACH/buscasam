@@ -322,7 +322,8 @@ On submit: `POST /api/documents` (validation 422 surfaced inline) → on success
 
 **Interface:** Edit page. Composes:
 
-- `useDraftState(id)` for staged metadata and interpreted lifecycle meaning (status pill copy, suggestion loading, publish eligibility, gate copy, refresh after a mutation).
+- `useDraftState(id)` for staged metadata and interpreted lifecycle meaning (status pill copy, initial-publication phase, publish eligibility, gate copy, refresh after a mutation).
+- **Initial-publication block.** On the initial path (`versions.length === 0`), the page reads `lifecycle.initialPhase` and, while it is not `ready`, renders only the heading, the status pill, and a centered full-page body — never the metadata form, suggestions, attachments, candidate/versions panels, coautores, the Publicar button, or (during `indexing`) Eliminar. `indexing` shows a blocking loader with Spanish copy ("el trabajo se procesa server-side; podés cerrar y volver"); `failed` shows the failure message (`lifecycle.gateMessage`) plus the owner-only Eliminar affordance. Polling unblocks the page automatically: when `initialPhase` becomes `ready` the full form mounts fresh (prefilled staged values). This replaces the former per-panel `showSuggestionsSpinner` overlay for the initial-indexing case — the spinner now only applies inside the already-published candidate flow.
 - A metadata form (RHF + Zod, scoped to this page — not extracted) bound to `documents.get_draft_state`'s staged + author-entered fields. Save-on-blur PATCHes `/api/documents/{id}`.
 - A suggestions panel that renders `staged_abstract`, `staged_keywords`, `staged_fecha` next to the editable inputs (PRD stories 17-18). It renders the loading meaning supplied by `useDraftState`, without inspecting indexing values.
 - `AttachmentsPanel({ docId })` (PRD stories 22-25).
@@ -351,6 +352,12 @@ useDraftState(docId: number) -> {
       showSuggestionsSpinner: boolean;
       gateMessage: string | null;
       canPublish: boolean;
+      // Initial-publication path only (versions.length === 0): "indexing"
+      // while index_status is pending/processing, "failed" on failure,
+      // "ready" once indexed or a published version exists. The editar page
+      // blocks all interaction behind a full-page loader/failure body until
+      // this is "ready"; pages never read the raw index_status.
+      initialPhase: "indexing" | "failed" | "ready";
     };
   } | undefined;
   isLoading: boolean;
