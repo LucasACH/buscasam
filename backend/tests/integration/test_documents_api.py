@@ -191,6 +191,35 @@ async def test_patch_draft_persists_document_fields(client, session):
     assert row["tipo"] == "paper"
 
 
+async def test_patch_draft_visibility_by_coauthor_returns_403(client, session):
+    # ADR-0010 §8: an accepted coauthor may edit metadata but not change
+    # visibility — that stays owner-only.
+    owner = await make_user(session)
+    coauthor = await make_user(session)
+    doc_id, _ = await _seed_candidate(session, owner_id=owner)
+    await make_document_author(
+        session, doc_id, user_id=coauthor, status="accepted"
+    )
+    coauthor_sid = await _seed_session(session, coauthor)
+    await session.commit()
+
+    r = await client.patch(
+        f"/api/documents/{doc_id}",
+        json={"visibility": "interno"},
+        headers={"origin": settings.base_url},
+        cookies={auth.SID_COOKIE: _sid_cookie(coauthor_sid)},
+    )
+
+    assert r.status_code == 403
+    visibility = (
+        await session.execute(
+            text("SELECT visibility FROM documents WHERE id = :id"),
+            {"id": doc_id},
+        )
+    ).scalar_one()
+    assert visibility == "publico"
+
+
 async def test_patch_draft_clears_fecha_with_null(client, session):
     uid = await make_user(session)
     sid = await _seed_session(session, uid)

@@ -34,6 +34,7 @@ export type DraftState = {
     canPublish: boolean;
   };
   isOwner: boolean;
+  visibility: DraftStateDTO["visibility"];
   candidate: Candidate | null;
   versions: DraftVersion[];
   attachments: DraftAttachment[];
@@ -149,6 +150,7 @@ function projectDraftState(state: DraftStateDTO): DraftState {
       canPublish: state.publish_gate_reason === null && state.is_owner,
     },
     isOwner: state.is_owner,
+    visibility: state.visibility,
     candidate: state.candidate ? projectCandidate(state.candidate) : null,
     versions: state.versions,
     attachments: state.attachments,
