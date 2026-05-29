@@ -151,6 +151,14 @@ describe("/moderacion/[reportId] inspect view", () => {
     expect(push).not.toHaveBeenCalled();
   });
 
+  it("shows a not-found message when the inspect load fails", () => {
+    inspect({ metadata: null, isError: true });
+
+    render(<InspectPage />);
+
+    expect(screen.getByText(/no se pudo cargar el reporte/i)).toBeInTheDocument();
+  });
+
   it("redirects an invitado to login, preserving the next path", () => {
     useUserMock.mockReturnValue({
       user: null,

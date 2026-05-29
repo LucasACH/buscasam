@@ -10,7 +10,7 @@ export type ActionError = "action_failed";
 
 const QUEUE_KEY = ["moderation", "queue"] as const;
 
-export function useInspect(reportId: number) {
+export function useInspect(reportId: number, enabled: boolean) {
   const queryClient = useQueryClient();
   const query = useQuery<InspectMetadata | null>({
     queryKey: ["moderation", "inspect", reportId],
@@ -22,6 +22,7 @@ export function useInspect(reportId: number) {
       if (error) throw error;
       return data ?? null;
     },
+    enabled,
   });
 
   // Acting resolves every open report on the document, so the inspected entry
