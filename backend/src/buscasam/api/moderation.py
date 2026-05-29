@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -166,7 +166,7 @@ async def inspect_download(
 
 
 class HideBody(BaseModel):
-    reason: str
+    reason: str = Field(min_length=1)
 
 
 class ActionBody(BaseModel):

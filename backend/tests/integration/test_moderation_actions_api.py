@@ -100,14 +100,15 @@ async def test_unhide_and_dismiss_accept_null_reason(client, session, action):
     assert r.status_code == 204
 
 
-async def test_hide_without_reason_is_rejected(client, session):
+@pytest.mark.parametrize("body", [{}, {"reason": ""}])
+async def test_hide_without_reason_is_rejected(client, session, body):
     doc_id = await make_document(session)
     report_id = await _file_report(session, doc_id)
     cookie = await _docente_cookie(session)
 
     r = await client.post(
         f"/api/moderation/reports/{report_id}/hide",
-        json={},
+        json=body,
         headers=_headers(cookie),
     )
 
