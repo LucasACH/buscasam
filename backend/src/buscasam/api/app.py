@@ -15,6 +15,7 @@ from buscasam.api.coauthor_invitations import router as coauthor_invitations_rou
 from buscasam.api.notifications import router as notifications_router
 from buscasam.api.docs import router as docs_router
 from buscasam.api.documents import router as documents_router
+from buscasam.api.moderation import router as moderation_router
 from buscasam.api.search import router as search_router
 from buscasam.core import auth
 from buscasam.settings import settings
@@ -65,4 +66,5 @@ def create_app() -> FastAPI:
     app.include_router(coauthor_invitations_router)
     app.include_router(documents_router)
     app.include_router(docs_router)
+    app.include_router(moderation_router)
     return app
