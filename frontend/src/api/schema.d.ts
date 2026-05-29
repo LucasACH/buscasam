@@ -748,11 +748,22 @@ export interface components {
             display_name: string;
             /** Email Local */
             email_local: string | null;
+            /** Email */
+            email: string | null;
             /**
              * Status
              * @enum {string}
              */
             status: "owner" | "pending" | "accepted" | "declined" | "external";
+        };
+        /** ExternalAuthorInput */
+        ExternalAuthorInput: {
+            /** Name */
+            name: string;
+            /** Surname */
+            surname: string;
+            /** Email */
+            email: string;
         };
         /** CreateDraftRequest */
         CreateDraftRequest: {
@@ -774,7 +785,7 @@ export interface components {
              * External Authors
              * @default []
              */
-            external_authors: string[];
+            external_authors: components["schemas"]["ExternalAuthorInput"][];
             /**
              * Coauthor User Ids
              * @default []
@@ -900,6 +911,8 @@ export interface components {
             publish_gate_reason: string | null;
             /** Is Owner */
             is_owner: boolean;
+            /** Visibility */
+            visibility: "publico" | "interno" | "privado";
             /** Attachments */
             attachments: components["schemas"]["AttachmentDTO"][];
             /** Coauthors */
