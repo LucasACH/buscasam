@@ -60,7 +60,7 @@ async def test_mixed_open_and_resolved_reports_aggregate_only_open(session):
     await _file_report(session, doc, await make_user(session), "spam", created_at=t1)
     await _file_report(session, doc, await make_user(session), "plagio", created_at=t2)
     await _file_report(
-        session, doc, await make_user(session), "ofensivo",
+        session, doc, await make_user(session), "error",
         status="resolved", created_at=datetime(2026, 1, 20, tzinfo=timezone.utc),
     )
 
