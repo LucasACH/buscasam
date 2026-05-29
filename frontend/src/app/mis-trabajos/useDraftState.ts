@@ -100,6 +100,10 @@ const draftQueryKey = (docId: number) => ["draft", docId] as const;
 
 function shouldPoll(state: DraftStateDTO | undefined): boolean {
   return (
+    // A freshly created draft starts at "pending" before the worker picks it
+    // up; the editar page blocks on it (initialPhase === "indexing"), so we
+    // must poll it too or the loader never clears.
+    state?.index_status === "pending" ||
     state?.index_status === "processing" ||
     state?.publish_gate_reason === "reindexing_headline" ||
     state?.candidate?.status === "processing"

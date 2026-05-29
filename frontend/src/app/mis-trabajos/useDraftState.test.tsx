@@ -197,6 +197,19 @@ describe("useDraftState", () => {
     expect(apiGet.mock.calls.length).toBeGreaterThan(initial);
   });
 
+  // The editar page blocks on pending (initialPhase === "indexing"), so polling
+  // must clear it; otherwise the loader never advances to processing.
+  it("polls while pending", async () => {
+    returns({ index_status: "pending", versions: [] });
+    renderHook(() => useDraftState(1), { wrapper: wrapper() });
+
+    await vi.advanceTimersByTimeAsync(0);
+    const initial = apiGet.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(3000);
+
+    expect(apiGet.mock.calls.length).toBeGreaterThan(initial);
+  });
+
   it("polls while reindexing_headline", async () => {
     returns({
       index_status: "indexed",
