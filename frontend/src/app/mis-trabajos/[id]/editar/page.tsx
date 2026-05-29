@@ -121,7 +121,7 @@ function EditarForm({
 }) {
   const router = useRouter();
   const [publishing, setPublishing] = useState(false);
-  const { register, getValues, formState } = useForm<FormValues>({
+  const { register, getValues, setValue, formState } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     mode: "onBlur",
     defaultValues: {
@@ -152,6 +152,36 @@ function EditarForm({
     });
     if (error) {
       toast.error("No se pudo guardar el cambio");
+      return;
+    }
+    await refresh();
+  }
+
+  // Revert a single generated field back to the extractor's immutable snapshot
+  // and persist it through the same metadata PATCH (issue #94). The form is not
+  // re-seeded on metadata edits, so setValue keeps the visible input in sync.
+  async function restoreField(field: "abstract" | "keywords" | "fecha") {
+    const body: Record<string, unknown> = {};
+    if (field === "abstract") {
+      const value = state.generated_abstract ?? "";
+      setValue("abstract", value, { shouldDirty: true });
+      body.abstract = value;
+    }
+    if (field === "keywords") {
+      const value = state.generated_keywords ?? [];
+      setValue("keywords", value.join(", "), { shouldDirty: true });
+      body.keywords = value;
+    }
+    if (field === "fecha") {
+      setValue("fecha", state.generated_fecha ?? "", { shouldDirty: true });
+      body.fecha = state.generated_fecha ?? null;
+    }
+    const { error } = await api.PATCH("/api/documents/{doc_id}", {
+      params: { path: { doc_id: docId } },
+      body,
+    });
+    if (error) {
+      toast.error("No se pudo restaurar el valor del extractor");
       return;
     }
     await refresh();
@@ -189,6 +219,17 @@ function EditarForm({
 
   const { lifecycle } = state;
 
+  // The prefilled inputs subsume the old suggestions panel; Restaurar appears
+  // per field only while the staged value diverges from the generated snapshot.
+  const canRestoreAbstract =
+    (state.staged_abstract ?? "") !== (state.generated_abstract ?? "");
+  const canRestoreKeywords = !keywordsEqual(
+    state.staged_keywords ?? [],
+    state.generated_keywords ?? [],
+  );
+  const canRestoreFecha =
+    (state.staged_fecha ?? "") !== (state.generated_fecha ?? "");
+
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8">
       <div className="flex items-center justify-between">
@@ -203,88 +244,94 @@ function EditarForm({
         </span>
       </div>
 
-      <div className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-2">
-        <form className="space-y-4">
-          <Field label="Título" htmlFor="titulo">
-            <input
-              id="titulo"
+      <form className="mt-8 space-y-4">
+        <Field label="Título" htmlFor="titulo">
+          <input
+            id="titulo"
+            className="w-full rounded-md border px-3 py-2 text-sm"
+            {...register("titulo", { onBlur: () => patchField("titulo") })}
+          />
+        </Field>
+        <Field
+          label="Resumen"
+          htmlFor="abstract"
+          action={
+            canRestoreAbstract && (
+              <Restaurar
+                testId="restore-abstract"
+                onClick={() => restoreField("abstract")}
+              />
+            )
+          }
+        >
+          <textarea
+            id="abstract"
+            className="w-full rounded-md border px-3 py-2 text-sm"
+            rows={5}
+            {...register("abstract", {
+              onBlur: () => patchField("abstract"),
+            })}
+          />
+        </Field>
+        <Field
+          label="Palabras clave"
+          htmlFor="keywords"
+          action={
+            canRestoreKeywords && (
+              <Restaurar
+                testId="restore-keywords"
+                onClick={() => restoreField("keywords")}
+              />
+            )
+          }
+        >
+          <input
+            id="keywords"
+            className="w-full rounded-md border px-3 py-2 text-sm"
+            placeholder="separadas por comas"
+            {...register("keywords", {
+              onBlur: () => patchField("keywords"),
+            })}
+          />
+        </Field>
+        <Field
+          label="Fecha"
+          htmlFor="fecha"
+          action={
+            canRestoreFecha && (
+              <Restaurar
+                testId="restore-fecha"
+                onClick={() => restoreField("fecha")}
+              />
+            )
+          }
+        >
+          <input
+            id="fecha"
+            type="date"
+            className="w-full rounded-md border px-3 py-2 text-sm"
+            {...register("fecha", { onBlur: () => patchField("fecha") })}
+          />
+        </Field>
+        {/* Visibility is owner-only (ADR-0010 §8); accepted coautores edit
+            metadata but cannot change who can read the trabajo. */}
+        {state.isOwner && (
+          <Field label="Visibilidad" htmlFor="visibility">
+            <select
+              id="visibility"
               className="w-full rounded-md border px-3 py-2 text-sm"
-              {...register("titulo", { onBlur: () => patchField("titulo") })}
-            />
-          </Field>
-          <Field label="Resumen" htmlFor="abstract">
-            <textarea
-              id="abstract"
-              className="w-full rounded-md border px-3 py-2 text-sm"
-              rows={5}
-              {...register("abstract", {
-                onBlur: () => patchField("abstract"),
-              })}
-            />
-          </Field>
-          <Field label="Palabras clave" htmlFor="keywords">
-            <input
-              id="keywords"
-              className="w-full rounded-md border px-3 py-2 text-sm"
-              placeholder="separadas por comas"
-              {...register("keywords", {
-                onBlur: () => patchField("keywords"),
-              })}
-            />
-          </Field>
-          <Field label="Fecha" htmlFor="fecha">
-            <input
-              id="fecha"
-              type="date"
-              className="w-full rounded-md border px-3 py-2 text-sm"
-              {...register("fecha", { onBlur: () => patchField("fecha") })}
-            />
-          </Field>
-          {/* Visibility is owner-only (ADR-0010 §8); accepted coautores edit
-              metadata but cannot change who can read the trabajo. */}
-          {state.isOwner && (
-            <Field label="Visibilidad" htmlFor="visibility">
-              <select
-                id="visibility"
-                className="w-full rounded-md border px-3 py-2 text-sm"
-                defaultValue={state.visibility}
-                onChange={(e) => patchVisibility(e.target.value)}
-              >
-                {VISIBILITIES.map((v) => (
-                  <option key={v.value} value={v.value}>
-                    {v.label}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          )}
-        </form>
-
-        <section className="bg-muted/30 relative rounded-lg border p-4">
-          <h2 className="text-muted-foreground text-sm font-medium">
-            Sugerencias del extractor
-          </h2>
-          {lifecycle.showSuggestionsSpinner && (
-            <div
-              data-testid="suggestions-spinner"
-              className="bg-background/60 absolute inset-0 flex items-center justify-center"
+              defaultValue={state.visibility}
+              onChange={(e) => patchVisibility(e.target.value)}
             >
-              <Loader2 className="animate-spin" />
-            </div>
-          )}
-          <dl className="mt-4 space-y-3 text-sm">
-            <Suggestion label="Resumen" testId="suggestion-abstract">
-              {state.staged_abstract || "—"}
-            </Suggestion>
-            <Suggestion label="Palabras clave" testId="suggestion-keywords">
-              {(state.staged_keywords ?? []).join(", ") || "—"}
-            </Suggestion>
-            <Suggestion label="Fecha" testId="suggestion-fecha">
-              {state.staged_fecha || "—"}
-            </Suggestion>
-          </dl>
-        </section>
-      </div>
+              {VISIBILITIES.map((v) => (
+                <option key={v.value} value={v.value}>
+                  {v.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+      </form>
 
       <div className="mt-8">
         <CandidatePanel candidate={state.candidate} actions={actions} />
@@ -424,40 +471,49 @@ function DeleteTrabajo({
   );
 }
 
+function keywordsEqual(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((x, i) => x === b[i]);
+}
+
 function Field({
   label,
   htmlFor,
+  action,
   children,
 }: {
   label: string;
   htmlFor: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <div className="space-y-1">
-      <label htmlFor={htmlFor} className="text-sm font-medium">
-        {label}
-      </label>
+      <div className="flex items-center justify-between">
+        <label htmlFor={htmlFor} className="text-sm font-medium">
+          {label}
+        </label>
+        {action}
+      </div>
       {children}
     </div>
   );
 }
 
-function Suggestion({
-  label,
+function Restaurar({
   testId,
-  children,
+  onClick,
 }: {
-  label: string;
   testId: string;
-  children: React.ReactNode;
+  onClick: () => void;
 }) {
   return (
-    <div>
-      <dt className="text-muted-foreground text-xs">{label}</dt>
-      <dd data-testid={testId} className="mt-0.5">
-        {children}
-      </dd>
-    </div>
+    <button
+      type="button"
+      data-testid={testId}
+      onClick={onClick}
+      className="text-primary text-xs hover:underline"
+    >
+      Restaurar
+    </button>
   );
 }

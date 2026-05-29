@@ -179,6 +179,82 @@ async def test_write_indexed_replacement_can_reuse_current_version_chunk_sequenc
     ]
 
 
+async def test_write_indexed_candidate_writes_immutable_generated_snapshot(session):
+    """Issue #94: the extractor's generated resumen/keywords/fecha are snapshotted
+    once at index completion so the author can revert any staged edit back to it.
+    Unlike staged_*, generated_* are the raw extractor output, not COALESCE-guarded."""
+    uid = await make_user(session)
+    version_id = await _make_candidate_version(session, owner_id=uid)
+
+    meta = IndexableMetadata(
+        abstract="resumen del extractor",
+        keywords=["extractor", "yake"],
+        fecha=date(2022, 7, 1),
+    )
+    headline = Chunk(body_text="h", is_headline=True, chunk_seq=0)
+    await documents.write_indexed_candidate(
+        session, version_id, body=[], headline=headline,
+        embeds=[np.full(1024, 0.1, dtype=np.float16)], meta=meta,
+        headline_fingerprint=headline_fingerprint("t", "resumen del extractor"),
+    )
+
+    row = (
+        await session.execute(
+            text(
+                "SELECT generated_abstract, generated_keywords, generated_fecha "
+                "FROM document_versions WHERE id = :id"
+            ),
+            {"id": version_id},
+        )
+    ).mappings().one()
+    assert row["generated_abstract"] == "resumen del extractor"
+    assert row["generated_keywords"] == ["extractor", "yake"]
+    assert row["generated_fecha"] == date(2022, 7, 1)
+
+
+async def test_write_indexed_candidate_generated_snapshot_ignores_author_edits(session):
+    """The generated snapshot is the extractor output even when the author already
+    wrote their own staged_* during processing — staged keeps the edit (COALESCE),
+    generated keeps the extractor value."""
+    uid = await make_user(session)
+    version_id = await _make_candidate_version(session, owner_id=uid)
+    await session.execute(
+        text(
+            "UPDATE document_versions SET staged_abstract = :a, "
+            "  staged_keywords = :k, staged_fecha = :f WHERE id = :vid"
+        ),
+        {"a": "resumen del autor", "k": ["autor"], "f": date(2021, 5, 1), "vid": version_id},
+    )
+
+    meta = IndexableMetadata(
+        abstract="resumen del extractor", keywords=["extractor"], fecha=date(2099, 1, 1)
+    )
+    await documents.write_indexed_candidate(
+        session, version_id, body=[],
+        headline=Chunk(body_text="h", is_headline=True, chunk_seq=0),
+        embeds=[np.full(1024, 0.1, dtype=np.float16)], meta=meta,
+        headline_fingerprint=headline_fingerprint("t", "resumen del extractor"),
+    )
+
+    row = (
+        await session.execute(
+            text(
+                "SELECT staged_abstract, generated_abstract, "
+                "  staged_keywords, generated_keywords, "
+                "  staged_fecha, generated_fecha "
+                "FROM document_versions WHERE id = :id"
+            ),
+            {"id": version_id},
+        )
+    ).mappings().one()
+    assert row["staged_abstract"] == "resumen del autor"
+    assert row["generated_abstract"] == "resumen del extractor"
+    assert row["staged_keywords"] == ["autor"]
+    assert row["generated_keywords"] == ["extractor"]
+    assert row["staged_fecha"] == date(2021, 5, 1)
+    assert row["generated_fecha"] == date(2099, 1, 1)
+
+
 async def test_write_indexed_candidate_preserves_staged_fields_edited_during_processing(session):
     """R007: an author who edits staged_* via save-on-blur while the candidate is
     still processing must keep those edits. Extraction fills only still-empty
