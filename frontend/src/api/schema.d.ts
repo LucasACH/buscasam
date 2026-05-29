@@ -191,6 +191,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/moderation/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Report */
+        post: operations["create_report_api_moderation_reports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/coauthor_invitations/{doc_id}/accept": {
         parameters: {
             query?: never;
@@ -554,6 +571,16 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** ReportBody */
+        ReportBody: {
+            /** Doc Id */
+            doc_id: number;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "spam" | "contenido_inadecuado" | "plagio" | "error";
+        };
         /** AreaDTO */
         AreaDTO: {
             /** Area Path */
@@ -1293,6 +1320,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MarkAllReadResponse"];
+                };
+            };
+        };
+    };
+    create_report_api_moderation_reports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

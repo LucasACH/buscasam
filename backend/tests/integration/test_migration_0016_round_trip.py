@@ -2,8 +2,8 @@
 
 Builds on the test_migration_0014_round_trip.py pattern: stands up an isolated
 database, runs migrations through 0015, then verifies the two moderation tables,
-the open-report unique partial index, and the status/action CHECKs appear on
-upgrade and disappear on downgrade.
+the open-report unique partial index, and the reason/status/action CHECKs appear
+on upgrade and disappear on downgrade.
 """
 from __future__ import annotations
 
@@ -188,6 +188,28 @@ def test_0016_status_check_rejects_unknown_value(isolated_db):
                         "INSERT INTO document_reports "
                         "(doc_id, reporter_user_id, reason, status) "
                         "VALUES (:d, :u, 'spam', 'archived')"
+                    ),
+                    {"d": doc_id, "u": user_id},
+                )
+    finally:
+        eng.dispose()
+
+
+def test_0016_reason_check_rejects_unknown_value(isolated_db):
+    url = isolated_db
+    cfg = _alembic_cfg(url)
+    command.upgrade(cfg, "0016")
+    doc_id, user_id = _seed_doc_and_user(url)
+
+    eng = create_engine(url)
+    try:
+        with pytest.raises(IntegrityError, match="document_reports_reason_check"):
+            with eng.begin() as c:
+                c.execute(
+                    text(
+                        "INSERT INTO document_reports "
+                        "(doc_id, reporter_user_id, reason) "
+                        "VALUES (:d, :u, 'otra_cosa')"
                     ),
                     {"d": doc_id, "u": user_id},
                 )
