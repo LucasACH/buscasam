@@ -54,6 +54,14 @@ export function AuthNav() {
       >
         Mis trabajos
       </Link>
+      {user.role === "docente" && (
+        <Link
+          href="/moderacion"
+          className="text-sm font-medium underline-offset-4 hover:underline"
+        >
+          Moderación
+        </Link>
+      )}
       <NotificationBell />
       {user.picture_url ? (
         <Image

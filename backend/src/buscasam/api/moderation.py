@@ -1,15 +1,17 @@
 """HTTP edge for the moderation flow (module map §api/moderation).
 
 The single chokepoint where moderation access is gated: `require_authenticated`
-for filing a report, `require_docente` for report-scoped inspection. Filing
-delegates to `core/moderation`; the inspect reads compose
-`moderation_inspection_where` (detail metadata + current main-file blob handoff
-only — no attachments, related, or version history). Maps every domain miss to a
-uniform 404 so hidden/private/deleted existence is never disclosed; role
-failures surface as 403 via `require_docente`. Opens no transactions and writes
-no tables directly.
+for filing a report, `require_docente` for the triage queue read and
+report-scoped inspection. Filing and the queue delegate to `core/moderation`;
+the inspect reads compose `moderation_inspection_where` (detail metadata +
+current main-file blob handoff only — no attachments, related, or version
+history). Maps every domain miss to a uniform 404 so hidden/private/deleted
+existence is never disclosed; role failures surface as 403 via
+`require_docente`. Opens no transactions and writes no tables directly.
 """
 from __future__ import annotations
+
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
@@ -20,7 +22,12 @@ from buscasam.api._blob import download_response
 from buscasam.api.deps import get_session
 from buscasam.core import auth
 from buscasam.core.document_access import moderation_inspection_where
-from buscasam.core.moderation import DocumentNotReadable, Reason, file_report
+from buscasam.core.moderation import (
+    DocumentNotReadable,
+    Reason,
+    file_report,
+    list_open_reports,
+)
 
 router = APIRouter(prefix="/api/moderation")
 
@@ -59,6 +66,28 @@ async def create_report(
     except DocumentNotReadable:
         raise _not_found()
     return Response(status_code=204)
+
+
+class QueueEntryDTO(BaseModel):
+    doc_id: int
+    title: str
+    reasons: list[str]
+    first_reported_at: datetime
+    last_reported_at: datetime
+    report_count: int
+
+
+class QueueResponse(BaseModel):
+    items: list[QueueEntryDTO]
+
+
+@router.get("/queue", response_model=QueueResponse)
+async def queue(
+    _docente: auth.UserCtx = Depends(auth.require_docente),
+    session: AsyncSession = Depends(get_session),
+) -> QueueResponse:
+    entries = await list_open_reports(session)
+    return QueueResponse(items=[QueueEntryDTO(**vars(e)) for e in entries])
 
 
 @router.get("/reports/{report_id}/document", response_model=InspectMetadataDTO)
