@@ -127,62 +127,20 @@ async def _stream_bytes(data: bytes):
     yield data
 
 
-@router.post("/documents/{doc_id}/upload", status_code=202)
-async def upload_main_file(
+async def _intake_main_file(
+    session: AsyncSession,
+    user_ctx: auth.UserCtx,
     doc_id: int,
     file: UploadFile,
-    user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
-    session: AsyncSession = Depends(get_session),
-) -> dict:
-    # Pre-check gates byte writes: reject unauthorized requests before streaming
-    # to disk. attach_main_version re-checks as the authoritative gate.
-    try:
-        await assert_manageable(session, user_ctx, doc_id)
-    except DocumentNotFound:
-        raise HTTPException(status_code=404)
-
-    data = await file.read(_MAX_MAIN_BYTES + 1)
-    if len(data) > _MAX_MAIN_BYTES:
-        raise HTTPException(status_code=413, detail="El archivo supera los 50 MB")
-
-    if data[:4] == b"%PDF":
-        try:
-            probe_encrypted(data)
-        except PDFEncryptionError:
-            raise HTTPException(
-                status_code=415,
-                detail="Este PDF está protegido por contraseña — quitá la protección y reintentá",
-            )
-
-    result = await blob_store.put_stream(_stream_bytes(data), max_bytes=_MAX_MAIN_BYTES)
-
-    if result.sniffed_mime not in _ALLOWED_MIMES:
-        await blob_store.discard_if_unreferenced(session, result.sha256)
-        raise HTTPException(status_code=415, detail="Formato no permitido")
-
-    try:
-        await attach_main_version(
-            session,
-            user_ctx,
-            doc_id,
-            result,
-            original_filename=file.filename or "upload",
-        )
-    except DocumentNotFound:
-        raise HTTPException(status_code=404)
-    return {}
-
-
-@router.post("/documents/{doc_id}/replace", status_code=202)
-async def replace_main_file(
-    doc_id: int,
-    file: UploadFile,
-    user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
-    session: AsyncSession = Depends(get_session),
-) -> dict:
-    # Mirrors /upload's synchronous gate (size → 413, encrypted-PDF / MIME →
-    # 415); the only divergence is replace_main_version (NoPublishedVersion →
-    # 409) replacing attach_main_version. The 413 copy matches the PRD string.
+) -> blob_store.BlobPutResult:
+    """Validate and persist a main-file upload at the API edge, returning the
+    stored blob. Shared by /upload and /replace so the two endpoints differ only
+    in the domain action they invoke (attach vs. replace). Enforces, in order:
+    the manageable pre-check (404), the 50 MB cap (413), the encrypted-PDF probe
+    (415), and the sniffed-MIME allowlist (415, discarding the just-written blob
+    on rejection). The domain action re-checks manageability as the authoritative
+    gate; this pre-check only avoids streaming bytes for an unauthorized request.
+    """
     try:
         await assert_manageable(session, user_ctx, doc_id)
     except DocumentNotFound:
@@ -207,6 +165,38 @@ async def replace_main_file(
         await blob_store.discard_if_unreferenced(session, result.sha256)
         raise HTTPException(status_code=415, detail="Formato no permitido")
 
+    return result
+
+
+@router.post("/documents/{doc_id}/upload", status_code=202)
+async def upload_main_file(
+    doc_id: int,
+    file: UploadFile,
+    user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    result = await _intake_main_file(session, user_ctx, doc_id, file)
+    try:
+        await attach_main_version(
+            session,
+            user_ctx,
+            doc_id,
+            result,
+            original_filename=file.filename or "upload",
+        )
+    except DocumentNotFound:
+        raise HTTPException(status_code=404)
+    return {}
+
+
+@router.post("/documents/{doc_id}/replace", status_code=202)
+async def replace_main_file(
+    doc_id: int,
+    file: UploadFile,
+    user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    result = await _intake_main_file(session, user_ctx, doc_id, file)
     try:
         await replace_main_version(
             session,
