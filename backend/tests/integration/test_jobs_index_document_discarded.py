@@ -1,18 +1,39 @@
 """The worker discarded-gate (issue #59, module map §core/jobs + §core/documents,
 ADR-0011 §5). A descartar committed against a candidate is terminal: the worker
 write functions match zero rows and never resurrect the row or materialize chunks.
-Driven directly against the session fixture — no worker, no real lock contention;
-the race is modeled linearly (begin → discard → worker write)."""
+
+Most cases are driven directly against the session fixture — no worker, no lock
+contention; the race is modeled linearly (begin → discard → worker write) to
+exercise the gate's `WHERE index_status='processing'` predicate in isolation.
+`test_descartar_completes_while_indexing_io_in_flight` adds the real
+two-connection proof that the new claim/finalize lifecycle releases the row lock
+before the extract IO, so descartar no longer blocks behind it."""
 from __future__ import annotations
 
+import asyncio
+
+import httpx
 import numpy as np
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from buscasam.core import documents
+from buscasam.core import documents, jobs
 from buscasam.core.auth import UserCtx
 from buscasam.core.chunk import Chunk, headline_chunk, headline_fingerprint
-from buscasam.core.extract import IndexableMetadata
+from buscasam.core.extract import ExtractedDoc, IndexableMetadata
 from tests.factories import make_document, make_document_author, make_user
+
+
+def _tei_mock() -> httpx.AsyncClient:
+    def handler(req: httpx.Request) -> httpx.Response:
+        import json
+
+        n = len(json.loads(req.read())["inputs"])
+        return httpx.Response(200, json=[[0.1] * 1024] * n)
+
+    return httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="http://tei"
+    )
 
 
 def _ctx(user_id: int) -> UserCtx:
@@ -81,11 +102,11 @@ def _index_inputs(title: str = "Tesis", abstract: str = "Resumen"):
 
 async def test_write_indexed_candidate_aborts_when_discarded_mid_flight(session):
     # Single-session model: exercises the gate's `WHERE index_status='processing'`
-    # predicate, not real two-connection lock contention. In production the
-    # worker holds the `_begin_indexing` FOR UPDATE lock through its IO window, so
-    # a concurrent descartar blocks until the worker commits rather than
-    # interleaving here (see discard_candidate's liveness caveat). The end state
-    # asserted below is what the gate guarantees once that lock is released.
+    # predicate in isolation. In production the worker releases _begin_indexing's
+    # lock at the claim commit, so a descartar interleaves during the extract/embed
+    # IO exactly as modeled here; the guarded write then matches zero rows.
+    # `test_descartar_completes_while_indexing_io_in_flight` proves the no-block
+    # property across two real connections.
     owner = await make_user(session)
     doc_id, candidate_vid = await _seed_published_with_candidate(
         session, owner_user_id=owner, candidate_status="pending"
@@ -112,6 +133,87 @@ async def test_write_indexed_candidate_aborts_when_discarded_mid_flight(session)
         )
     ).scalar_one()
     assert chunk_count == 0  # no chunks materialize on a discarded candidate
+
+
+async def test_descartar_completes_while_indexing_io_in_flight(engine, monkeypatch):
+    """Real two-connection proof of the claim/finalize lifecycle (ADR-0011 §5).
+
+    The worker claims the candidate in a short committed transaction — releasing
+    _begin_indexing's row lock — then parks in extract IO. A descartar issued on
+    an independent connection commits 'discarded' WITHOUT waiting for that IO
+    (the prior single-session model could not show this). When the worker
+    resumes, its `WHERE index_status='processing'` finalize write matches zero
+    rows: the candidate stays discarded with no chunks."""
+    sm = async_sessionmaker(engine, expire_on_commit=False)
+
+    # Commit a published doc + pending candidate so both connections observe it.
+    async with sm() as setup:
+        owner = await make_user(setup)
+        doc_id, candidate_vid = await _seed_published_with_candidate(
+            setup, owner_user_id=owner, candidate_status="pending"
+        )
+        await setup.commit()
+
+    in_io = asyncio.Event()
+    release = asyncio.Event()
+
+    async def _blocking_extract(sha, mime):
+        in_io.set()
+        await release.wait()  # hold the IO window open until descartar commits
+        return ExtractedDoc(
+            text="Resumen\nCuerpo del trabajo.",
+            paragraph_breaks=[],
+            page_breaks=[],
+            raw_metadata={},
+        )
+
+    monkeypatch.setattr(jobs.extractmod, "extract", _blocking_extract)
+
+    tei = _tei_mock()
+    worker = asyncio.create_task(jobs._run_index_document(sm, tei, candidate_vid))
+    try:
+        # Worker has committed pending→processing and is now blocked in extract;
+        # it holds no DB lock here.
+        await asyncio.wait_for(in_io.wait(), timeout=5)
+
+        # If the lock were still held through the IO, this FOR UPDATE would hang
+        # past the timeout. It must complete promptly on its own connection.
+        async with sm() as ds:
+            await asyncio.wait_for(
+                documents.discard_candidate(ds, _ctx(owner), doc_id), timeout=5
+            )
+            await ds.commit()
+    finally:
+        release.set()
+        await worker
+        await tei.aclose()
+
+    async with sm() as check:
+        status = (
+            await check.execute(
+                text("SELECT index_status FROM document_versions WHERE id = :id"),
+                {"id": candidate_vid},
+            )
+        ).scalar_one()
+        chunk_count = (
+            await check.execute(
+                text("SELECT count(*) FROM chunks WHERE version_id = :id"),
+                {"id": candidate_vid},
+            )
+        ).scalar_one()
+        # Tidy the committed rows in FK order (no ON DELETE CASCADE here).
+        for table in ("chunks", "document_authors", "document_versions"):
+            await check.execute(
+                text(f"DELETE FROM {table} WHERE doc_id = :id"), {"id": doc_id}
+            )
+        await check.execute(
+            text("DELETE FROM documents WHERE id = :id"), {"id": doc_id}
+        )
+        await check.execute(text("DELETE FROM users WHERE id = :id"), {"id": owner})
+        await check.commit()
+
+    assert status == "discarded"
+    assert chunk_count == 0
 
 
 async def test_mark_failed_does_not_resurrect_discarded_candidate(session):

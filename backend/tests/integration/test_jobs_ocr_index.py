@@ -64,7 +64,7 @@ def _has_tesseract_spa_eng() -> bool:
     return "spa" in langs and "eng" in langs
 
 
-async def test_ocr_index_document_runs_ocrmypdf_and_indexes(session, blob_root):
+async def test_ocr_index_document_runs_ocrmypdf_and_indexes(session, blob_root, worker_sm):
     """Scanned-image PDF triggers OCRRequired, ocr_index_document OCRs it, indexes."""
     if not _has_tesseract_spa_eng():
         pytest.skip(
@@ -130,7 +130,7 @@ async def test_ocr_index_document_runs_ocrmypdf_and_indexes(session, blob_root):
     ).scalar_one()
 
     tei = _tei_mock()
-    await jobs._run_ocr_index_document(session, tei, version_id)
+    await jobs._run_ocr_index_document(worker_sm, tei, version_id)
     await tei.aclose()
 
     status = (

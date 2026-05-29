@@ -78,11 +78,15 @@ def coauthor_invite_event_key(doc_id: int, user_id: int) -> str:
 
 
 async def _complete_indexing(
-    session: AsyncSession,
+    sm,
     tei: httpx.AsyncClient,
     cv: documents.CandidateVersion,
     doc: extractmod.ExtractedDoc,
 ) -> None:
+    """Embed the candidate's text (no row lock held) and persist it through the
+    finalize transaction (ADR-0011 §5). `write_indexed_candidate` is gated on
+    `index_status='processing'`, so a descartar committed during the embed IO
+    makes this write a clean no-op — no chunks materialize on a discarded row."""
     meta = extractmod.derive_metadata(doc)
     body = chunkmod.chunk(doc)
     headline = chunkmod.headline_chunk(cv.title, meta.abstract)
@@ -91,51 +95,78 @@ async def _complete_indexing(
     texts = [c.body_text for c in [headline, *body]]
     embeds = [await embedmod.embed(tei, t, kind="passage") for t in texts]
 
-    await documents.write_indexed_candidate(
-        session,
-        cv.version_id,
-        body=body,
-        headline=headline,
-        embeds=embeds,
-        meta=meta,
-        headline_fingerprint=fp,
-    )
+    async with sm() as session:
+        await documents.write_indexed_candidate(
+            session,
+            cv.version_id,
+            body=body,
+            headline=headline,
+            embeds=embeds,
+            meta=meta,
+            headline_fingerprint=fp,
+        )
+        await session.commit()
 
 
-async def _run_index_document(
-    session: AsyncSession, tei: httpx.AsyncClient, version_id: int
-) -> None:
-    cv = await documents._begin_indexing(session, version_id)
+async def _claim(sm, version_id: int) -> documents.CandidateVersion | None:
+    """Short claim transaction: move pending→processing and commit, releasing
+    `_begin_indexing`'s FOR UPDATE before the extract/OCR/embed IO (ADR-0011 §5,
+    ADR-0008 §3). Returns the candidate, or None when the row is already
+    'indexed' (retry no-op) or 'discarded' (descartado, abort). 'processing' is
+    re-enterable: a prior attempt whose IO failed left it there, and the claim
+    re-claims it on retry."""
+    async with sm() as session:
+        cv = await documents._begin_indexing(session, version_id)
+        await session.commit()
+    return cv
+
+
+async def _run_index_document(sm, tei: httpx.AsyncClient, version_id: int) -> None:
+    cv = await _claim(sm, version_id)
     if cv is None:
         return
+    # The row lock is released by _claim's commit, so extract/embed run lock-free
+    # and a concurrent descartar can commit while this IO is in flight; the
+    # guarded finalize write aborts atomically against a discarded row.
     try:
         doc = await extractmod.extract(cv.sha256, cv.mime)
     except extractmod.OCRRequired:
-        await enqueue_ocr_index_document(session, version_id)
+        async with sm() as session:
+            await enqueue_ocr_index_document(session, version_id)
+            await session.commit()
         return
     except (PDFSyntaxError, zipfile.BadZipFile) as e:
-        await documents.mark_failed(
-            session, version_id, error=f"corrupted: {type(e).__name__}"
-        )
+        async with sm() as session:
+            await documents.mark_failed(
+                session, version_id, error=f"corrupted: {type(e).__name__}"
+            )
+            await session.commit()
         return
 
-    await _complete_indexing(session, tei, cv, doc)
+    await _complete_indexing(sm, tei, cv, doc)
 
 
 async def _run_ocr_index_document(
-    session: AsyncSession, tei: httpx.AsyncClient, version_id: int
+    sm, tei: httpx.AsyncClient, version_id: int
 ) -> None:
-    """Runs ocrmypdf to add a text layer, then re-extracts from the OCR'd bytes."""
-    cv = await documents._begin_indexing(session, version_id)
+    """Runs ocrmypdf to add a text layer, then re-extracts from the OCR'd bytes.
+
+    The claim commits 'processing' and releases the row lock *before* the
+    ~30-min OCR run (ADR-0011 §5), so a descartar no longer blocks behind the
+    OCR IO window — the finalize write is what aborts atomically against a
+    discarded row."""
+    cv = await _claim(sm, version_id)
     if cv is None:
         return
     try:
         import ocrmypdf
         from ocrmypdf.exceptions import ExitCodeException
     except ImportError as e:
-        await documents.mark_failed(
-            session, version_id, error=f"ocr_unavailable: {type(e).__name__}"
-        )
+        async with sm() as session:
+            await documents.mark_failed(
+                session, version_id, error=f"ocr_unavailable: {type(e).__name__}"
+            )
+            await session.commit()
         return
 
     raw_pdf = bytearray()
@@ -157,9 +188,11 @@ async def _run_ocr_index_document(
     except ExitCodeException as e:
         # ocrmypdf documented input/config failure → terminal for this candidate.
         logger.warning("ocr_failed version_id=%s", version_id, exc_info=True)
-        await documents.mark_failed(
-            session, version_id, error=f"ocr_failed: {type(e).__name__}"
-        )
+        async with sm() as session:
+            await documents.mark_failed(
+                session, version_id, error=f"ocr_failed: {type(e).__name__}"
+            )
+            await session.commit()
         return
 
     # ADR-0007 §10: the OCR'd PDF is a scratch artifact — it goes through
@@ -170,25 +203,30 @@ async def _run_ocr_index_document(
     put = await blob_store.put_stream(_one_chunk(), max_bytes=200_000_000)
     try:
         doc = await extractmod.extract(put.sha256, "application/pdf")
-        await _complete_indexing(session, tei, cv, doc)
+        await _complete_indexing(sm, tei, cv, doc)
     finally:
-        await blob_store.discard_if_unreferenced(session, put.sha256)
+        async with sm() as session:
+            await blob_store.discard_if_unreferenced(session, put.sha256)
+            await session.commit()
 
 
 async def _run_refresh_headline(
-    session: AsyncSession, tei: httpx.AsyncClient, version_id: int
+    sm, tei: httpx.AsyncClient, version_id: int
 ) -> None:
-    cv = await documents.load_candidate(session, version_id)
-    staged_abstract = (
-        await session.execute(
-            text("SELECT staged_abstract FROM document_versions WHERE id = :id"),
-            {"id": version_id},
-        )
-    ).scalar_one() or ""
+    async with sm() as session:
+        cv = await documents.load_candidate(session, version_id)
+        staged_abstract = (
+            await session.execute(
+                text("SELECT staged_abstract FROM document_versions WHERE id = :id"),
+                {"id": version_id},
+            )
+        ).scalar_one() or ""
     headline = chunkmod.headline_chunk(cv.title, staged_abstract)
     fp = chunkmod.headline_fingerprint(cv.title, staged_abstract)
     embed = await embedmod.embed(tei, headline.body_text, kind="passage")
-    await documents.write_headline(session, version_id, headline, embed, fp)
+    async with sm() as session:
+        await documents.write_headline(session, version_id, headline, embed, fp)
+        await session.commit()
 
 
 async def _run_fan_out_coauthor_invites(session: AsyncSession, doc_id: int) -> None:
@@ -279,8 +317,11 @@ async def _run_sweep_orphan_blobs(session: AsyncSession) -> int:
 
 # --- Procrastinate task bodies (production worker entry points). ---
 #
-# Each body opens its own SQLAlchemy session + TEI client per job. Tests drive
-# the _run_* cores directly so the worker wiring stays untested-but-thin.
+# Each body resolves a per-job sessionmaker + TEI client. The _run_* cores own
+# their transactions — a short claim tx, the lock-free extract/OCR/embed IO, and
+# a guarded finalize tx (ADR-0011 §5) — so _run_attempt only adds the
+# retry→terminal handling. Tests drive the _run_* cores directly so the worker
+# wiring stays untested-but-thin.
 
 
 _worker_engine: object | None = None
@@ -317,40 +358,37 @@ async def _terminal_headline_failure(
 async def _run_attempt(context, runner, version_id, on_terminal) -> None:
     """Single chokepoint for indexing terminal outcomes (ADR-0008 §5).
 
-    Runs `runner` in a worker session. On uncaught failure: rolls back, asks
-    the task's retry strategy whether another attempt remains, and if not,
-    opens a fresh session to call `on_terminal` — so every fatal path
-    (recognized parse/OCR errors inside the runner *and* exhausted transient
-    failures here) converges on `documents.mark_failed` /
-    `documents.mark_headline_refresh_failed`.
+    The runner owns its own claim/finalize transactions; this wrapper only
+    handles failure. On uncaught failure it asks the task's retry strategy
+    whether another attempt remains, and if not opens a fresh session to call
+    `on_terminal` — so every fatal path (recognized parse/OCR errors inside the
+    runner *and* exhausted transient failures here) converges on
+    `documents.mark_failed` / `documents.mark_headline_refresh_failed`. The
+    candidate row is left in 'processing' by the claim commit; a retried attempt
+    re-claims it, and `on_terminal` flips 'processing'→'failed' under its guard.
     """
     sm, tei = _get_worker_resources()
-    exc: BaseException | None = None
-    async with sm() as session:
-        try:
-            await runner(session, tei, version_id)
-            await session.commit()
-            return
-        except Exception as e:
-            await session.rollback()
-            exc = e
-
-    will_retry = (
-        context.task.get_retry_exception(exception=exc, job=context.job) is not None
-    )
-    if not will_retry:
-        async with sm() as terminal_session:
-            try:
-                await on_terminal(terminal_session, version_id, exc)
-                await terminal_session.commit()
-            except Exception:
-                await terminal_session.rollback()
-                logger.exception(
-                    "terminal_handler_failed version_id=%s task=%s",
-                    version_id,
-                    context.job.task_name,
-                )
-    raise exc
+    try:
+        await runner(sm, tei, version_id)
+        return
+    except Exception as exc:
+        will_retry = (
+            context.task.get_retry_exception(exception=exc, job=context.job)
+            is not None
+        )
+        if not will_retry:
+            async with sm() as terminal_session:
+                try:
+                    await on_terminal(terminal_session, version_id, exc)
+                    await terminal_session.commit()
+                except Exception:
+                    await terminal_session.rollback()
+                    logger.exception(
+                        "terminal_handler_failed version_id=%s task=%s",
+                        version_id,
+                        context.job.task_name,
+                    )
+        raise
 
 
 @app.task(queue="default", retry=_DEFAULT_RETRY, pass_context=True)

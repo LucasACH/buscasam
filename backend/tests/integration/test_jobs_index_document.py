@@ -88,7 +88,7 @@ def _tei_mock() -> httpx.AsyncClient:
     return httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://tei")
 
 
-async def test_index_document_happy_path_indexes_pdf(session, blob_root):
+async def test_index_document_happy_path_indexes_pdf(session, blob_root, worker_sm):
     from fpdf import FPDF
 
     pdf = FPDF()
@@ -104,7 +104,7 @@ async def test_index_document_happy_path_indexes_pdf(session, blob_root):
     )
     tei = _tei_mock()
 
-    await jobs._run_index_document(session, tei, version_id)
+    await jobs._run_index_document(worker_sm, tei, version_id)
     await tei.aclose()
 
     status = (
@@ -116,7 +116,7 @@ async def test_index_document_happy_path_indexes_pdf(session, blob_root):
     assert status == "indexed"
 
 
-async def test_index_document_corrupted_pdf_marks_failed_and_notifies(session, blob_root):
+async def test_index_document_corrupted_pdf_marks_failed_and_notifies(session, blob_root, worker_sm):
     payload = b"%PDF-1.4 totally not a real pdf body"
     sha_hex, sha_bytes = _persist_blob(blob_root, payload)
     uid, doc_id, version_id = await _seed_version(
@@ -124,7 +124,7 @@ async def test_index_document_corrupted_pdf_marks_failed_and_notifies(session, b
     )
     tei = _tei_mock()
 
-    await jobs._run_index_document(session, tei, version_id)
+    await jobs._run_index_document(worker_sm, tei, version_id)
     await tei.aclose()
 
     row = (
@@ -149,7 +149,7 @@ async def test_index_document_corrupted_pdf_marks_failed_and_notifies(session, b
 
 
 async def test_index_document_retry_after_failure_does_not_duplicate_notification(
-    session, blob_root
+    session, blob_root, worker_sm
 ):
     payload = b"%PDF-1.4 garbage"
     sha_hex, sha_bytes = _persist_blob(blob_root, payload)
@@ -158,8 +158,8 @@ async def test_index_document_retry_after_failure_does_not_duplicate_notificatio
     )
     tei = _tei_mock()
 
-    await jobs._run_index_document(session, tei, version_id)
-    await jobs._run_index_document(session, tei, version_id)
+    await jobs._run_index_document(worker_sm, tei, version_id)
+    await jobs._run_index_document(worker_sm, tei, version_id)
     await tei.aclose()
 
     count = (
@@ -172,7 +172,7 @@ async def test_index_document_retry_after_failure_does_not_duplicate_notificatio
 
 
 async def test_index_document_ocr_required_reenqueues_on_ocr_queue(
-    session, blob_root, monkeypatch
+    session, blob_root, worker_sm, monkeypatch
 ):
     payload = _docx_bytes(["whatever"])
     sha_hex, sha_bytes = _persist_blob(blob_root, payload)
@@ -195,7 +195,7 @@ async def test_index_document_ocr_required_reenqueues_on_ocr_queue(
 
     monkeypatch.setattr(jobs, "enqueue_ocr_index_document", _capture_enqueue)
 
-    await jobs._run_index_document(session, tei, version_id)
+    await jobs._run_index_document(worker_sm, tei, version_id)
     await tei.aclose()
 
     assert called == [version_id]
@@ -211,7 +211,7 @@ async def test_index_document_ocr_required_reenqueues_on_ocr_queue(
 
 
 async def test_index_document_empty_extraction_docx_indexes_with_empty_abstract(
-    session, blob_root
+    session, blob_root, worker_sm
 ):
     """ADR-0007 §9 / PRD story 34: empty body extraction is not a failure."""
     payload = _docx_bytes([""])  # truly empty document
@@ -221,7 +221,7 @@ async def test_index_document_empty_extraction_docx_indexes_with_empty_abstract(
     )
     tei = _tei_mock()
 
-    await jobs._run_index_document(session, tei, version_id)
+    await jobs._run_index_document(worker_sm, tei, version_id)
     await tei.aclose()
 
     row = (
@@ -239,7 +239,7 @@ async def test_index_document_empty_extraction_docx_indexes_with_empty_abstract(
     assert row["staged_fecha"] is None
 
 
-async def test_index_document_happy_path_indexes_docx(session, blob_root):
+async def test_index_document_happy_path_indexes_docx(session, blob_root, worker_sm):
     payload = _docx_bytes([
         "Resumen",
         "Este trabajo investiga la integración de Postgres y procrastinate.",
@@ -250,7 +250,7 @@ async def test_index_document_happy_path_indexes_docx(session, blob_root):
     uid, doc_id, version_id = await _seed_version(session, sha_bytes=sha_bytes, mime=_DOCX_MIME)
     tei = _tei_mock()
 
-    await jobs._run_index_document(session, tei, version_id)
+    await jobs._run_index_document(worker_sm, tei, version_id)
     await tei.aclose()
 
     row = (
@@ -281,7 +281,7 @@ async def test_index_document_happy_path_indexes_docx(session, blob_root):
     assert all(c["is_current"] is False for c in chunks)
 
 
-async def test_index_document_duplicate_success_is_no_op(session, blob_root):
+async def test_index_document_duplicate_success_is_no_op(session, blob_root, worker_sm):
     payload = _docx_bytes([
         "Resumen",
         "Este trabajo debe indexarse una sola vez aunque el job se repita.",
@@ -292,7 +292,7 @@ async def test_index_document_duplicate_success_is_no_op(session, blob_root):
     )
     tei = _tei_mock()
 
-    await jobs._run_index_document(session, tei, version_id)
+    await jobs._run_index_document(worker_sm, tei, version_id)
     first_chunks = (
         await session.execute(
             text(
@@ -303,7 +303,7 @@ async def test_index_document_duplicate_success_is_no_op(session, blob_root):
         )
     ).all()
 
-    await jobs._run_index_document(session, tei, version_id)
+    await jobs._run_index_document(worker_sm, tei, version_id)
     await tei.aclose()
 
     second_chunks = (
@@ -319,7 +319,7 @@ async def test_index_document_duplicate_success_is_no_op(session, blob_root):
 
 
 async def test_default_and_ocr_completion_share_retry_safe_indexed_result(
-    session, blob_root, monkeypatch
+    session, blob_root, worker_sm, monkeypatch
 ):
     import sys
     from types import ModuleType, SimpleNamespace
@@ -383,10 +383,10 @@ async def test_default_and_ocr_completion_share_retry_safe_indexed_result(
     monkeypatch.setitem(sys.modules, "ocrmypdf.exceptions", exceptions_module)
 
     tei = _tei_mock()
-    await jobs._run_index_document(session, tei, default_id)
-    await jobs._run_ocr_index_document(session, tei, ocr_id)
-    await jobs._run_index_document(session, tei, default_id)
-    await jobs._run_ocr_index_document(session, tei, ocr_id)
+    await jobs._run_index_document(worker_sm, tei, default_id)
+    await jobs._run_ocr_index_document(worker_sm, tei, ocr_id)
+    await jobs._run_index_document(worker_sm, tei, default_id)
+    await jobs._run_ocr_index_document(worker_sm, tei, ocr_id)
     await tei.aclose()
 
     async def _result(version_id):
