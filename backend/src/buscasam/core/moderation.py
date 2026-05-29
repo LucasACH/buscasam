@@ -53,6 +53,141 @@ async def file_report(
 
 
 @dataclass(frozen=True)
+class ActionOutcome:
+    action_id: int
+
+
+async def hide(
+    session: AsyncSession, docente_ctx: UserCtx, report_id: int, reason: Reason
+) -> ActionOutcome | None:
+    """Stamp `documents.moderation_hidden_at`, append a `hide` audit row, and
+    resolve all open reports on the document — in one transaction. Returns None
+    when the report is unknown or its document is author-soft-deleted (router →
+    404). Touches no other `documents` column (stories 24-25)."""
+    doc_id = await _resolve_case(session, report_id)
+    if doc_id is None:
+        return None
+    action_id = await _append_action(session, report_id, docente_ctx, "hide", reason)
+    await _resolve_open_reports(session, doc_id)
+    await session.execute(
+        text("UPDATE documents SET moderation_hidden_at = now() WHERE id = :d"),
+        {"d": doc_id},
+    )
+    await _notify_authors(session, doc_id, action_id, "document_hidden", reason)
+    return ActionOutcome(action_id=action_id)
+
+
+async def unhide(
+    session: AsyncSession,
+    docente_ctx: UserCtx,
+    report_id: int,
+    reason: Reason | None = None,
+) -> ActionOutcome | None:
+    """Clear `documents.moderation_hidden_at` unconditionally, append an
+    `unhide` audit row, and resolve all open reports — one transaction. Re-hide/
+    re-unhide leaves no residue beyond the log (story 33). None on unknown report
+    or author-soft-deleted doc."""
+    doc_id = await _resolve_case(session, report_id)
+    if doc_id is None:
+        return None
+    action_id = await _append_action(session, report_id, docente_ctx, "unhide", reason)
+    await _resolve_open_reports(session, doc_id)
+    await session.execute(
+        text("UPDATE documents SET moderation_hidden_at = NULL WHERE id = :d"),
+        {"d": doc_id},
+    )
+    await _notify_authors(session, doc_id, action_id, "document_unhidden", reason)
+    return ActionOutcome(action_id=action_id)
+
+
+async def dismiss(
+    session: AsyncSession,
+    docente_ctx: UserCtx,
+    report_id: int,
+    reason: Reason | None = None,
+) -> ActionOutcome | None:
+    """Append a `dismiss` audit row and resolve all open reports — the matter is
+    settled for the document (story 23). Touches no `documents` column and
+    notifies no one (story 28). None on unknown report or author-soft-deleted
+    doc."""
+    doc_id = await _resolve_case(session, report_id)
+    if doc_id is None:
+        return None
+    action_id = await _append_action(session, report_id, docente_ctx, "dismiss", reason)
+    await _resolve_open_reports(session, doc_id)
+    return ActionOutcome(action_id=action_id)
+
+
+async def _resolve_case(session: AsyncSession, report_id: int) -> int | None:
+    """The report's document, excluding author-soft-deleted (story 18)."""
+    return (
+        await session.execute(
+            text(
+                "SELECT d.id FROM document_reports r JOIN documents d ON d.id = r.doc_id "
+                "WHERE r.id = :r AND d.soft_deleted_at IS NULL"
+            ),
+            {"r": report_id},
+        )
+    ).scalar_one_or_none()
+
+
+async def _append_action(
+    session: AsyncSession,
+    report_id: int,
+    docente_ctx: UserCtx,
+    action: str,
+    reason: str | None,
+) -> int:
+    return (
+        await session.execute(
+            text(
+                "INSERT INTO moderation_actions "
+                "(report_id, docente_user_id, action, reason) "
+                "VALUES (:r, :u, :a, :reason) RETURNING id"
+            ),
+            {"r": report_id, "u": docente_ctx.user_id, "a": action, "reason": reason},
+        )
+    ).scalar_one()
+
+
+async def _notify_authors(
+    session: AsyncSession,
+    doc_id: int,
+    action_id: int,
+    kind: str,
+    reason: str | None,
+) -> None:
+    """One in-app notification per registered author (owner + accepted,
+    `user_id NOT NULL`); external authors are skipped. `event_key` is keyed per
+    `moderation_actions` id, so a retry of the same action never double-notifies
+    (story 29)."""
+    await session.execute(
+        text(
+            "INSERT INTO notifications (user_id, event_key, kind, payload_json) "
+            "SELECT da.user_id, :ek, :kind, "
+            "       jsonb_build_object('doc_id', cast(:doc_id as bigint), "
+            "                          'doc_title', d.titulo, "
+            "                          'reason', cast(:reason as text)) "
+            "FROM document_authors da JOIN documents d ON d.id = da.doc_id "
+            "WHERE da.doc_id = :doc_id AND da.status IN ('owner', 'accepted') "
+            "  AND da.user_id IS NOT NULL "
+            "ON CONFLICT (user_id, event_key) DO NOTHING"
+        ),
+        {"ek": f"{kind}:{action_id}", "kind": kind, "doc_id": doc_id, "reason": reason},
+    )
+
+
+async def _resolve_open_reports(session: AsyncSession, doc_id: int) -> None:
+    await session.execute(
+        text(
+            "UPDATE document_reports SET status = 'resolved' "
+            "WHERE doc_id = :d AND status = 'open'"
+        ),
+        {"d": doc_id},
+    )
+
+
+@dataclass(frozen=True)
 class QueueEntry:
     doc_id: int
     title: str
