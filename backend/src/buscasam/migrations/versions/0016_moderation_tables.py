@@ -27,6 +27,8 @@ def upgrade() -> None:
           reason           text not null,
           status           text not null default 'open',
           created_at       timestamptz not null default now(),
+          CONSTRAINT document_reports_reason_check
+            CHECK (reason IN ('spam', 'contenido_inadecuado', 'plagio', 'error')),
           CONSTRAINT document_reports_status_check
             CHECK (status IN ('open', 'resolved'))
         )
