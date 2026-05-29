@@ -192,7 +192,11 @@ async def test_hide_notifies_only_registered_authors(session):
     for r in rows:
         assert r["kind"] == "document_hidden"
         assert r["event_key"] == f"document_hidden:{outcome.action_id}"
-        assert r["payload"] == {"doc_title": "Trabajo", "doc_id": doc_id}
+        assert r["payload"] == {
+            "doc_title": "Trabajo",
+            "doc_id": doc_id,
+            "reason": "spam",
+        }
 
 
 async def test_unhide_notifies_with_unhidden_kind(session):
@@ -225,7 +229,11 @@ async def test_notify_is_idempotent_on_event_key(session):
 
     outcome = await hide(session, _docente_ctx(docente), report_id, "spam")
     await moderation._notify_authors(
-        session, action_id=outcome.action_id, doc_id=doc_id, kind="document_hidden"
+        session,
+        action_id=outcome.action_id,
+        doc_id=doc_id,
+        kind="document_hidden",
+        reason="spam",
     )
 
     count = (
