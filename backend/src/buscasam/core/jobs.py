@@ -81,7 +81,7 @@ async def _complete_indexing(
     finalize transaction (ADR-0011 §5). `write_indexed_candidate` is gated on
     `index_status='processing'`, so a descartar committed during the embed IO
     makes this write a clean no-op — no chunks materialize on a discarded row."""
-    meta = extractmod.derive_metadata(doc)
+    meta = await extractmod.suggest_metadata(doc)
     body = chunkmod.chunk(doc)
     headline = chunkmod.headline_chunk(cv.title, meta.abstract)
     fp = chunkmod.headline_fingerprint(cv.title, meta.abstract)

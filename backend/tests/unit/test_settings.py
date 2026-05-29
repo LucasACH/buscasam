@@ -14,6 +14,15 @@ def test_tei_url_default():
     assert s.tei_url == "http://localhost:8080"
 
 
+def test_metadata_llm_defaults_are_local_opt_in():
+    s = Settings()
+    assert s.metadata_llm_enabled is False
+    assert s.metadata_llm_url == "http://localhost:11434"
+    assert s.metadata_llm_model == "llama3.2:3b"
+    assert s.metadata_llm_timeout_s == 60.0
+    assert s.extract_pipeline_version == "extract-v2"
+
+
 def test_prod_env_rejects_dev_secret_key():
     with pytest.raises(ValueError, match="BUSCASAM_SECRET_KEY"):
         Settings(env="prod", oidc_client_secret="real-client-secret", _env_file=None)

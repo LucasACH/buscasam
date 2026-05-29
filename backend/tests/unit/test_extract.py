@@ -6,9 +6,11 @@ then call extract(sha256, mime) and assert text + paragraph_breaks.
 from __future__ import annotations
 
 import hashlib
+import json
 from io import BytesIO
 from pathlib import Path
 
+import httpx
 import pytest
 from docx import Document as DocxDocument
 from odf.opendocument import OpenDocumentText
@@ -19,10 +21,13 @@ from buscasam.core.extract import (
     ExtractedDoc,
     OCRRequired,
     PDFEncryptionError,
+    _clean_keywords,
     derive_metadata,
     extract,
     probe_encrypted,
+    suggest_metadata,
 )
+from buscasam.settings import settings
 
 
 @pytest.fixture
@@ -223,3 +228,146 @@ def test_derive_metadata_returns_some_keywords_for_real_text():
     meta = derive_metadata(doc)
     assert 0 < len(meta.keywords) <= 10
     assert all(isinstance(k, str) and k for k in meta.keywords)
+
+
+def test_keyword_cleanup_filters_template_noise_and_duplicates():
+    assert _clean_keywords([
+        "Este trabajo",
+        " aprendizaje automático ",
+        "Aprendizaje automático",
+        "Universidad Nacional de San Martín",
+        "redes neuronales",
+    ]) == ["aprendizaje automático", "redes neuronales"]
+
+
+async def test_suggest_metadata_uses_llm_success(monkeypatch):
+    monkeypatch.setattr(settings, "metadata_llm_enabled", True)
+    monkeypatch.setattr(settings, "metadata_llm_timeout_s", 60.0)
+    seen_timeout: list[float] = []
+    seen_format: list[dict] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen_timeout.append(req.extensions["timeout"]["connect"])
+        seen_format.append(json.loads(req.read())["format"])
+        return httpx.Response(
+            200,
+            json={
+                "response": (
+                    '{"abstract": "Resumen limpio generado localmente.", '
+                    '"keywords": ["grafos", "Este trabajo", "redes"]}'
+                )
+            },
+        )
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="http://ollama"
+    )
+    try:
+        meta = await suggest_metadata(
+            _doc("Texto sin resumen explícito sobre grafos y redes."),
+            client,
+        )
+    finally:
+        await client.aclose()
+
+    assert meta.abstract == "Resumen limpio generado localmente."
+    assert meta.keywords == ["grafos", "redes"]
+    assert seen_timeout == [60.0]
+    assert seen_format[0]["required"] == ["abstract", "keywords"]
+    assert seen_format[0]["additionalProperties"] is False
+
+
+async def test_suggest_metadata_keeps_explicit_abstract_over_llm(monkeypatch):
+    monkeypatch.setattr(settings, "metadata_llm_enabled", True)
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "response": (
+                    '{"abstract": "Resumen inventado por el LLM.", '
+                    '"keywords": ["procesamiento de lenguaje"]}'
+                )
+            },
+        )
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="http://ollama"
+    )
+    try:
+        meta = await suggest_metadata(
+            _doc(
+                "Resumen\n\n"
+                "Resumen determinístico extraído del documento.\n\n"
+                "Introducción\n\n"
+                "Cuerpo."
+            ),
+            client,
+        )
+    finally:
+        await client.aclose()
+
+    assert meta.abstract == "Resumen determinístico extraído del documento."
+    assert meta.keywords == ["procesamiento de lenguaje"]
+
+
+async def test_suggest_metadata_timeout_falls_back(monkeypatch):
+    monkeypatch.setattr(settings, "metadata_llm_enabled", True)
+    doc = _doc("Primer párrafo usado como fallback.")
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise httpx.TimeoutException("slow local model", request=req)
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="http://ollama"
+    )
+    try:
+        meta = await suggest_metadata(doc, client)
+    finally:
+        await client.aclose()
+
+    assert meta == derive_metadata(doc)
+
+
+async def test_suggest_metadata_invalid_output_falls_back(monkeypatch):
+    monkeypatch.setattr(settings, "metadata_llm_enabled", True)
+    doc = _doc("Primer párrafo usado como fallback.")
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"response": '{"abstract": 123}'})
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="http://ollama"
+    )
+    try:
+        meta = await suggest_metadata(doc, client)
+    finally:
+        await client.aclose()
+
+    assert meta == derive_metadata(doc)
+
+
+async def test_suggest_metadata_portuguese_output_falls_back(monkeypatch):
+    monkeypatch.setattr(settings, "metadata_llm_enabled", True)
+    doc = _doc("Texto sobre modelos de series temporales y viento.")
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "response": (
+                    '{"abstract": "Este documento descreve a previsão de séries temporais.", '
+                    '"keywords": ["redes neurais LSTM", "vento"]}'
+                )
+            },
+        )
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="http://ollama"
+    )
+    try:
+        meta = await suggest_metadata(doc, client)
+    finally:
+        await client.aclose()
+
+    assert meta == derive_metadata(doc)

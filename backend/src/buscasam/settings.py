@@ -19,7 +19,11 @@ class Settings(BaseSettings):
     min_semantic_similarity: float = 0.78
     embed_query_timeout_s: float = 0.5
     # ADR-0007 §12: per-row provenance stamp for the extraction pipeline.
-    extract_pipeline_version: str = "extract-v1"
+    extract_pipeline_version: str = "extract-v2"
+    metadata_llm_enabled: bool = False
+    metadata_llm_url: str = "http://localhost:11434"
+    metadata_llm_model: str = "llama3.2:3b"
+    metadata_llm_timeout_s: float = 60.0
 
     base_url: str = "http://localhost:3000"
     blob_root: Path = Path("/var/lib/buscasam/blobs")

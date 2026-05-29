@@ -281,6 +281,81 @@ async def test_index_document_happy_path_indexes_docx(session, blob_root, worker
     assert all(c["is_current"] is False for c in chunks)
 
 
+async def test_index_document_persists_local_metadata_llm_output(
+    session, blob_root, worker_sm, monkeypatch
+):
+    payload = _docx_bytes([
+        "Este documento analiza grafos de coautoría académica.",
+        "El método compara redes, componentes y centralidad.",
+    ])
+    sha_hex, sha_bytes = _persist_blob(blob_root, payload)
+    uid, doc_id, version_id = await _seed_version(
+        session, sha_bytes=sha_bytes, mime=_DOCX_MIME
+    )
+    tei = _tei_mock()
+    monkeypatch.setattr(jobs.extractmod.settings, "metadata_llm_enabled", True)
+
+    async def _llm(client, doc, fallback):
+        return jobs.extractmod._LlmMetadata(
+            abstract="Resumen limpio del modelo local.",
+            keywords=["grafos", "Este trabajo", "centralidad"],
+        )
+
+    monkeypatch.setattr(jobs.extractmod, "_call_metadata_llm", _llm)
+
+    await jobs._run_index_document(worker_sm, tei, version_id)
+    await tei.aclose()
+
+    row = (
+        await session.execute(
+            text(
+                "SELECT index_status, staged_abstract, staged_keywords "
+                "FROM document_versions WHERE id = :id"
+            ),
+            {"id": version_id},
+        )
+    ).mappings().one()
+    assert row["index_status"] == "indexed"
+    assert row["staged_abstract"] == "Resumen limpio del modelo local."
+    assert row["staged_keywords"] == ["grafos", "centralidad"]
+
+
+async def test_index_document_metadata_llm_timeout_still_indexes(
+    session, blob_root, worker_sm, monkeypatch
+):
+    payload = _docx_bytes([
+        "Primer párrafo usado como resumen heurístico.",
+        "Texto sobre indexación y búsqueda académica.",
+    ])
+    sha_hex, sha_bytes = _persist_blob(blob_root, payload)
+    uid, doc_id, version_id = await _seed_version(
+        session, sha_bytes=sha_bytes, mime=_DOCX_MIME
+    )
+    tei = _tei_mock()
+    monkeypatch.setattr(jobs.extractmod.settings, "metadata_llm_enabled", True)
+
+    async def _timeout(client, doc, fallback):
+        raise httpx.TimeoutException("slow local model")
+
+    monkeypatch.setattr(jobs.extractmod, "_call_metadata_llm", _timeout)
+
+    await jobs._run_index_document(worker_sm, tei, version_id)
+    await tei.aclose()
+
+    row = (
+        await session.execute(
+            text(
+                "SELECT index_status, staged_abstract, headline_fingerprint "
+                "FROM document_versions WHERE id = :id"
+            ),
+            {"id": version_id},
+        )
+    ).mappings().one()
+    assert row["index_status"] == "indexed"
+    assert row["staged_abstract"].startswith("Primer párrafo")
+    assert row["headline_fingerprint"] is not None
+
+
 async def test_index_document_duplicate_success_is_no_op(session, blob_root, worker_sm):
     payload = _docx_bytes([
         "Resumen",
