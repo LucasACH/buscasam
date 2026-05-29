@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { CoauthorInvitationBanner } from "@/components/CoauthorInvitationBanner";
+import { ReportDialog } from "@/components/ReportDialog";
 import { VersionsPanel } from "@/components/VersionsPanel";
 
 import { fetchAreas, fetchDocDetail } from "./fetchDetail";
@@ -218,6 +219,10 @@ function DetailView({
             versions={detail.versions}
             canManage={detail.manageable}
           />
+
+          <div className="mt-6">
+            <ReportDialog docId={docId} />
+          </div>
         </aside>
       </article>
 
