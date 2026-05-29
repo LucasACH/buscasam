@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { useUser } from "@/lib/useUser";
@@ -44,13 +45,18 @@ export default function ModeracionPage() {
 
 function Row({ entry }: { entry: QueueEntry }) {
   return (
-    <li className="px-4 py-3 text-sm">
-      <div className="font-medium">{entry.title}</div>
-      <div className="text-muted-foreground mt-1 text-xs">
-        {entry.reasons.join(", ")} · {entry.report_count}{" "}
-        {entry.report_count === 1 ? "reporte" : "reportes"} · Último reporte el{" "}
-        {new Date(entry.last_reported_at).toLocaleDateString("es-AR")}
-      </div>
+    <li>
+      <Link
+        href={`/moderacion/${entry.report_id}`}
+        className="hover:bg-muted/50 block px-4 py-3 text-sm"
+      >
+        <div className="font-medium">{entry.title}</div>
+        <div className="text-muted-foreground mt-1 text-xs">
+          {entry.reasons.join(", ")} · {entry.report_count}{" "}
+          {entry.report_count === 1 ? "reporte" : "reportes"} · Último reporte el{" "}
+          {new Date(entry.last_reported_at).toLocaleDateString("es-AR")}
+        </div>
+      </Link>
     </li>
   );
 }

@@ -38,19 +38,21 @@ async def _sid_cookie(session, user_id: int) -> str:
     return base64.urlsafe_b64encode(sid).rstrip(b"=").decode()
 
 
-async def _file_report(session, doc_id: int, reporter_user_id: int, reason: str) -> None:
-    await session.execute(
-        text(
-            "INSERT INTO document_reports (doc_id, reporter_user_id, reason) "
-            "VALUES (:d, :u, :r)"
-        ),
-        {"d": doc_id, "u": reporter_user_id, "r": reason},
-    )
+async def _file_report(session, doc_id: int, reporter_user_id: int, reason: str) -> int:
+    return (
+        await session.execute(
+            text(
+                "INSERT INTO document_reports (doc_id, reporter_user_id, reason) "
+                "VALUES (:d, :u, :r) RETURNING id"
+            ),
+            {"d": doc_id, "u": reporter_user_id, "r": reason},
+        )
+    ).scalar_one()
 
 
 async def test_queue_as_docente_returns_200_with_entries(client, session):
     doc = await make_document(session, titulo="Doc A")
-    await _file_report(session, doc, await make_user(session), "spam")
+    report_id = await _file_report(session, doc, await make_user(session), "spam")
     docente = await make_user(session, role="docente")
     cookie = await _sid_cookie(session, docente)
 
@@ -60,6 +62,7 @@ async def test_queue_as_docente_returns_200_with_entries(client, session):
     items = r.json()["items"]
     assert len(items) == 1
     assert items[0]["doc_id"] == doc
+    assert items[0]["report_id"] == report_id
     assert items[0]["title"] == "Doc A"
     assert items[0]["reasons"] == ["spam"]
     assert items[0]["report_count"] == 1
