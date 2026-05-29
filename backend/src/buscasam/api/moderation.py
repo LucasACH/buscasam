@@ -11,45 +11,22 @@ no tables directly.
 """
 from __future__ import annotations
 
-from urllib.parse import quote
-
 from fastapi import APIRouter, Depends, HTTPException, Response
-from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from buscasam.api._blob import download_response
 from buscasam.api.deps import get_session
-from buscasam.core import auth, blob_store
+from buscasam.core import auth
 from buscasam.core.document_access import moderation_inspection_where
 from buscasam.core.moderation import DocumentNotReadable, Reason, file_report
-from buscasam.settings import settings
 
 router = APIRouter(prefix="/api/moderation")
 
 
 def _not_found() -> HTTPException:
     return HTTPException(status_code=404, detail="not_found")
-
-
-def _download_response(*, sha_hex: str, original_filename: str, mime: str) -> Response:
-    # Same dual-mode projection as api/docs: nginx X-Accel-Redirect in prod,
-    # inline FileResponse for local dev (settings.serve_blobs_inline).
-    disposition = f"attachment; filename*=UTF-8''{quote(original_filename, safe='')}"
-    if settings.serve_blobs_inline:
-        return FileResponse(
-            blob_store.local_path(sha_hex),
-            media_type=mime,
-            headers={"Content-Disposition": disposition},
-        )
-    return Response(
-        status_code=200,
-        headers={
-            "X-Accel-Redirect": blob_store.internal_path(sha_hex),
-            "Content-Type": mime,
-            "Content-Disposition": disposition,
-        },
-    )
 
 
 class ReportBody(BaseModel):
@@ -151,6 +128,6 @@ async def inspect_download(
     ).first()
     if row is None:
         raise _not_found()
-    return _download_response(
+    return download_response(
         sha_hex=row.sha, original_filename=row.original_filename, mime=row.mime
     )

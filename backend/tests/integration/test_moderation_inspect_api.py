@@ -92,10 +92,20 @@ async def _docente_cookie(session) -> str:
 
 async def test_document_returns_metadata_for_privado_reported_doc(client, session):
     doc_id = await make_document(
-        session, visibility="privado", titulo="Secreto", abstract="resumen"
+        session,
+        visibility="privado",
+        titulo="Secreto",
+        abstract="resumen",
+        tipo="tesis",
+        area_path="escuela_ciencia.matematica",
     )
+    await session.execute(
+        text("UPDATE documents SET keywords = ARRAY['algebra', 'topologia'] WHERE id = :d"),
+        {"d": doc_id},
+    )
+    author_user_id = await make_user(session)
     await make_document_author(
-        session, doc_id, user_id=await make_user(session), status="owner",
+        session, doc_id, user_id=author_user_id, status="owner",
         display_name="Ana",
     )
     reporter = await make_user(session)
@@ -110,7 +120,10 @@ async def test_document_returns_metadata_for_privado_reported_doc(client, sessio
     body = r.json()
     assert body["titulo"] == "Secreto"
     assert body["abstract"] == "resumen"
-    assert body["autores"] == [{"display_name": "Ana", "user_id": body["autores"][0]["user_id"]}]
+    assert body["tipo"] == "tesis"
+    assert body["area_path"] == "escuela_ciencia.matematica"
+    assert body["palabras_clave"] == ["algebra", "topologia"]
+    assert body["autores"] == [{"display_name": "Ana", "user_id": author_user_id}]
 
 
 @pytest.mark.parametrize("status", ["open", "resolved"])
@@ -125,7 +138,9 @@ async def test_document_works_for_open_and_resolved(client, session, status):
     )
 
     assert r.status_code == 200
-    assert r.json()["titulo"] == "T"
+    body = r.json()
+    assert body["titulo"] == "T"
+    assert body["palabras_clave"] == []  # COALESCE(keywords, ARRAY[]) for the null case
 
 
 async def test_download_streams_current_main_file(client, session):
