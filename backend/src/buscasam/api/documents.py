@@ -31,10 +31,12 @@ from buscasam.core.documents import (
     discard_candidate,
     get_draft_state,
     invite_coauthor,
+    list_deleted_documents,
     list_own_documents,
     publish,
     remove_attachment,
     replace_main_version,
+    restore,
     revoke_invitation,
     soft_delete,
     update_draft_metadata,
@@ -66,6 +68,16 @@ class OwnDocDTO(BaseModel):
     publication_status: str
     visibility: str
     published_at: datetime | None
+
+
+# Exposes purge_at (the server-computed soft_deleted_at + 180 días) but not the
+# raw deletion time: the frontend derives "Se elimina en N días" from purge_at
+# alone, so the 180-día constant stays single-sourced in the SQL projection.
+class DeletedDocDTO(BaseModel):
+    id: int
+    title: str
+    publication_status: str
+    purge_at: datetime
 
 
 class CreateDraftRequest(BaseModel):
@@ -452,6 +464,19 @@ async def delete_document(
     return Response(status_code=204)
 
 
+@router.post("/documents/{doc_id}/restore", status_code=204)
+async def restore_document(
+    doc_id: int,
+    user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    try:
+        await restore(session, user_ctx, doc_id)
+    except DocumentNotFound:
+        raise HTTPException(status_code=404)
+    return Response(status_code=204)
+
+
 # ADR-0006 §10: attachment extension allowlist (no content sniffing). The
 # component's <input accept=...> mirrors this set.
 _ALLOWED_ATTACHMENT_EXTS = {
@@ -546,6 +571,23 @@ async def get_own_documents(
             publication_status=d.publication_status,
             visibility=d.visibility,
             published_at=d.published_at,
+        )
+        for d in docs
+    ]
+
+
+@router.get("/me/documents/deleted", response_model=list[DeletedDocDTO])
+async def get_deleted_documents(
+    user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
+    session: AsyncSession = Depends(get_session),
+) -> list[DeletedDocDTO]:
+    docs = await list_deleted_documents(session, user_ctx)
+    return [
+        DeletedDocDTO(
+            id=d.id,
+            title=d.title,
+            publication_status=d.publication_status,
+            purge_at=d.purge_at,
         )
         for d in docs
     ]

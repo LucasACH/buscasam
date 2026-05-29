@@ -13,6 +13,7 @@ from buscasam.core.document_access import (
     manageable_where,
     pending_invitation_disclosure_where,
     readable_where,
+    restorable_where,
 )
 from buscasam.settings import settings
 
@@ -178,6 +179,15 @@ class OwnDocSummary:
     publication_status: str
     visibility: str
     published_at: datetime | None
+
+
+@dataclass(frozen=True)
+class DeletedDocSummary:
+    id: int
+    title: str
+    publication_status: str  # draft | published — for the Papelera label
+    soft_deleted_at: datetime
+    purge_at: datetime  # soft_deleted_at + 180 días, computed server-side
 
 
 async def create_draft(
@@ -991,6 +1001,33 @@ async def soft_delete(
     )
 
 
+async def restore(
+    session: AsyncSession, user_ctx: UserCtx, doc_id: int
+) -> None:
+    """Owner-only undo of a soft-delete (module map §core/documents, issue #66).
+
+    Clears soft_deleted_at on the caller's OWN soft-deleted document. The UPDATE
+    is gated by restorable_where, so a live document, a non-owner, or another
+    user's deleted document all match zero rows → DocumentNotFound (→ 404, no
+    existence leak; stories 12, 20).
+
+    A true undo with nothing to reconstruct: delete only hid the row via the
+    inherited soft_deleted_at IS NULL exclusion, so the current-version flag,
+    publication_status, attachments, and coautores were never mutated — clearing
+    the timestamp returns the document to exactly its prior state (stories 8-11).
+    """
+    where, params = restorable_where("d", user_ctx)
+    result = await session.execute(
+        text(
+            f"UPDATE documents AS d SET soft_deleted_at = NULL "
+            f"WHERE d.id = :doc_id AND ({where})"
+        ),
+        params | {"doc_id": doc_id},
+    )
+    if result.rowcount == 0:
+        raise DocumentNotFound
+
+
 async def _assert_owner(
     session: AsyncSession, user_ctx: UserCtx, doc_id: int
 ) -> None:
@@ -1391,6 +1428,39 @@ async def list_own_documents(
             publication_status=r["publication_status"],
             visibility=r["visibility"],
             published_at=r["published_at"],
+        )
+        for r in rows
+    ]
+
+
+async def list_deleted_documents(
+    session: AsyncSession, user_ctx: UserCtx
+) -> list[DeletedDocSummary]:
+    """The Papelera projection — sibling of list_own_documents, gated by
+    restorable_where instead of manageable_where (module map §core/documents,
+    issue #66). Returns only the caller's own soft-deleted documents, ordered by
+    soft_deleted_at desc. purge_at is `soft_deleted_at + INTERVAL '180 days'`
+    projected in SQL, so the 180-día retention constant is single-sourced
+    server-side; the client derives the days-remaining label from it."""
+    where, params = restorable_where("d", user_ctx)
+    rows = (
+        await session.execute(
+            text(
+                f"SELECT d.id, d.titulo, d.publication_status, d.soft_deleted_at, "
+                f"       d.soft_deleted_at + INTERVAL '180 days' AS purge_at "
+                f"FROM documents d WHERE {where} "
+                f"ORDER BY d.soft_deleted_at DESC"
+            ),
+            params,
+        )
+    ).mappings().all()
+    return [
+        DeletedDocSummary(
+            id=r["id"],
+            title=r["titulo"],
+            publication_status=r["publication_status"],
+            soft_deleted_at=r["soft_deleted_at"],
+            purge_at=r["purge_at"],
         )
         for r in rows
     ]

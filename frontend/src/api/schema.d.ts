@@ -379,6 +379,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/documents/{doc_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore Document */
+        post: operations["restore_document_api_documents__doc_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/documents/{doc_id}/attachments": {
         parameters: {
             query?: never;
@@ -422,6 +439,23 @@ export interface paths {
         };
         /** Get Own Documents */
         get: operations["get_own_documents_api_me_documents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/documents/deleted": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Deleted Documents */
+        get: operations["get_deleted_documents_api_me_documents_deleted_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -627,6 +661,20 @@ export interface components {
         CreateDraftResponse: {
             /** Id */
             id: number;
+        };
+        /** DeletedDocDTO */
+        DeletedDocDTO: {
+            /** Id */
+            id: number;
+            /** Title */
+            title: string;
+            /** Publication Status */
+            publication_status: string;
+            /**
+             * Purge At
+             * Format: date-time
+             */
+            purge_at: string;
         };
         /** DetailDTO */
         DetailDTO: {
@@ -1628,6 +1676,35 @@ export interface operations {
             };
         };
     };
+    restore_document_api_documents__doc_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_attachment_api_documents__doc_id__attachments_post: {
         parameters: {
             query?: never;
@@ -1709,6 +1786,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OwnDocDTO"][];
+                };
+            };
+        };
+    };
+    get_deleted_documents_api_me_documents_deleted_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletedDocDTO"][];
                 };
             };
         };
