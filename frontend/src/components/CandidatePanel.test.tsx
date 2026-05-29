@@ -2,18 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-const { apiPost } = vi.hoisted(() => ({ apiPost: vi.fn() }));
-vi.mock("@/api/client", () => ({ api: { POST: apiPost } }));
-
 const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { error: toastError } }));
 
 import { CandidatePanel } from "./CandidatePanel";
 
-const DOC_ID = 7;
 const replace = vi.fn();
 const discard = vi.fn();
-const refresh = vi.fn();
+const publish = vi.fn();
 
 type Candidate = {
   status: "processing" | "ready" | "failed";
@@ -40,16 +36,9 @@ function candidate(over: Partial<Candidate> = {}): Candidate {
   };
 }
 
-function wrap(cand: Candidate | null, canPublish = true) {
+function wrap(cand: Candidate | null) {
   return render(
-    <CandidatePanel
-      docId={DOC_ID}
-      canPublish={canPublish}
-      candidate={cand}
-      replace={replace}
-      discard={discard}
-      refresh={refresh}
-    />,
+    <CandidatePanel candidate={cand} actions={{ publish, replace, discard }} />,
   );
 }
 
@@ -59,10 +48,8 @@ describe("CandidatePanel", () => {
     replace.mockResolvedValue(undefined);
     discard.mockReset();
     discard.mockResolvedValue(undefined);
-    refresh.mockReset();
-    refresh.mockResolvedValue(undefined);
-    apiPost.mockReset();
-    apiPost.mockResolvedValue({ error: undefined, response: { status: 204 } });
+    publish.mockReset();
+    publish.mockResolvedValue("published");
     toastError.mockReset();
   });
   afterEach(() => cleanup());
@@ -95,7 +82,6 @@ describe("CandidatePanel", () => {
         canPublish: true,
         stagedAbstract: "Nuevo resumen",
       }),
-      true,
     );
 
     expect(screen.getByText("Listo para publicar")).toBeInTheDocument();
@@ -103,10 +89,13 @@ describe("CandidatePanel", () => {
     expect(screen.getByRole("button", { name: "Publicar" })).toBeEnabled();
   });
 
-  it("disables Publicar when the viewer is not the owner", () => {
+  it("disables Publicar when the draft action interface marks it blocked", () => {
     wrap(
-      candidate({ status: "ready", statusLabel: "Listo para publicar", canPublish: true }),
-      false,
+      candidate({
+        status: "ready",
+        statusLabel: "Listo para publicar",
+        canPublish: false,
+      }),
     );
 
     expect(screen.getByRole("button", { name: "Publicar" })).toBeDisabled();
@@ -158,25 +147,45 @@ describe("CandidatePanel", () => {
     );
   });
 
-  it("publishes through the existing publish route and refreshes", async () => {
+  it("delegates Publicar to the draft action interface", async () => {
     const user = userEvent.setup();
     wrap(
-      candidate({ status: "ready", statusLabel: "Listo para publicar", canPublish: true }),
-      true,
+      candidate({
+        status: "ready",
+        statusLabel: "Listo para publicar",
+        canPublish: true,
+      }),
     );
 
     await user.click(screen.getByRole("button", { name: "Publicar" }));
 
-    expect(apiPost).toHaveBeenCalledWith("/api/documents/{doc_id}/publish", {
-      params: { path: { doc_id: DOC_ID } },
-    });
-    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(publish).toHaveBeenCalledOnce();
+  });
+
+  it("toasts when publish fails", async () => {
+    const user = userEvent.setup();
+    publish.mockResolvedValue("publish_failed");
+    wrap(
+      candidate({
+        status: "ready",
+        statusLabel: "Listo para publicar",
+        canPublish: true,
+      }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Publicar" }));
+
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith("No se pudo publicar"),
+    );
   });
 
   it.each(["processing", "ready", "failed"] as const)(
     "offers Descartar in the %s state when canDiscard",
     (status) => {
-      wrap(candidate({ status, canDiscard: true, canPublish: status === "ready" }));
+      wrap(
+        candidate({ status, canDiscard: true, canPublish: status === "ready" }),
+      );
 
       expect(
         screen.getByRole("button", { name: "Descartar" }),
@@ -208,6 +217,8 @@ describe("CandidatePanel", () => {
 
     await user.click(screen.getByRole("button", { name: "Descartar" }));
 
-    await waitFor(() => expect(toastError).toHaveBeenCalledWith("No se pudo descartar"));
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith("No se pudo descartar"),
+    );
   });
 });

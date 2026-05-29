@@ -17,10 +17,8 @@ import { VersionsPanel } from "@/components/VersionsPanel";
 import { useUser } from "@/lib/useUser";
 import {
   useDraftState,
-  type DiscardMutationError,
+  type DraftWorkspaceActions,
   type DraftState,
-  type ReplaceMutationError,
-  type SoftDeleteMutationError,
 } from "../../useDraftState";
 
 const formSchema = z.object({
@@ -37,8 +35,7 @@ export default function EditarPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const docId = Number(params.id);
-  const { state, isLoading, refresh, replace, discard, softDelete } =
-    useDraftState(docId);
+  const { state, isLoading, refresh, actions } = useDraftState(docId);
 
   useEffect(() => {
     if (isInvitado) router.replace(`/login?next=/mis-trabajos/${docId}/editar`);
@@ -56,9 +53,7 @@ export default function EditarPage() {
       docId={docId}
       state={state}
       refresh={refresh}
-      replace={replace}
-      discard={discard}
-      softDelete={softDelete}
+      actions={actions}
     />
   );
 }
@@ -67,16 +62,12 @@ function EditarForm({
   docId,
   state,
   refresh,
-  replace,
-  discard,
-  softDelete,
+  actions,
 }: {
   docId: number;
   state: DraftState;
   refresh: () => Promise<void>;
-  replace: (file: File) => Promise<ReplaceMutationError | undefined>;
-  discard: () => Promise<DiscardMutationError | undefined>;
-  softDelete: () => Promise<SoftDeleteMutationError | undefined>;
+  actions: DraftWorkspaceActions;
 }) {
   const router = useRouter();
   const [publishing, setPublishing] = useState(false);
@@ -119,27 +110,15 @@ function EditarForm({
 
   async function onPublish() {
     setPublishing(true);
-    // try/catch/finally so a thrown fetch (network error, abort) still
-    // re-enables the button and toasts — the disabled state also doubles as
-    // the double-click guard, so without finally the user gets stuck.
     try {
-      const { error, response } = await api.POST(
-        "/api/documents/{doc_id}/publish",
-        {
-          params: { path: { doc_id: docId } },
-        },
-      );
-      if (error) {
-        // A 409 is a publish-gate race: refetch so the next poll re-renders the
-        // gate reason (server is source of truth). Other errors are surfaced.
-        if (response?.status === 409) {
-          await refresh();
-          return;
-        }
-        toast.error("No se pudo publicar");
+      const result = await actions.publish();
+      if (result === "published") {
+        router.push("/mis-trabajos");
         return;
       }
-      router.push("/mis-trabajos");
+      if (result === "publish_failed") {
+        toast.error("No se pudo publicar");
+      }
     } catch {
       toast.error("No se pudo publicar");
     } finally {
@@ -149,10 +128,8 @@ function EditarForm({
 
   async function onDelete() {
     setDeleting(true);
-    // finally re-enables the button (its disabled state doubles as the
-    // double-click guard) so a thrown DELETE never leaves the user stuck.
     try {
-      const error = await softDelete();
+      const error = await actions.softDelete();
       if (error) {
         toast.error("No se pudo eliminar");
         return;
@@ -247,14 +224,7 @@ function EditarForm({
       </div>
 
       <div className="mt-8">
-        <CandidatePanel
-          docId={docId}
-          canPublish={state.isOwner}
-          candidate={state.candidate}
-          replace={replace}
-          discard={discard}
-          refresh={refresh}
-        />
+        <CandidatePanel candidate={state.candidate} actions={actions} />
       </div>
 
       <div className="mt-8">
@@ -264,7 +234,11 @@ function EditarForm({
       <div className="mt-8">
         {/* The draft state only loads for manageable users (owner + accepted
             coauthors); reaching this page means the user can manage attachments. */}
-        <AttachmentsPanel docId={docId} canManage />
+        <AttachmentsPanel
+          attachments={state.attachments}
+          actions={actions.attachments}
+          canManage
+        />
       </div>
 
       <div className="mt-8">
