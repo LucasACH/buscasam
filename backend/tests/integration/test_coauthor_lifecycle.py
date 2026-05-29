@@ -11,7 +11,7 @@ from sqlalchemy import text
 
 from buscasam.core import documents
 from buscasam.core.auth import UserCtx
-from buscasam.core.jobs import coauthor_invite_event_key
+from buscasam.core.notifications import coauthor_invite_event_key
 from tests.factories import (
     make_document,
     make_document_author,
