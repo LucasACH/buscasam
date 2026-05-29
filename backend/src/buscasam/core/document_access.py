@@ -89,6 +89,32 @@ def pending_invitation_disclosure_where(
     return where, {"user_id": user_ctx.user_id}
 
 
+def moderation_inspection_where(alias: str, report_id: int) -> tuple[str, dict]:
+    """`WHERE`-clause body + bind params for the ADR-0010 §6, §9 moderation
+    carve-out — the second deliberate exception to the normal reader policy.
+
+    Report-scoped, **not** visibility-scoped: selects the document behind report
+    `:inspect_report_id` regardless of `visibility` AND regardless of
+    `moderation_hidden_at`, for ANY report status (`open` | `resolved`) — the
+    case record persists so a Docente can re-open detail after acting. Author-
+    soft-deleted documents are excluded (`soft_deleted_at IS NULL`) so moderation
+    cannot resurrect removed content (story 18). A Docente gains no standing
+    access to private documents; access is bounded to this report's document.
+
+    Carries no role check — `require_docente` gates at the router. Bind key
+    `:inspect_report_id`, distinct from the other fragments' keys.
+    """
+    where = (
+        f"{alias}.soft_deleted_at IS NULL "
+        f"AND EXISTS ("
+        f"SELECT 1 FROM document_reports r "
+        f"WHERE r.id = :inspect_report_id "
+        f"AND r.doc_id = {alias}.id"
+        f")"
+    )
+    return where, {"inspect_report_id": report_id}
+
+
 def manageable_where(alias: str, user_ctx: UserCtx) -> tuple[str, dict]:
     """`WHERE`-clause body + bind params for the author-management predicate.
 
