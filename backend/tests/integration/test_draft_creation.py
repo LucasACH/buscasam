@@ -146,6 +146,40 @@ async def test_create_draft_inserts_pending_coauthor_rows(client, session):
     assert statuses["pending"] == coauthor_id
 
 
+async def test_create_draft_inserts_external_author_rows(client, session):
+    uid = await make_user(session)
+    sid = await _seed_session(session, uid)
+    await session.commit()
+
+    r = await client.post(
+        "/api/documents",
+        json={
+            **_VALID_DRAFT,
+            "external_authors": [
+                {"name": "Ada", "surname": "Lovelace", "email": "ada@ext.org"}
+            ],
+        },
+        headers={"origin": _ORIGIN},
+        cookies={auth.SID_COOKIE: _sid_cookie(sid)},
+    )
+
+    assert r.status_code == 201
+    doc_id = r.json()["id"]
+
+    row = (
+        await session.execute(
+            text(
+                "SELECT display_name, email, user_id FROM document_authors "
+                "WHERE doc_id = :id AND status = 'external'"
+            ),
+            {"id": doc_id},
+        )
+    ).mappings().first()
+    assert row["display_name"] == "Ada Lovelace"
+    assert row["email"] == "ada@ext.org"
+    assert row["user_id"] is None
+
+
 async def _create_draft(client, session) -> tuple[int, int, bytes]:
     uid = await make_user(session)
     sid = await _seed_session(session, uid)

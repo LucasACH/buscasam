@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, useFieldArray, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
@@ -55,17 +55,20 @@ const formSchema = z.object({
     "informe_catedra",
   ]),
   visibilidad: z.enum(["publico", "interno", "privado"]),
-  external_authors: z.string(),
+  external_authors: z.array(
+    z.object({
+      name: z.string().min(1, "El nombre es obligatorio"),
+      surname: z.string().min(1, "El apellido es obligatorio"),
+      email: z.string().email("Email inválido"),
+    }),
+  ),
   coauthor_user_ids: z.array(z.number()),
 });
 
 type FormValues = z.infer<typeof formSchema>;
 
-function parseExternalAuthors(raw: string): string[] {
-  return raw
-    .split(/[\n,]/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+function titleCase(s: string): string {
+  return s.toLowerCase().replace(/\b\p{L}/gu, (c) => c.toUpperCase());
 }
 
 export default function NuevoPage() {
@@ -90,6 +93,7 @@ function NuevoForm() {
     register,
     handleSubmit,
     control,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -98,10 +102,12 @@ function NuevoForm() {
       area_path: "",
       tipo: "tesis",
       visibilidad: "publico",
-      external_authors: "",
+      external_authors: [],
       coauthor_user_ids: [],
     },
   });
+
+  const externalAuthors = useFieldArray({ control, name: "external_authors" });
 
   async function onSubmit(values: FormValues) {
     setSubmitError(null);
@@ -117,7 +123,11 @@ function NuevoForm() {
           area_path: values.area_path,
           document_type: values.tipo,
           visibility: values.visibilidad,
-          external_authors: parseExternalAuthors(values.external_authors),
+          external_authors: values.external_authors.map((a) => ({
+            name: titleCase(a.name.trim()),
+            surname: titleCase(a.surname.trim()),
+            email: a.email.trim(),
+          })),
           coauthor_user_ids: values.coauthor_user_ids,
         },
       });
@@ -217,17 +227,81 @@ function NuevoForm() {
           ))}
         </fieldset>
 
-        <div className="space-y-1">
-          <label htmlFor="external_authors" className="text-sm font-medium">
-            Coautores externos
-          </label>
-          <textarea
-            id="external_authors"
-            rows={2}
-            placeholder="Uno por línea o separados por coma"
-            className="w-full rounded-md border px-3 py-2 text-sm"
-            {...register("external_authors")}
-          />
+        <div className="space-y-2">
+          <span className="text-sm font-medium">Coautores externos</span>
+          {externalAuthors.fields.map((row, i) => (
+            <div key={row.id} className="space-y-1">
+              <div className="flex items-start gap-2">
+                <div className="flex-1 space-y-1">
+                  <input
+                    placeholder="Nombre"
+                    className="w-full rounded-md border px-3 py-2 text-sm"
+                    {...register(`external_authors.${i}.name`, {
+                      onBlur: (e) =>
+                        setValue(
+                          `external_authors.${i}.name`,
+                          titleCase(e.target.value.trim()),
+                        ),
+                    })}
+                  />
+                  {errors.external_authors?.[i]?.name && (
+                    <p className="text-destructive text-xs">
+                      {errors.external_authors[i]?.name?.message}
+                    </p>
+                  )}
+                </div>
+                <div className="flex-1 space-y-1">
+                  <input
+                    placeholder="Apellido"
+                    className="w-full rounded-md border px-3 py-2 text-sm"
+                    {...register(`external_authors.${i}.surname`, {
+                      onBlur: (e) =>
+                        setValue(
+                          `external_authors.${i}.surname`,
+                          titleCase(e.target.value.trim()),
+                        ),
+                    })}
+                  />
+                  {errors.external_authors?.[i]?.surname && (
+                    <p className="text-destructive text-xs">
+                      {errors.external_authors[i]?.surname?.message}
+                    </p>
+                  )}
+                </div>
+                <div className="flex-1 space-y-1">
+                  <input
+                    type="email"
+                    placeholder="Email"
+                    className="w-full rounded-md border px-3 py-2 text-sm"
+                    {...register(`external_authors.${i}.email`)}
+                  />
+                  {errors.external_authors?.[i]?.email && (
+                    <p className="text-destructive text-xs">
+                      {errors.external_authors[i]?.email?.message}
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => externalAuthors.remove(i)}
+                  className="text-muted-foreground hover:text-destructive px-2 py-2 text-sm"
+                  aria-label="Quitar coautor externo"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          ))}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              externalAuthors.append({ name: "", surname: "", email: "" })
+            }
+          >
+            Agregar coautor externo
+          </Button>
         </div>
 
         <Controller

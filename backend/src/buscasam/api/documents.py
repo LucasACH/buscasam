@@ -19,6 +19,7 @@ from buscasam.core.documents import (
     CoauthorNotPending,
     CoauthorStatus,
     DocumentNotFound,
+    ExternalAuthor,
     InvalidCoauthorId,
     NoCandidateToDiscard,
     NoPublishedVersion,
@@ -80,12 +81,18 @@ class DeletedDocDTO(BaseModel):
     purge_at: datetime
 
 
+class ExternalAuthorInput(BaseModel):
+    name: str
+    surname: str
+    email: str
+
+
 class CreateDraftRequest(BaseModel):
     title: str
     area_path: str = Field(pattern=_AREA_PATH_PATTERN)
     document_type: DocumentType
     visibility: Visibility
-    external_authors: list[str] = []
+    external_authors: list[ExternalAuthorInput] = []
     coauthor_user_ids: list[int] = []
 
 
@@ -107,7 +114,10 @@ async def create_draft_endpoint(
             area_path=body.area_path,
             document_type=body.document_type,
             visibility=body.visibility,
-            external_authors=body.external_authors,
+            external_authors=[
+                ExternalAuthor(name=a.name, surname=a.surname, email=a.email)
+                for a in body.external_authors
+            ],
             coauthor_user_ids=body.coauthor_user_ids,
         )
     except InvalidCoauthorId as exc:
@@ -242,6 +252,7 @@ class CoauthorRowDTO(BaseModel):
     user_id: int | None
     display_name: str
     email_local: str | None
+    email: str | None
     status: CoauthorStatus
 
 
@@ -274,6 +285,7 @@ class DraftStateDTO(BaseModel):
     index_error: str | None
     publish_gate_reason: str | None
     is_owner: bool
+    visibility: Visibility
     attachments: list[AttachmentDTO]
     coauthors: list[CoauthorRowDTO]
     versions: list[DraftVersionDTO]
@@ -313,6 +325,7 @@ async def get_draft(
         index_error=state.index_error,
         publish_gate_reason=state.publish_gate_reason,
         is_owner=state.is_owner,
+        visibility=state.visibility,
         attachments=[
             AttachmentDTO(
                 id=a.id,
@@ -327,6 +340,7 @@ async def get_draft(
                 user_id=c.user_id,
                 display_name=c.display_name,
                 email_local=c.email_local,
+                email=c.email,
                 status=c.status,
             )
             for c in state.coauthors
@@ -423,6 +437,8 @@ async def patch_draft(
         )
     except DocumentNotFound:
         raise HTTPException(status_code=404)
+    except NotOwner:
+        raise HTTPException(status_code=403)
     return Response(status_code=204)
 
 

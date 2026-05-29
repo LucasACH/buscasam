@@ -37,9 +37,10 @@ function returns(overrides: Partial<DraftStateDTO> = {}) {
     index_error: null,
     publish_gate_reason: null,
     is_owner: true,
+    visibility: "publico",
     attachments: [],
     coauthors: [
-      { user_id: 1, display_name: "Ada", email_local: "ada", status: "owner" },
+      { user_id: 1, display_name: "Ada", email_local: "ada", email: null, status: "owner" },
     ],
     versions: [],
     candidate: null,
@@ -60,8 +61,8 @@ describe("useCoauthors", () => {
     returns({
       is_owner: true,
       coauthors: [
-        { user_id: 1, display_name: "Ada", email_local: "ada", status: "owner" },
-        { user_id: 2, display_name: "Bob", email_local: "bob", status: "pending" },
+        { user_id: 1, display_name: "Ada", email_local: "ada", email: null, status: "owner" },
+        { user_id: 2, display_name: "Bob", email_local: "bob", email: null, status: "pending" },
       ],
     });
     const { result } = renderHook(() => useCoauthors(1), { wrapper: wrapper() });

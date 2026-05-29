@@ -113,10 +113,18 @@ CoauthorStatus = Literal["owner", "pending", "accepted", "declined", "external"]
 
 
 @dataclass(frozen=True)
+class ExternalAuthor:
+    name: str
+    surname: str
+    email: str
+
+
+@dataclass(frozen=True)
 class CoauthorRow:
     user_id: int | None
     display_name: str
     email_local: str | None
+    email: str | None
     status: CoauthorStatus
 
 
@@ -155,6 +163,7 @@ class DraftState:
     index_error: str | None
     publish_gate_reason: str | None
     is_owner: bool
+    visibility: str
     attachments: list[AttachmentInfo]
     coauthors: list[CoauthorRow]
     versions: list[DetailVersion]
@@ -199,7 +208,7 @@ async def create_draft(
     area_path: str,
     document_type: str,
     visibility: str,
-    external_authors: list[str],
+    external_authors: list[ExternalAuthor],
     coauthor_user_ids: list[int],
 ) -> int:
     owner_name = (
@@ -254,13 +263,17 @@ async def create_draft(
             {"doc_id": doc_id, "uid": coauthor_id, "name": coauthor_names[coauthor_id]},
         )
 
-    for external_name in external_authors:
+    for external in external_authors:
         await session.execute(
             text(
-                "INSERT INTO document_authors (doc_id, user_id, display_name, status) "
-                "VALUES (:doc_id, NULL, :name, 'external')"
+                "INSERT INTO document_authors (doc_id, user_id, display_name, email, status) "
+                "VALUES (:doc_id, NULL, :name, :email, 'external')"
             ),
-            {"doc_id": doc_id, "name": external_name},
+            {
+                "doc_id": doc_id,
+                "name": f"{external.name} {external.surname}".strip(),
+                "email": external.email,
+            },
         )
 
     return doc_id
@@ -768,8 +781,11 @@ async def update_draft_metadata(
     current version plus any in-flight candidate, enqueuing refresh_headline per
     version when title or abstract changed (module map §core/documents). Frozen
     historical versions and a discarded candidate are left untouched.
-    Manageable-scoped; cross-user → DocumentNotFound."""
+    Manageable-scoped; cross-user → DocumentNotFound. Visibility is owner-only
+    (ADR-0010 §8): an accepted coauthor passing `visibility` → NotOwner."""
     await assert_manageable(session, user_ctx, doc_id)
+    if visibility is not None:
+        await _assert_owner(session, user_ctx, doc_id)
 
     # Edit-relevant versions: the published current (is_current) and the
     # never-published candidate (first_published_at IS NULL). A discarded
@@ -1245,7 +1261,7 @@ async def get_draft_state(
             text(
                 "SELECT v.id AS version_id, v.index_status, v.staged_abstract, "
                 "       v.staged_keywords, v.staged_fecha, v.index_error, "
-                "       v.headline_fingerprint, d.titulo, "
+                "       v.headline_fingerprint, d.titulo, d.visibility, "
                 "       (SELECT a.user_id FROM document_authors a "
                 "         WHERE a.doc_id = d.id AND a.status = 'owner' LIMIT 1) "
                 "         AS owner_user_id "
@@ -1315,7 +1331,7 @@ async def get_draft_state(
     coauthor_rows = (
         await session.execute(
             text(
-                "SELECT da.user_id, da.display_name, da.status, "
+                "SELECT da.user_id, da.display_name, da.status, da.email, "
                 "       split_part(u.email, '@', 1) AS email_local "
                 "FROM document_authors da "
                 "LEFT JOIN users u ON u.id = da.user_id "
@@ -1338,6 +1354,7 @@ async def get_draft_state(
             row["index_status"], matches
         ),
         is_owner=is_owner,
+        visibility=row["visibility"],
         attachments=[
             AttachmentInfo(
                 id=a["id"],
@@ -1352,6 +1369,7 @@ async def get_draft_state(
                 user_id=c["user_id"],
                 display_name=c["display_name"],
                 email_local=c["email_local"],
+                email=c["email"],
                 status=c["status"],
             )
             for c in coauthor_rows
