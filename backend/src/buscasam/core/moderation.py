@@ -110,7 +110,7 @@ _NOTIFY_KIND = {"hide": "document_hidden", "unhide": "document_unhidden"}
 
 
 async def hide(
-    session: AsyncSession, docente_ctx: UserCtx, report_id: int, reason: str
+    session: AsyncSession, docente_ctx: UserCtx, report_id: int, reason: Reason
 ) -> ActionOutcome | None:
     """Stamp `documents.moderation_hidden_at`, append a `hide` action, resolve
     all open reports on the doc, and notify every registered author — one
@@ -120,7 +120,7 @@ async def hide(
 
 
 async def unhide(
-    session: AsyncSession, docente_ctx: UserCtx, report_id: int, reason: str | None = None
+    session: AsyncSession, docente_ctx: UserCtx, report_id: int, reason: Reason | None = None
 ) -> ActionOutcome | None:
     """Clear `moderation_hidden_at`, append an `unhide` action, resolve all open
     reports, and notify every registered author — one transaction. None on an
@@ -129,7 +129,7 @@ async def unhide(
 
 
 async def dismiss(
-    session: AsyncSession, docente_ctx: UserCtx, report_id: int, reason: str | None = None
+    session: AsyncSession, docente_ctx: UserCtx, report_id: int, reason: Reason | None = None
 ) -> ActionOutcome | None:
     """Append a `dismiss` action and resolve all open reports — the matter is
     settled for the document — without touching `moderation_hidden_at` and
@@ -142,7 +142,7 @@ async def _act(
     docente_ctx: UserCtx,
     report_id: int,
     action: str,
-    reason: str | None,
+    reason: Reason | None,
 ) -> ActionOutcome | None:
     """Shared resolve-all-open + audit-append. Sole writer of
     `documents.moderation_hidden_at` (arch test); touches no other `documents`
@@ -197,43 +197,31 @@ async def _act(
 
     kind = _NOTIFY_KIND.get(action)
     if kind is not None:
-        await _notify_authors(session, action_id=action_id, doc_id=doc_id, kind=kind)
+        await _notify_authors(
+            session, action_id=action_id, doc_id=doc_id, kind=kind, reason=reason
+        )
 
     return ActionOutcome(action_id=action_id, doc_id=doc_id)
 
 
 async def _notify_authors(
-    session: AsyncSession, *, action_id: int, doc_id: int, kind: str
+    session: AsyncSession, *, action_id: int, doc_id: int, kind: str, reason: Reason | None
 ) -> None:
     """Insert one in-app notification per registered author (owner + accepted,
     `user_id NOT NULL`); external authors are skipped. `ON CONFLICT
     (user_id, event_key) DO NOTHING` with `event_key = f"{kind}:{action_id}"`,
     so a retry of the same action never double-notifies any recipient."""
-    rows = (
-        await session.execute(
-            text(
-                "SELECT da.user_id AS user_id, d.titulo AS doc_title "
-                "FROM document_authors da JOIN documents d ON d.id = da.doc_id "
-                "WHERE da.doc_id = :d AND da.status IN ('owner', 'accepted') "
-                "  AND da.user_id IS NOT NULL"
-            ),
-            {"d": doc_id},
-        )
-    ).mappings().all()
-    for r in rows:
-        await session.execute(
-            text(
-                "INSERT INTO notifications (user_id, event_key, kind, payload_json) "
-                "VALUES (:uid, :ek, :kind, "
-                "        jsonb_build_object('doc_title', cast(:doc_title as text), "
-                "                           'doc_id', cast(:doc_id as bigint))) "
-                "ON CONFLICT (user_id, event_key) DO NOTHING"
-            ),
-            {
-                "uid": r["user_id"],
-                "ek": f"{kind}:{action_id}",
-                "kind": kind,
-                "doc_title": r["doc_title"],
-                "doc_id": doc_id,
-            },
-        )
+    await session.execute(
+        text(
+            "INSERT INTO notifications (user_id, event_key, kind, payload_json) "
+            "SELECT da.user_id, :ek, :kind, "
+            "       jsonb_build_object('doc_id', cast(:doc_id as bigint), "
+            "                          'doc_title', d.titulo, "
+            "                          'reason', cast(:reason as text)) "
+            "FROM document_authors da JOIN documents d ON d.id = da.doc_id "
+            "WHERE da.doc_id = :doc_id AND da.status IN ('owner', 'accepted') "
+            "  AND da.user_id IS NOT NULL "
+            "ON CONFLICT (user_id, event_key) DO NOTHING"
+        ),
+        {"ek": f"{kind}:{action_id}", "kind": kind, "doc_id": doc_id, "reason": reason},
+    )

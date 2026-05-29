@@ -121,7 +121,7 @@ async def test_unknown_report_returns_404(client, session, action):
 
     r = await client.post(
         f"/api/moderation/reports/999999/{action}",
-        json={"reason": "x"},
+        json={"reason": "spam"},
         headers=_headers(cookie),
     )
 
@@ -136,7 +136,7 @@ async def test_author_soft_deleted_doc_returns_404(client, session, action):
 
     r = await client.post(
         f"/api/moderation/reports/{report_id}/{action}",
-        json={"reason": "x"},
+        json={"reason": "spam"},
         headers=_headers(cookie),
     )
 
@@ -151,7 +151,7 @@ async def test_non_docente_returns_403(client, session, action):
 
     r = await client.post(
         f"/api/moderation/reports/{report_id}/{action}",
-        json={"reason": "x"},
+        json={"reason": "spam"},
         headers=_headers(cookie),
     )
 
@@ -165,7 +165,7 @@ async def test_unauthenticated_returns_401(client, session, action):
     await session.commit()
 
     r = await client.post(
-        f"/api/moderation/reports/{report_id}/{action}", json={"reason": "x"}
+        f"/api/moderation/reports/{report_id}/{action}", json={"reason": "spam"}
     )
 
     assert r.status_code == 401
