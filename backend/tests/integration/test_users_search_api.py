@@ -65,6 +65,24 @@ async def test_users_search_returns_matches_excluding_self(client, session):
         assert set(u.keys()) >= {"user_id", "name", "email_local", "picture_url"}
 
 
+async def test_users_search_matches_by_email(client, session):
+    searcher_id = await make_user(session, name="Lucas Achaval")
+    match_id = await make_user(
+        session, name="Marcos Achaval", email="machavalrodriguez@unsam-bue.edu.ar"
+    )
+    sid = await _seed_session(session, searcher_id)
+    await session.commit()
+
+    r = await client.get(
+        "/api/users/search",
+        params={"q": "machavalrodriguez@unsam-bue.edu.ar"},
+        cookies={auth.SID_COOKIE: _sid_cookie(sid)},
+    )
+
+    assert r.status_code == 200
+    assert match_id in [u["user_id"] for u in r.json()]
+
+
 async def test_users_search_returns_at_most_10(client, session):
     searcher_id = await make_user(session, name="Searcher")
     sid = await _seed_session(session, searcher_id)

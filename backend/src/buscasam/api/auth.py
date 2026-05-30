@@ -81,7 +81,7 @@ async def search_users(
             text(
                 "SELECT id, name, split_part(email, '@', 1) AS email_local, picture_url "
                 "FROM users "
-                "WHERE id != :uid AND name ILIKE :prefix "
+                "WHERE id != :uid AND (name ILIKE :prefix OR email ILIKE :prefix) "
                 "ORDER BY name LIMIT 10"
             ),
             {"uid": user_ctx.user_id, "prefix": f"{q}%"},
