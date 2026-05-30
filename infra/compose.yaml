@@ -45,7 +45,7 @@ services:
   api:
     build:
       context: ../backend
-    command: ["uvicorn", "buscasam.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    command: ["uvicorn", "buscasam.api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
     environment: &backend_env
       BUSCASAM_ENV: ${BUSCASAM_ENV:-dev}
       BUSCASAM_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-buscasam}:${POSTGRES_PASSWORD:-buscasam}@db:5432/${POSTGRES_DB:-buscasam}
@@ -64,7 +64,7 @@ services:
     volumes:
       - ./.data/blobs:/var/lib/buscasam/blobs
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/openapi.json"]
       interval: 10s
       timeout: 5s
       retries: 5

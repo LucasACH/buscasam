@@ -8,7 +8,7 @@
 #   - TEI offline + pinned revision (§10)       - nginx :443 for TLS_MODE=self (§9)
 #
 # TODO: replace every `@sha256:...` placeholder with the resolved digest before
-# the first prod deploy. CI fails the compose smoke check until they are real.
+# the first prod deploy. `docker compose ... config`/`pull` fails until they are real.
 
 x-logging: &default-logging
   driver: json-file
