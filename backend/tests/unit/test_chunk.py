@@ -6,8 +6,9 @@ coordination (module map §core/chunk).
 """
 from __future__ import annotations
 
-from buscasam.core.chunk import MAX_CHUNK_CHARS, chunk, headline_chunk, headline_fingerprint
+from buscasam.core.chunk import chunk, headline_chunk, headline_fingerprint
 from buscasam.core.extract import ExtractedDoc
+from buscasam.core.tokenizer import MAX_TOKENS, passage_token_len
 
 
 def test_headline_fingerprint_is_deterministic():
@@ -91,11 +92,11 @@ def test_chunk_no_paragraph_breaks_yields_single_chunk():
 
 
 def test_chunk_splits_oversized_paragraph_at_sentence_boundaries():
-    """ADR-0007 §2: paragraphs above the token budget split at sentence boundaries."""
+    """ADR-0002 §4: paragraphs above the token budget split at sentence boundaries."""
     sentence = "Esta es una oración larga sobre el tema del trabajo. "
-    big = sentence * 200  # ≈ 10kB, well above MAX_CHUNK_CHARS
+    big = sentence * 200  # ≈ 10kB, well above the 512-token budget
     doc = ExtractedDoc(text=big, paragraph_breaks=[], page_breaks=[], raw_metadata={})
     chunks = chunk(doc)
     assert len(chunks) > 1
-    assert all(len(c.body_text) <= MAX_CHUNK_CHARS for c in chunks)
+    assert all(passage_token_len(c.body_text) <= MAX_TOKENS for c in chunks)
     assert [c.chunk_seq for c in chunks] == list(range(1, len(chunks) + 1))

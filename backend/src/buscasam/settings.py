@@ -1,12 +1,25 @@
+import json
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEV_SECRET_KEY = "dev-secret-do-not-use-in-prod"
 DEV_OIDC_CLIENT_SECRET = "dev-client-secret"
+
+
+def _vendored_tokenizer_revision() -> str:
+    """Default model revision: the SHA the vendored e5 tokenizer was pinned to.
+
+    Operators override via `BUSCASAM_EMBEDDING_MODEL_REVISION` in prod; startup
+    verifies the vendored tokenizer manifest still matches (ADR-0002 §5).
+    """
+    manifest = (
+        Path(__file__).parent / "core" / "vendor" / "e5_tokenizer" / "manifest.json"
+    )
+    return json.loads(manifest.read_text())["revision"]
 
 
 class Settings(BaseSettings):
@@ -16,6 +29,8 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://buscasam:buscasam@localhost:5432/buscasam"
     tei_url: str = "http://localhost:8080"
+    # ADR-0002 §5: single source for the HF model + vendored tokenizer revision.
+    embedding_model_revision: str = Field(default_factory=_vendored_tokenizer_revision)
     min_semantic_similarity: float = 0.78
     embed_query_timeout_s: float = 0.5
     # ADR-0007 §12: per-row provenance stamp for the extraction pipeline.
