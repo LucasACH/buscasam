@@ -65,6 +65,7 @@ async def make_user(
     *,
     role: str = "estudiante",
     name: str = "Test User",
+    email: str | None = None,
 ) -> int:
     conn = await session.connection()
     sub = f"sub-{uuid.uuid4().hex}"
@@ -76,7 +77,7 @@ async def make_user(
             ),
             {
                 "sub": sub,
-                "email": f"{sub}@unsam.edu.ar",
+                "email": email or f"{sub}@unsam.edu.ar",
                 "hd": _HD_BY_ROLE[role],
                 "role": role,
                 "name": name,
