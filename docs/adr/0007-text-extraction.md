@@ -6,7 +6,7 @@ Accepted
 
 ## Decision
 
-Indexable text is extracted from PDF/DOCX/ODT via per-format libraries (`pdfminer.six`, `python-docx`, `odfpy`), with `ocrmypdf` (Tesseract on `spa+eng`) as a gated PDF fallback. All extraction and metadata suggestion logic lives behind `core/extract.py`. Initial extraction runs on the default worker; PDFs requiring OCR are handed to the dedicated OCR worker before OCR is invoked. Encrypted PDFs are rejected synchronously at upload; corrupted files fail asynchronously. Suggested metadata feeds ADR-0010 staged publication.
+Indexable text is extracted from PDF/DOCX/ODT via per-format libraries (`pdfminer.six`, `python-docx`, `odfpy`), with `ocrmypdf` (Tesseract on `spa+eng`) as a gated PDF fallback. All extraction and metadata suggestion logic lives behind `core/extract.py`. Initial extraction runs on the default worker; PDFs requiring OCR are handed to the dedicated OCR worker before OCR is invoked. Encrypted PDFs are rejected synchronously at upload; corrupted files fail asynchronously. Suggested metadata feeds ADR-0010 staged publication. The §6–7 abstract/keyword heuristics may be refined by an optional, off-by-default local LLM (ADR-0012); the heuristic remains the always-on fallback.
 
 ## Locked
 

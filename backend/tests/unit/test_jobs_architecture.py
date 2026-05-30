@@ -14,8 +14,10 @@ JOBS_FILE = SRC_ROOT / "core" / "jobs.py"
 
 
 def _python_files_except_jobs():
+    # Migrations apply the procrastinate schema and are exempt from chokepoint
+    # rules (cf. ADR-0008 §3, "schema/index literals" carve-out in ADR-0003 §3).
     for p in SRC_ROOT.rglob("*.py"):
-        if p != JOBS_FILE and "__pycache__" not in p.parts:
+        if p != JOBS_FILE and "__pycache__" not in p.parts and "migrations" not in p.parts:
             yield p
 
 

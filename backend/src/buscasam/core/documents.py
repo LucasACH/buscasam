@@ -16,6 +16,7 @@ from buscasam.core.document_access import (
     readable_where,
     restorable_where,
 )
+from buscasam.core.embed import halfvec_literal
 from buscasam.settings import settings
 
 if TYPE_CHECKING:
@@ -33,10 +34,6 @@ class _Unset:
 
 
 UNSET = _Unset()
-
-
-def _halfvec_literal(values: np.ndarray) -> str:
-    return "[" + ",".join(f"{float(v):.6f}" for v in values) + "]"
 
 
 @dataclass(frozen=True)
@@ -611,7 +608,7 @@ async def write_indexed_candidate(
                 "seq": c.chunk_seq,
                 "hl": c.is_headline,
                 "body": c.body_text,
-                "emb": _halfvec_literal(emb),
+                "emb": halfvec_literal(emb),
                 "mv": _EMBEDDING_MODEL_VERSION,
                 "vid": version_id,
             },
@@ -727,7 +724,7 @@ async def write_headline(
         {
             "doc_id": doc_id,
             "body": headline.body_text,
-            "emb": _halfvec_literal(embed),
+            "emb": halfvec_literal(embed),
             "mv": _EMBEDDING_MODEL_VERSION,
             "vid": version_id,
             "is_current": row["is_current"],

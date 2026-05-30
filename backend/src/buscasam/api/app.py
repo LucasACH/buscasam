@@ -17,6 +17,7 @@ from buscasam.api.docs import router as docs_router
 from buscasam.api.documents import router as documents_router
 from buscasam.api.moderation import router as moderation_router
 from buscasam.api.search import router as search_router
+from buscasam.api.sitemap import router as sitemap_router
 from buscasam.core import auth
 from buscasam.core.embed import assert_model_revision_pinned
 from buscasam.settings import settings
@@ -70,4 +71,5 @@ def create_app() -> FastAPI:
     app.include_router(documents_router)
     app.include_router(docs_router)
     app.include_router(moderation_router)
+    app.include_router(sitemap_router)
     return app
