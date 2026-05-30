@@ -13,6 +13,7 @@ type CandidateDTO = NonNullable<DraftStateDTO["candidate"]>;
 export type Candidate = {
   status: CandidateDTO["status"];
   statusLabel: string;
+  stage: CandidateDTO["index_stage"];
   stagedAbstract: CandidateDTO["staged_abstract"];
   stagedKeywords: CandidateDTO["staged_keywords"];
   stagedFecha: CandidateDTO["staged_fecha"];
@@ -32,6 +33,7 @@ export type DraftState = {
   lifecycle: {
     formSeedKey: string;
     statusLabel: string;
+    stage: DraftStateDTO["index_stage"];
     showSuggestionsSpinner: boolean;
     gateMessage: string | null;
     canPublish: boolean;
@@ -79,7 +81,10 @@ export type DraftWorkspaceActions = {
   };
 };
 
-export const POLL_INTERVAL_MS = 3000;
+// Only used while shouldPoll() is true (pending/processing/reindexing), so this
+// is the active-processing cadence — kept snappy so progress checkpoints surface
+// promptly rather than lagging a step behind.
+export const POLL_INTERVAL_MS = 1500;
 
 const STATUS_PILL: Record<string, string> = {
   pending: "Procesando…",
@@ -118,6 +123,7 @@ function projectCandidate(c: CandidateDTO): Candidate {
   return {
     status: c.status,
     statusLabel: CANDIDATE_STATUS_LABEL[c.status],
+    stage: c.index_stage,
     stagedAbstract: c.staged_abstract,
     stagedKeywords: c.staged_keywords,
     stagedFecha: c.staged_fecha,
@@ -166,6 +172,7 @@ function projectDraftState(state: DraftStateDTO): DraftState {
     lifecycle: {
       formSeedKey: state.index_status,
       statusLabel: STATUS_PILL[state.index_status] ?? state.index_status,
+      stage: state.index_stage,
       showSuggestionsSpinner: state.index_status === "processing",
       gateMessage: state.publish_gate_reason
         ? (GATE_COPY[state.publish_gate_reason] ?? state.publish_gate_reason)

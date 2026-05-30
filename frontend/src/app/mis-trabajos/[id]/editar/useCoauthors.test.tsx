@@ -31,6 +31,7 @@ function returns(overrides: Partial<DraftStateDTO> = {}) {
   const body: DraftStateDTO = {
     title: "t",
     index_status: "indexed",
+    index_stage: null,
     staged_abstract: null,
     staged_keywords: [],
     staged_fecha: null,

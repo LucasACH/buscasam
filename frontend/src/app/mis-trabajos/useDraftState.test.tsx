@@ -32,6 +32,7 @@ type CandidateDTO = NonNullable<DraftStateDTO["candidate"]>;
 function candidate(over: Partial<CandidateDTO> = {}): CandidateDTO {
   return {
     status: "processing",
+    index_stage: null,
     staged_abstract: null,
     staged_keywords: [],
     staged_fecha: null,
@@ -47,6 +48,7 @@ function returns(state: Partial<DraftStateDTO>) {
   const body: DraftStateDTO = {
     title: "Doc",
     index_status: "indexed",
+    index_stage: null,
     staged_abstract: null,
     staged_keywords: [],
     staged_fecha: null,
@@ -118,6 +120,7 @@ describe("useDraftState", () => {
     expect(result.current.state?.lifecycle).toEqual({
       formSeedKey: "indexed",
       statusLabel: "Listo para publicar",
+      stage: null,
       showSuggestionsSpinner: false,
       gateMessage: null,
       canPublish: true,

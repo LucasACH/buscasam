@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { ProcessingSteps } from "@/components/ProcessingSteps";
 import type {
   Candidate,
   DraftWorkspaceActions,
@@ -88,8 +89,8 @@ export function CandidatePanel({
       )}
 
       {candidate?.status === "processing" && (
-        <div className="mt-3 space-y-2">
-          <StatusPill>{candidate.statusLabel}</StatusPill>
+        <div className="mt-3 space-y-3">
+          <ProcessingSteps stage={candidate.stage} />
           <ReplaceButton label="Reemplazar" onPick={onPick} />
           {candidate.canDiscard && (
             <DiscardButton onClick={onDiscard} disabled={discarding} />

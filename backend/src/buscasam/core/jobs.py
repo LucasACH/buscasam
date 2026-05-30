@@ -71,6 +71,15 @@ def _coauthor_lock(doc_id: int) -> str:
 # --- Plain async cores (callable by tests + by the task body wrapper). ---
 
 
+async def _set_stage(sm, version_id: int, stage: str) -> None:
+    """Short transaction recording the worker's current pipeline checkpoint for
+    the editar progress UI. Guarded on 'processing' inside `set_index_stage`, so
+    it's a clean no-op against a row a concurrent descartar already discarded."""
+    async with sm() as session:
+        await documents.set_index_stage(session, version_id, stage)
+        await session.commit()
+
+
 async def _complete_indexing(
     sm,
     tei: httpx.AsyncClient,
@@ -81,11 +90,20 @@ async def _complete_indexing(
     finalize transaction (ADR-0011 §5). `write_indexed_candidate` is gated on
     `index_status='processing'`, so a descartar committed during the embed IO
     makes this write a clean no-op — no chunks materialize on a discarded row."""
+    # 'summarizing' surfaces as a checkpoint only when the metadata LLM actually
+    # runs; otherwise the heuristic extractor is instant and the step is
+    # 'analyzing' (metadata + chunking). See ADR-0011 progress UI.
+    await _set_stage(
+        sm,
+        cv.version_id,
+        "summarizing" if settings.metadata_llm_enabled else "analyzing",
+    )
     meta = await extractmod.suggest_metadata(doc)
     body = chunkmod.chunk(doc)
     headline = chunkmod.headline_chunk(cv.title, meta.abstract)
     fp = chunkmod.headline_fingerprint(cv.title, meta.abstract)
 
+    await _set_stage(sm, cv.version_id, "indexing")
     texts = [c.body_text for c in [headline, *body]]
     embeds = [await embedmod.embed(tei, t, kind="passage") for t in texts]
 
@@ -152,6 +170,7 @@ async def _run_ocr_index_document(
     cv = await _claim(sm, version_id)
     if cv is None:
         return
+    await _set_stage(sm, version_id, "ocr")
     try:
         import ocrmypdf
         from ocrmypdf.exceptions import ExitCodeException
