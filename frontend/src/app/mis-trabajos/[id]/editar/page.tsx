@@ -5,7 +5,6 @@ import { useParams, useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@/api/client";
@@ -25,6 +24,7 @@ import { AreaField } from "@/components/AreaField";
 import { AttachmentsPanel } from "@/components/AttachmentsPanel";
 import { CandidatePanel } from "@/components/CandidatePanel";
 import { CoauthorsPanel } from "@/components/CoauthorsPanel";
+import { ProcessingSteps } from "@/components/ProcessingSteps";
 import { VersionsPanel } from "@/components/VersionsPanel";
 import { useUser } from "@/lib/useUser";
 import {
@@ -73,7 +73,7 @@ export default function EditarPage() {
             data-testid="indexing-block"
             className="flex flex-col items-center gap-4 py-24 text-center"
           >
-            <Loader2 className="text-muted-foreground h-8 w-8 animate-spin" />
+            <ProcessingSteps stage={state.lifecycle.stage} />
             <p className="text-muted-foreground max-w-md text-sm">
               Estamos procesando tu archivo. Esto puede tardar unos minutos.
               Podés cerrar esta página y volver más tarde: el trabajo sigue

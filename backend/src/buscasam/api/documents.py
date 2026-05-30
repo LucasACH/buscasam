@@ -267,6 +267,7 @@ class DraftVersionDTO(BaseModel):
 
 class CandidateStateDTO(BaseModel):
     status: Literal["processing", "ready", "failed"]
+    index_stage: str | None  # pipeline checkpoint while status='processing'
     staged_abstract: str | None
     staged_keywords: list[str]
     staged_fecha: date | None
@@ -279,6 +280,7 @@ class CandidateStateDTO(BaseModel):
 class DraftStateDTO(BaseModel):
     title: str
     index_status: str
+    index_stage: str | None
     staged_abstract: str | None
     staged_keywords: list[str]
     staged_fecha: date | None
@@ -323,6 +325,7 @@ async def get_draft(
     return DraftStateDTO(
         title=state.title,
         index_status=state.index_status,
+        index_stage=state.index_stage,
         staged_abstract=state.staged_abstract,
         staged_keywords=state.staged_keywords,
         staged_fecha=state.staged_fecha,
@@ -369,6 +372,7 @@ async def get_draft(
         candidate=(
             CandidateStateDTO(
                 status=state.candidate.status,
+                index_stage=state.candidate.index_stage,
                 staged_abstract=state.candidate.staged_abstract,
                 staged_keywords=state.candidate.staged_keywords,
                 staged_fecha=state.candidate.staged_fecha,

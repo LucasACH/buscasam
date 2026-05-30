@@ -725,6 +725,8 @@ export interface components {
              * @enum {string}
              */
             status: "processing" | "ready" | "failed";
+            /** Index Stage */
+            index_stage: string | null;
             /** Staged Abstract */
             staged_abstract: string | null;
             /** Staged Keywords */
@@ -899,6 +901,8 @@ export interface components {
             title: string;
             /** Index Status */
             index_status: string;
+            /** Index Stage */
+            index_stage: string | null;
             /** Staged Abstract */
             staged_abstract: string | null;
             /** Staged Keywords */
