@@ -121,6 +121,33 @@ async def test_get_draft_returns_state_for_owner(client, session):
     assert body["staged_abstract"] == "resumen"
 
 
+async def test_get_draft_returns_generated_snapshot(client, session):
+    """Issue #94 AC2: the draft DTO exposes the generated snapshot fields."""
+    uid = await make_user(session)
+    sid = await _seed_session(session, uid)
+    doc_id, version_id = await _seed_candidate(session, owner_id=uid)
+    await session.execute(
+        text(
+            "UPDATE document_versions SET generated_abstract = :a, "
+            "  generated_keywords = :k, generated_fecha = :f WHERE id = :vid"
+        ),
+        {"a": "resumen del extractor", "k": ["extractor"], "f": "2022-07-01",
+         "vid": version_id},
+    )
+    await session.commit()
+
+    r = await client.get(
+        f"/api/documents/{doc_id}/draft",
+        cookies={auth.SID_COOKIE: _sid_cookie(sid)},
+    )
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["generated_abstract"] == "resumen del extractor"
+    assert body["generated_keywords"] == ["extractor"]
+    assert body["generated_fecha"] == "2022-07-01"
+
+
 async def test_get_draft_cross_user_returns_404(client, session):
     owner = await make_user(session)
     other = await make_user(session)

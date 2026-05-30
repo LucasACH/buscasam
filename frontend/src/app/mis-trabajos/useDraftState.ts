@@ -26,6 +26,9 @@ export type DraftState = {
   staged_abstract: DraftStateDTO["staged_abstract"];
   staged_keywords: DraftStateDTO["staged_keywords"];
   staged_fecha: DraftStateDTO["staged_fecha"];
+  generated_abstract: DraftStateDTO["generated_abstract"];
+  generated_keywords: DraftStateDTO["generated_keywords"];
+  generated_fecha: DraftStateDTO["generated_fecha"];
   lifecycle: {
     formSeedKey: string;
     statusLabel: string;
@@ -156,6 +159,9 @@ function projectDraftState(state: DraftStateDTO): DraftState {
     staged_abstract: state.staged_abstract,
     staged_keywords: state.staged_keywords,
     staged_fecha: state.staged_fecha,
+    generated_abstract: state.generated_abstract,
+    generated_keywords: state.generated_keywords,
+    generated_fecha: state.generated_fecha,
     lifecycle: {
       formSeedKey: state.index_status,
       statusLabel: STATUS_PILL[state.index_status] ?? state.index_status,

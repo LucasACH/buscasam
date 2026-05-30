@@ -85,6 +85,29 @@ async def test_get_draft_state_indexed_and_matched_is_publishable(session):
     assert state.staged_abstract == "resumen"
 
 
+async def test_get_draft_state_exposes_generated_snapshot(session):
+    """Issue #94: the polling payload carries the immutable generated snapshot
+    alongside staged_*, so the editar form can offer per-field Restaurar."""
+    uid, doc_id, version_id = await _seed_candidate(
+        session, staged_abstract="resumen editado", staged_keywords=["editado"]
+    )
+    await session.execute(
+        text(
+            "UPDATE document_versions SET generated_abstract = :a, "
+            "  generated_keywords = :k, generated_fecha = :f WHERE id = :vid"
+        ),
+        {"a": "resumen del extractor", "k": ["extractor"], "f": date(2022, 7, 1),
+         "vid": version_id},
+    )
+
+    state = await documents.get_draft_state(session, _ctx(uid), doc_id)
+
+    assert state.staged_abstract == "resumen editado"
+    assert state.generated_abstract == "resumen del extractor"
+    assert state.generated_keywords == ["extractor"]
+    assert state.generated_fecha == date(2022, 7, 1)
+
+
 async def test_get_draft_state_versions_lists_published_excludes_candidate(session):
     """ADR-0011 §4: the editar Versiones list mirrors get_detail — only rows
     that were at some point the public current appear, by 1-based n. A draft's
@@ -120,6 +143,35 @@ async def test_get_draft_state_versions_lists_published_excludes_candidate(sessi
         (1, "v1.pdf"),
         (2, "v2.pdf"),
     ]
+
+
+async def test_metadata_patch_leaves_generated_snapshot_immutable(session):
+    """Issue #94 AC1: editing the staged value via update_draft_metadata never
+    touches the immutable generated snapshot."""
+    uid, doc_id, version_id = await _seed_candidate(
+        session, staged_abstract="resumen del extractor", index_status="indexed"
+    )
+    await session.execute(
+        text(
+            "UPDATE document_versions SET generated_abstract = :a, "
+            "  generated_keywords = :k, generated_fecha = :f WHERE id = :vid"
+        ),
+        {"a": "resumen del extractor", "k": ["extractor"], "f": date(2022, 7, 1),
+         "vid": version_id},
+    )
+
+    await documents.update_draft_metadata(
+        session, _ctx(uid), doc_id,
+        abstract="resumen editado", keywords=["editado"], fecha=date(2000, 1, 1),
+    )
+
+    state = await documents.get_draft_state(session, _ctx(uid), doc_id)
+    assert state.staged_abstract == "resumen editado"
+    assert state.staged_keywords == ["editado"]
+    assert state.staged_fecha == date(2000, 1, 1)
+    assert state.generated_abstract == "resumen del extractor"
+    assert state.generated_keywords == ["extractor"]
+    assert state.generated_fecha == date(2022, 7, 1)
 
 
 async def test_get_draft_state_processing_gates_with_processing(session):
