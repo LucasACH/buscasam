@@ -1,0 +1,25 @@
+# TLS_MODE=self (ADR-0009 §9): we own the certs. :80 serves the ACME challenge
+# and 301s everything else to :443; :443 terminates TLS and serves the app.
+
+server {
+    listen 80 default_server;
+    server_name ${SERVER_NAME};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${SERVER_NAME};
+
+    ssl_certificate     /etc/letsencrypt/live/${SERVER_NAME}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${SERVER_NAME}/privkey.pem;
+
+    include /etc/nginx/templates/_locations.conf;
+}
