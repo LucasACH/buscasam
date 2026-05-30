@@ -34,6 +34,7 @@ export type DraftState = {
     formSeedKey: string;
     statusLabel: string;
     stage: DraftStateDTO["index_stage"];
+    queued: boolean;
     showSuggestionsSpinner: boolean;
     gateMessage: string | null;
     canPublish: boolean;
@@ -138,6 +139,10 @@ function useDraftQuery(docId: number) {
     queryKey: draftQueryKey(docId),
     refetchInterval: (q) =>
       shouldPoll(q.state.data) ? POLL_INTERVAL_MS : false,
+    // The indexing copy invites the author to close the tab and come back;
+    // keep polling while backgrounded so the page reflects live progress on
+    // return instead of freezing at the last foreground poll.
+    refetchIntervalInBackground: true,
     queryFn: async () => {
       const { data, error } = await api.GET("/api/documents/{doc_id}/draft", {
         params: { path: { doc_id: docId } },
@@ -173,6 +178,7 @@ function projectDraftState(state: DraftStateDTO): DraftState {
       formSeedKey: state.index_status,
       statusLabel: STATUS_PILL[state.index_status] ?? state.index_status,
       stage: state.index_stage,
+      queued: state.index_status === "pending",
       showSuggestionsSpinner: state.index_status === "processing",
       gateMessage: state.publish_gate_reason
         ? (GATE_COPY[state.publish_gate_reason] ?? state.publish_gate_reason)
