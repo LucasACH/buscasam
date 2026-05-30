@@ -32,6 +32,9 @@ vi.mock("sonner", () => ({ toast: { error: toastError } }));
 vi.mock("@/components/CoauthorsPanel", () => ({
   CoauthorsPanel: () => null,
 }));
+vi.mock("@/components/AreaField", () => ({
+  AreaField: () => null,
+}));
 const { attachmentsPanelMock, candidatePanelMock, versionsPanelMock } =
   vi.hoisted(() => ({
     attachmentsPanelMock: vi.fn<(props: unknown) => null>(() => null),
@@ -78,6 +81,7 @@ function draft(
       generated_keywords: ["redes", "grafos"],
       generated_fecha: "2024-03-01",
       isOwner: true,
+      area_path: "escuela.carrera.materia",
       candidate: null,
       versions: [],
       attachments: [],

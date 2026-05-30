@@ -57,6 +57,7 @@ function returns(state: Partial<DraftStateDTO>) {
     publish_gate_reason: null,
     is_owner: true,
     visibility: "publico",
+    area_path: "escuela.carrera.materia",
     attachments: [],
     coauthors: [],
     versions: [],
