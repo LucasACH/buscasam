@@ -222,13 +222,15 @@ function EditarForm({
   // The prefilled inputs subsume the old suggestions panel; Restaurar appears
   // per field only while the staged value diverges from the generated snapshot.
   const canRestoreAbstract =
-    (state.staged_abstract ?? "") !== (state.generated_abstract ?? "");
-  const canRestoreKeywords = !keywordsEqual(
-    state.staged_keywords ?? [],
-    state.generated_keywords ?? [],
-  );
+    state.generated_abstract != null &&
+    (state.staged_abstract ?? "") !== state.generated_abstract;
+  const canRestoreKeywords =
+    state.generated_keywords != null &&
+    state.generated_keywords.length > 0 &&
+    !keywordsEqual(state.staged_keywords ?? [], state.generated_keywords);
   const canRestoreFecha =
-    (state.staged_fecha ?? "") !== (state.generated_fecha ?? "");
+    state.generated_fecha != null &&
+    (state.staged_fecha ?? "") !== state.generated_fecha;
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8">

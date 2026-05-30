@@ -391,6 +391,25 @@ describe("editar page", () => {
     expect(screen.queryByTestId("restore-fecha")).not.toBeInTheDocument();
   });
 
+  it("hides Restaurar when no generated snapshot exists (pre-migration draft)", () => {
+    // Drafts indexed before migration 0018 have null/empty generated_*; there is
+    // nothing to restore to, so Restaurar must not offer to wipe the staged value.
+    useDraftStateMock.mockReturnValue(
+      draft({
+        staged_abstract: "resumen editado",
+        staged_keywords: ["editado"],
+        staged_fecha: "2024-03-01",
+        generated_abstract: null,
+        generated_keywords: [],
+        generated_fecha: null,
+      }),
+    );
+    render(<EditarPage />);
+    expect(screen.queryByTestId("restore-abstract")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("restore-keywords")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("restore-fecha")).not.toBeInTheDocument();
+  });
+
   it("never offers Restaurar for título (author-entered, not generated)", () => {
     useDraftStateMock.mockReturnValue(draft({ title: "Otro título" }));
     render(<EditarPage />);
