@@ -116,6 +116,107 @@ async def test_index_document_happy_path_indexes_pdf(session, blob_root, worker_
     assert status == "indexed"
 
 
+async def test_index_document_writes_progress_stages(
+    session, blob_root, worker_sm, monkeypatch
+):
+    from fpdf import FPDF
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=12)
+    pdf.multi_cell(180, 10, "Resumen")
+    pdf.multi_cell(180, 10, "Este trabajo investiga la integracion. " * 20)
+    payload = bytes(pdf.output())
+    sha_hex, sha_bytes = _persist_blob(blob_root, payload)
+    uid, doc_id, version_id = await _seed_version(
+        session, sha_bytes=sha_bytes, mime="application/pdf"
+    )
+    tei = _tei_mock()
+    # Pin the metadata-LLM branch off so the metadata checkpoint is deterministic
+    # ('analyzing'); the 'summarizing' branch is covered separately below.
+    monkeypatch.setattr(jobs.settings, "metadata_llm_enabled", False)
+
+    async def read_stage() -> str | None:
+        return (
+            await session.execute(
+                text("SELECT index_stage FROM document_versions WHERE id = :id"),
+                {"id": version_id},
+            )
+        ).scalar_one()
+
+    # The worker commits each checkpoint before doing the matching IO, so a spy
+    # wrapping that IO observes the stage already set (LLM off → 'analyzing').
+    observed: dict[str, str | None] = {}
+    real_extract = jobs.extractmod.extract
+
+    async def spy_extract(*a, **k):
+        observed["at_extract"] = await read_stage()
+        return await real_extract(*a, **k)
+
+    real_suggest = jobs.extractmod.suggest_metadata
+
+    async def spy_suggest(*a, **k):
+        observed["at_metadata"] = await read_stage()
+        return await real_suggest(*a, **k)
+
+    real_embed = jobs.embedmod.embed
+
+    async def spy_embed(*a, **k):
+        observed.setdefault("at_embed", await read_stage())
+        return await real_embed(*a, **k)
+
+    monkeypatch.setattr(jobs.extractmod, "extract", spy_extract)
+    monkeypatch.setattr(jobs.extractmod, "suggest_metadata", spy_suggest)
+    monkeypatch.setattr(jobs.embedmod, "embed", spy_embed)
+
+    await jobs._run_index_document(worker_sm, tei, version_id)
+    await tei.aclose()
+
+    assert observed["at_extract"] == "reading"
+    assert observed["at_metadata"] == "analyzing"
+    assert observed["at_embed"] == "indexing"
+    # Cleared once finalized so a stale checkpoint never lingers on an indexed row.
+    assert await read_stage() is None
+
+
+async def test_index_document_summarizing_stage_when_llm_enabled(
+    session, blob_root, worker_sm, monkeypatch
+):
+    from fpdf import FPDF
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=12)
+    pdf.multi_cell(180, 10, "Resumen")
+    pdf.multi_cell(180, 10, "Este trabajo investiga la integracion. " * 20)
+    payload = bytes(pdf.output())
+    sha_hex, sha_bytes = _persist_blob(blob_root, payload)
+    uid, doc_id, version_id = await _seed_version(
+        session, sha_bytes=sha_bytes, mime="application/pdf"
+    )
+    tei = _tei_mock()
+    monkeypatch.setattr(jobs.settings, "metadata_llm_enabled", True)
+
+    observed: dict[str, str | None] = {}
+    real_suggest = jobs.extractmod.suggest_metadata
+
+    async def spy_suggest(*a, **k):
+        observed["at_metadata"] = (
+            await session.execute(
+                text("SELECT index_stage FROM document_versions WHERE id = :id"),
+                {"id": version_id},
+            )
+        ).scalar_one()
+        return await real_suggest(*a, **k)
+
+    monkeypatch.setattr(jobs.extractmod, "suggest_metadata", spy_suggest)
+
+    await jobs._run_index_document(worker_sm, tei, version_id)
+    await tei.aclose()
+
+    assert observed["at_metadata"] == "summarizing"
+
+
 async def test_index_document_corrupted_pdf_marks_failed_and_notifies(session, blob_root, worker_sm):
     payload = b"%PDF-1.4 totally not a real pdf body"
     sha_hex, sha_bytes = _persist_blob(blob_root, payload)

@@ -134,6 +134,7 @@ class CandidateState:
     (module map §core/documents, ADR-0011 §9). `status` is the raw lifecycle
     collapsed to the three UI states; the Spanish labels live on the frontend."""
     status: Literal["processing", "ready", "failed"]
+    index_stage: str | None  # pipeline checkpoint while status='processing'
     staged_abstract: str | None
     staged_keywords: list[str]
     staged_fecha: date | None
@@ -157,6 +158,7 @@ class DraftState:
     version_id: int
     title: str
     index_status: str
+    index_stage: str | None
     staged_abstract: str | None
     staged_keywords: list[str]
     staged_fecha: date | None
@@ -541,10 +543,30 @@ async def _begin_indexing(
     if status in ("indexed", "discarded"):
         return None
     await session.execute(
-        text("UPDATE document_versions SET index_status = 'processing' WHERE id = :id"),
+        text(
+            "UPDATE document_versions "
+            "SET index_status = 'processing', index_stage = 'reading' "
+            "WHERE id = :id"
+        ),
         {"id": version_id},
     )
     return await load_candidate(session, version_id)
+
+
+async def set_index_stage(
+    session: AsyncSession, version_id: int, stage: str
+) -> None:
+    """Record the worker's current pipeline checkpoint for the editar progress
+    UI. Guarded on index_status='processing' (like the finalize write) so a
+    descartar committed mid-IO leaves the stage untouched — a no-op on a
+    discarded/failed/indexed row. Advisory only; never gates publish."""
+    await session.execute(
+        text(
+            "UPDATE document_versions SET index_stage = :stage "
+            "WHERE id = :id AND index_status = 'processing'"
+        ),
+        {"stage": stage, "id": version_id},
+    )
 
 
 async def write_indexed_candidate(
@@ -606,6 +628,7 @@ async def write_indexed_candidate(
         text(
             "UPDATE document_versions SET "
             "  index_status = 'indexed', "
+            "  index_stage = NULL, "
             "  staged_abstract = COALESCE(staged_abstract, :abstract), "
             "  staged_keywords = COALESCE(staged_keywords, :keywords), "
             "  staged_fecha = COALESCE(staged_fecha, :fecha), "
@@ -1270,7 +1293,8 @@ async def get_draft_state(
     row = (
         await session.execute(
             text(
-                "SELECT v.id AS version_id, v.index_status, v.staged_abstract, "
+                "SELECT v.id AS version_id, v.index_status, v.index_stage, "
+                "       v.staged_abstract, "
                 "       v.staged_keywords, v.staged_fecha, v.index_error, "
                 "       v.generated_abstract, v.generated_keywords, "
                 "       v.generated_fecha, "
@@ -1312,7 +1336,8 @@ async def get_draft_state(
     cand_row = (
         await session.execute(
             text(
-                "SELECT v.index_status, v.staged_abstract, v.staged_keywords, "
+                "SELECT v.index_status, v.index_stage, v.staged_abstract, "
+                "       v.staged_keywords, "
                 "       v.staged_fecha, v.indexed_at, v.index_error, "
                 "       v.headline_fingerprint, d.titulo "
                 "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
@@ -1330,6 +1355,7 @@ async def get_draft_state(
         )
         candidate = CandidateState(
             status=_candidate_status(cand_row["index_status"]),
+            index_stage=cand_row["index_stage"],
             staged_abstract=cand_row["staged_abstract"],
             staged_keywords=cand_row["staged_keywords"] or [],
             staged_fecha=cand_row["staged_fecha"],
@@ -1360,6 +1386,7 @@ async def get_draft_state(
         version_id=row["version_id"],
         title=row["titulo"],
         index_status=row["index_status"],
+        index_stage=row["index_stage"],
         staged_abstract=row["staged_abstract"],
         staged_keywords=row["staged_keywords"] or [],
         staged_fecha=row["staged_fecha"],

@@ -14,6 +14,7 @@ const publish = vi.fn();
 type Candidate = {
   status: "processing" | "ready" | "failed";
   statusLabel: string;
+  stage: string | null;
   stagedAbstract: string | null;
   stagedKeywords: string[];
   stagedFecha: string | null;
@@ -26,6 +27,7 @@ function candidate(over: Partial<Candidate> = {}): Candidate {
   return {
     status: "processing",
     statusLabel: "Procesando…",
+    stage: null,
     stagedAbstract: null,
     stagedKeywords: [],
     stagedFecha: null,
@@ -67,10 +69,10 @@ describe("CandidatePanel", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the processing pill and a Reemplazar affordance while processing", () => {
-    wrap(candidate({ status: "processing", statusLabel: "Procesando…" }));
+  it("shows the progress checkpoint and a Reemplazar affordance while processing", () => {
+    wrap(candidate({ status: "processing", stage: "reading" }));
 
-    expect(screen.getByText("Procesando…")).toBeInTheDocument();
+    expect(screen.getByText("Leyendo el documento")).toBeInTheDocument();
     expect(screen.getByLabelText("Reemplazar")).toBeInTheDocument();
   });
 
