@@ -26,8 +26,8 @@ function LoginPageInner() {
       {isNotUnsam ? (
         <>
           <p className="text-muted-foreground text-center text-sm">
-            Solo cuentas @unsam.edu.ar o @estudiantes.unsam.edu.ar pueden
-            ingresar.
+            Solo cuentas @unsam.edu.ar, @estudiantes.unsam.edu.ar o
+            @unsam-bue.edu.ar pueden ingresar.
           </p>
           <Button asChild>
             <a href={LOGIN_HREF}>Probar otra cuenta</a>

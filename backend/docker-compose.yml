@@ -34,6 +34,14 @@ services:
       timeout: 3s
       retries: 60
 
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: buscasam-tunnel
+    profiles: ["tunnel"]
+    command: ["tunnel", "--no-autoupdate", "--url", "http://host.docker.internal:3000"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
 volumes:
   buscasam-db-data:
   buscasam-tei-cache:
