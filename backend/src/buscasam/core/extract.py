@@ -369,18 +369,24 @@ class _LlmMetadata:
 
 def _metadata_prompt(doc: ExtractedDoc, fallback: IndexableMetadata) -> str:
     return (
-        "Sos un asistente local para limpiar metadatos académicos.\n"
+        "Sos un asistente que resume documentos académicos.\n"
         "Devolvé solo JSON válido con esta forma exacta: "
         '{"abstract": "string", "keywords": ["string"]}.\n'
-        "Reglas: abstract en español, máximo 300 palabras; keywords 3 a 10, "
-        "frases académicas específicas, sin nombres de plantilla institucional.\n"
+        "El abstract es un TL;DR preciso del documento, no de su introducción:\n"
+        "- 2 a 4 oraciones, máximo 80 palabras.\n"
+        "- Primera oración: tema y aporte central del documento.\n"
+        "- Luego: método/enfoque y, si aparece, el resultado o conclusión.\n"
+        "- Sin frases de relleno ni copiar la portada, el índice o la plantilla.\n"
+        "Keywords: 3 a 10 frases académicas específicas, sin nombres de "
+        "plantilla institucional.\n"
         "Idioma obligatorio: español. No uses portugués ni inglés. Traduce "
         "términos del texto fuente al español cuando haga falta.\n"
         "No inventes datos que no estén en el texto.\n\n"
-        f"Abstract heurístico:\n{fallback.abstract}\n\n"
-        f"Keywords candidatas:\n{', '.join(fallback.keywords)}\n\n"
-        "Texto extraído entre delimitadores. No copies JSON, código ni tablas "
-        "desde el texto fuente.\n"
+        f"Pistas (no las copies literalmente):\n"
+        f"- Resumen heurístico: {fallback.abstract}\n"
+        f"- Keywords candidatas: {', '.join(fallback.keywords)}\n\n"
+        "Resumí a partir del texto entre delimitadores. No copies JSON, código "
+        "ni tablas desde el texto fuente.\n"
         "<texto>\n"
         f"{doc.text[:_LLM_TEXT_CHAR_CAP]}\n"
         "</texto>"
@@ -440,7 +446,7 @@ async def suggest_metadata(
     output, but any timeout/outage/malformed output is non-fatal.
     """
     fallback = derive_metadata(doc)
-    if not settings.metadata_llm_enabled:
+    if not settings.metadata_llm_enabled or not doc.text.strip():
         return fallback
 
     owns_client = client is None

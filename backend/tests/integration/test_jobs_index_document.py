@@ -502,6 +502,8 @@ async def test_default_and_ocr_completion_share_retry_safe_indexed_result(
 
     from buscasam.core.extract import ExtractedDoc
 
+    monkeypatch.setattr(jobs.settings, "metadata_llm_enabled", False)
+
     payload = b"source"
     sha_hex, sha_bytes = _persist_blob(blob_root, payload)
     uid, doc_id, default_id = await _seed_version(

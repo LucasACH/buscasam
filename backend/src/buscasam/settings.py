@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     extract_pipeline_version: str = "extract-v2"
     metadata_llm_enabled: bool = False
     metadata_llm_url: str = "http://localhost:11434"
-    metadata_llm_model: str = "llama3.2:3b"
+    metadata_llm_model: str = "qwen2.5:7b-instruct"
     metadata_llm_timeout_s: float = 60.0
 
     base_url: str = "http://localhost:3000"
