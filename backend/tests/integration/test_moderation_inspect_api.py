@@ -124,6 +124,7 @@ async def test_document_returns_metadata_for_privado_reported_doc(client, sessio
     assert body["area_path"] == "escuela_ciencia.matematica"
     assert body["palabras_clave"] == ["algebra", "topologia"]
     assert body["autores"] == [{"display_name": "Ana", "user_id": author_user_id}]
+    assert body["report_reasons"] == ["spam"]
 
 
 @pytest.mark.parametrize("status", ["open", "resolved"])
@@ -141,6 +142,8 @@ async def test_document_works_for_open_and_resolved(client, session, status):
     body = r.json()
     assert body["titulo"] == "T"
     assert body["palabras_clave"] == []  # COALESCE(keywords, ARRAY[]) for the null case
+    # report_reasons aggregates only OPEN reports, so the resolved case is empty.
+    assert body["report_reasons"] == (["spam"] if status == "open" else [])
 
 
 async def test_download_streams_current_main_file(client, session):

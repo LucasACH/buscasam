@@ -69,6 +69,7 @@ class OwnDocDTO(BaseModel):
     publication_status: str
     visibility: str
     published_at: datetime | None
+    moderation_hidden: bool
 
 
 # Exposes purge_at (the server-computed soft_deleted_at + 180 días) but not the
@@ -589,6 +590,7 @@ async def get_own_documents(
             publication_status=d.publication_status,
             visibility=d.visibility,
             published_at=d.published_at,
+            moderation_hidden=d.moderation_hidden,
         )
         for d in docs
     ]

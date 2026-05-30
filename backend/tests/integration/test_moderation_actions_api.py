@@ -1,6 +1,6 @@
 """Integration tests for api/moderation action endpoints (issue #78, module map
 §api/moderation). POST …/{report_id}/{hide,unhide,dismiss} → 204 | 404 | 403.
-Reason is required on hide, optional on unhide/dismiss; every domain miss is a
+Reason is an optional free-text note on every action; every domain miss is a
 uniform 404, role failure a 403.
 """
 from __future__ import annotations
@@ -85,9 +85,11 @@ async def test_hide_returns_204_and_stamps(client, session):
     assert hidden is not None
 
 
-@pytest.mark.parametrize("action", ["unhide", "dismiss"])
-async def test_unhide_and_dismiss_accept_null_reason(client, session, action):
-    doc_id = await make_document(session, moderation_hidden=True)
+@pytest.mark.parametrize("action", ["hide", "unhide", "dismiss"])
+async def test_actions_accept_null_reason(client, session, action):
+    # The moderator's reason is an optional free-text note on all three actions
+    # (ADR-0010 §9: moderation_actions.reason is nullable). hide is not special.
+    doc_id = await make_document(session, moderation_hidden=(action == "unhide"))
     report_id = await _file_report(session, doc_id)
     cookie = await _docente_cookie(session)
 
@@ -98,21 +100,6 @@ async def test_unhide_and_dismiss_accept_null_reason(client, session, action):
     )
 
     assert r.status_code == 204
-
-
-@pytest.mark.parametrize("body", [{}, {"reason": ""}])
-async def test_hide_without_reason_is_rejected(client, session, body):
-    doc_id = await make_document(session)
-    report_id = await _file_report(session, doc_id)
-    cookie = await _docente_cookie(session)
-
-    r = await client.post(
-        f"/api/moderation/reports/{report_id}/hide",
-        json=body,
-        headers=_headers(cookie),
-    )
-
-    assert r.status_code == 422
 
 
 @pytest.mark.parametrize("action", ["hide", "unhide", "dismiss"])

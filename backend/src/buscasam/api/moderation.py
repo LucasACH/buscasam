@@ -56,6 +56,10 @@ class InspectMetadataDTO(BaseModel):
     autores: list[AuthorDisplayDTO]
     tipo: str
     area_path: str
+    # Distinct reasons across the doc's open reports (the category the reporters
+    # chose), so the moderator can see why it was reported before acting. Sorted,
+    # matching the queue's aggregation.
+    report_reasons: list[str]
 
 
 @router.post("/reports", status_code=204)
@@ -125,6 +129,15 @@ async def inspect_document(
             {"d": row["id"]},
         )
     ).mappings().all()
+    reasons = (
+        await session.execute(
+            text(
+                "SELECT DISTINCT reason FROM document_reports "
+                "WHERE doc_id = :d AND status = 'open' ORDER BY reason"
+            ),
+            {"d": row["id"]},
+        )
+    ).scalars().all()
     return InspectMetadataDTO(
         titulo=row["titulo"],
         abstract=row["abstract"] or "",
@@ -135,6 +148,7 @@ async def inspect_document(
         ],
         tipo=row["tipo"],
         area_path=row["area_path"],
+        report_reasons=list(reasons),
     )
 
 
@@ -166,18 +180,17 @@ async def inspect_download(
     )
 
 
-class HideBody(BaseModel):
-    reason: Reason
-
-
 class ActionBody(BaseModel):
-    reason: Reason | None = None
+    # The moderator's optional free-text note, distinct from the reporter's
+    # `document_reports.reason` category (ADR-0010 §9: moderation_actions.reason
+    # is nullable free text).
+    reason: str | None = None
 
 
 @router.post("/reports/{report_id}/hide", status_code=204)
 async def hide_report(
     report_id: int,
-    body: HideBody,
+    body: ActionBody,
     docente_ctx: auth.UserCtx = Depends(auth.require_docente),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
