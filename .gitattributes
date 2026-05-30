@@ -1,0 +1,2 @@
+# Vendored e5 tokenizer: huge generated vocab — suppress diffs and exclude from language stats.
+backend/src/buscasam/core/vendor/e5_tokenizer/tokenizer.json -diff linguist-generated
