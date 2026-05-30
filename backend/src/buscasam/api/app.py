@@ -18,6 +18,7 @@ from buscasam.api.documents import router as documents_router
 from buscasam.api.moderation import router as moderation_router
 from buscasam.api.search import router as search_router
 from buscasam.core import auth
+from buscasam.core.embed import assert_model_revision_pinned
 from buscasam.settings import settings
 
 
@@ -44,6 +45,8 @@ class OriginCheckMiddleware(BaseHTTPMiddleware):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # ADR-0002 §5: fail fast if the vendored tokenizer drifts from the model.
+    assert_model_revision_pinned()
     engine = create_async_engine(settings.database_url)
     app.state.engine = engine
     app.state.sessionmaker = async_sessionmaker(engine, expire_on_commit=False)

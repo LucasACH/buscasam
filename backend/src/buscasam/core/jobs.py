@@ -335,6 +335,8 @@ _worker_tei: httpx.AsyncClient | None = None
 def _get_worker_resources():
     global _worker_engine, _worker_sessionmaker, _worker_tei
     if _worker_sessionmaker is None:
+        # ADR-0002 §5: fail fast if the vendored tokenizer drifts from the model.
+        embedmod.assert_model_revision_pinned()
         _worker_engine = create_async_engine(settings.database_url)
         _worker_sessionmaker = async_sessionmaker(_worker_engine, expire_on_commit=False)
     if _worker_tei is None:

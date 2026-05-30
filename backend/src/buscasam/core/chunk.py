@@ -3,6 +3,10 @@
 Single source of `headline_fingerprint` so the publish gate, the post-edit
 reindex enqueue rule, and the worker all compute the same value without
 coordination.
+
+Chunk boundaries are measured against the e5 token budget using the vendored
+tokenizer (ADR-0002 §4): every `passage` chunk encodes to `<= 512` tokens with
+the `passage:` prefix and special tokens included. Chunking never contacts TEI.
 """
 from __future__ import annotations
 
@@ -11,10 +15,8 @@ import re
 from dataclasses import dataclass
 
 from buscasam.core.extract import ExtractedDoc
+from buscasam.core.tokenizer import fits
 
-# ADR-0002 token budget. multilingual-e5-large is 512 tokens; ~4 chars/token
-# leaves headroom for non-ASCII tokenization variance.
-MAX_CHUNK_CHARS = 1800
 _SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
 
 
@@ -36,40 +38,67 @@ def headline_fingerprint(title: str, abstract: str) -> str:
 
 def headline_chunk(title: str, abstract: str) -> Chunk:
     body = f"{title}\n\n{abstract}" if abstract else title
-    return Chunk(body_text=body, is_headline=True, chunk_seq=0)
+    return Chunk(body_text=_truncate_to_budget(body), is_headline=True, chunk_seq=0)
 
 
-def _split_oversized(paragraph: str) -> list[str]:
-    """ADR-0007 §2: oversized paragraphs split at sentence boundaries.
-
-    Falls back to a hard character cap when no sentence boundary fits.
-    """
-    if len(paragraph) <= MAX_CHUNK_CHARS:
-        return [paragraph]
-    pieces: list[str] = []
-    sentences = _SENTENCE_BOUNDARY.split(paragraph)
-    buf = ""
-    for sentence in sentences:
-        if not buf:
-            buf = sentence
-            continue
-        candidate = f"{buf} {sentence}"
-        if len(candidate) <= MAX_CHUNK_CHARS:
-            buf = candidate
+def _largest_prefix_within_budget(text: str) -> int:
+    """Largest character count whose prefixed encoding fits the token budget."""
+    lo, hi = 1, len(text)
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if fits(text[:mid]):
+            lo = mid
         else:
+            hi = mid - 1
+    return lo
+
+
+def _truncate_to_budget(text: str) -> str:
+    """ADR-0002 §7: truncate oversized headline text by the measured rule."""
+    if fits(text):
+        return text
+    return text[: _largest_prefix_within_budget(text)]
+
+
+def _split_by_chars(text: str) -> list[str]:
+    pieces: list[str] = []
+    rest = text
+    while rest:
+        if fits(rest):
+            pieces.append(rest)
+            break
+        cut = _largest_prefix_within_budget(rest)
+        pieces.append(rest[:cut])
+        rest = rest[cut:]
+    return pieces
+
+
+def _split_to_budget(text: str) -> list[str]:
+    """Split `text` into pieces each encoding to `<= MAX_TOKENS` (measured)."""
+    if fits(text):
+        return [text]
+    units = _SENTENCE_BOUNDARY.split(text)
+    if len(units) == 1:
+        units = text.split(" ")
+        if len(units) == 1:
+            return _split_by_chars(text)
+    pieces: list[str] = []
+    buf = ""
+    for unit in units:
+        candidate = unit if not buf else f"{buf} {unit}"
+        if fits(candidate):
+            buf = candidate
+            continue
+        if buf:
             pieces.append(buf)
-            buf = sentence
+            buf = ""
+        if fits(unit):
+            buf = unit
+        else:
+            pieces.extend(_split_to_budget(unit))
     if buf:
         pieces.append(buf)
-    # If any single sentence still exceeded the cap, hard-split at MAX_CHUNK_CHARS.
-    out: list[str] = []
-    for p in pieces:
-        if len(p) <= MAX_CHUNK_CHARS:
-            out.append(p)
-            continue
-        for i in range(0, len(p), MAX_CHUNK_CHARS):
-            out.append(p[i:i + MAX_CHUNK_CHARS])
-    return out
+    return pieces
 
 
 def chunk(doc: ExtractedDoc) -> list[Chunk]:
@@ -89,7 +118,7 @@ def chunk(doc: ExtractedDoc) -> list[Chunk]:
         return []
     pieces: list[str] = []
     for p in paragraphs:
-        pieces.extend(_split_oversized(p))
+        pieces.extend(_split_to_budget(p))
     return [
         Chunk(body_text=p, is_headline=False, chunk_seq=i + 1)
         for i, p in enumerate(pieces)

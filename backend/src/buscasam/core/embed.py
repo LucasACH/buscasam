@@ -10,6 +10,7 @@ from typing import Literal
 import httpx
 import numpy as np
 
+from buscasam.core.tokenizer import vendored_revision
 from buscasam.settings import settings
 
 INDEX_TIMEOUT_S = 30.0
@@ -17,6 +18,19 @@ INDEX_TIMEOUT_S = 30.0
 
 class EmbedUnavailable(Exception):
     """Raised when TEI is 5xx or times out — caller substitutes lexical-only."""
+
+
+def assert_model_revision_pinned() -> None:
+    """ADR-0002 §5: refuse to start if the vendored tokenizer revision disagrees
+    with the configured model revision."""
+    vendored = vendored_revision()
+    if vendored != settings.embedding_model_revision:
+        raise RuntimeError(
+            "Vendored e5 tokenizer revision "
+            f"{vendored!r} != EMBEDDING_MODEL_REVISION "
+            f"{settings.embedding_model_revision!r}; the tokenizer used for "
+            "chunking is out of sync with the served model."
+        )
 
 
 async def embed(
