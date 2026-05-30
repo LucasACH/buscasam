@@ -74,6 +74,9 @@ function draft(
       staged_abstract: "resumen extraído",
       staged_keywords: ["redes", "grafos"],
       staged_fecha: "2024-03-01",
+      generated_abstract: "resumen extraído",
+      generated_keywords: ["redes", "grafos"],
+      generated_fecha: "2024-03-01",
       isOwner: true,
       candidate: null,
       versions: [],
@@ -357,29 +360,96 @@ describe("editar page", () => {
     expect(push).not.toHaveBeenCalled();
   });
 
-  it("renders the staged suggestions", () => {
+  it("no longer renders the 'Sugerencias del extractor' panel", () => {
     useDraftStateMock.mockReturnValue(draft({}));
     render(<EditarPage />);
-    expect(screen.getByTestId("suggestion-abstract")).toHaveTextContent(
-      "resumen extraído",
-    );
-    expect(screen.getByTestId("suggestion-keywords")).toHaveTextContent(
-      "redes",
-    );
-    expect(screen.getByTestId("suggestion-fecha")).toHaveTextContent(
-      "2024-03-01",
-    );
+    expect(
+      screen.queryByText("Sugerencias del extractor"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("suggestion-abstract")).not.toBeInTheDocument();
   });
 
-  it("shows a spinner over the suggestions while processing", () => {
+  it("hides Restaurar when staged equals the generated snapshot", () => {
+    useDraftStateMock.mockReturnValue(draft({}));
+    render(<EditarPage />);
+    expect(screen.queryByTestId("restore-abstract")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("restore-keywords")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("restore-fecha")).not.toBeInTheDocument();
+  });
+
+  it("shows Restaurar only for fields whose staged value diverges", () => {
     useDraftStateMock.mockReturnValue(
-      draft(
-        { staged_abstract: null, staged_keywords: [], staged_fecha: null },
-        { showSuggestionsSpinner: true, canPublish: false },
-      ),
+      draft({
+        staged_abstract: "resumen editado",
+        staged_keywords: ["editado"],
+        // staged_fecha unchanged from generated → no Restaurar
+      }),
     );
     render(<EditarPage />);
-    expect(screen.getByTestId("suggestions-spinner")).toBeInTheDocument();
+    expect(screen.getByTestId("restore-abstract")).toBeInTheDocument();
+    expect(screen.getByTestId("restore-keywords")).toBeInTheDocument();
+    expect(screen.queryByTestId("restore-fecha")).not.toBeInTheDocument();
+  });
+
+  it("hides Restaurar when no generated snapshot exists (pre-migration draft)", () => {
+    // Drafts indexed before migration 0018 have null/empty generated_*; there is
+    // nothing to restore to, so Restaurar must not offer to wipe the staged value.
+    useDraftStateMock.mockReturnValue(
+      draft({
+        staged_abstract: "resumen editado",
+        staged_keywords: ["editado"],
+        staged_fecha: "2024-03-01",
+        generated_abstract: null,
+        generated_keywords: [],
+        generated_fecha: null,
+      }),
+    );
+    render(<EditarPage />);
+    expect(screen.queryByTestId("restore-abstract")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("restore-keywords")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("restore-fecha")).not.toBeInTheDocument();
+  });
+
+  it("never offers Restaurar for título (author-entered, not generated)", () => {
+    useDraftStateMock.mockReturnValue(draft({ title: "Otro título" }));
+    render(<EditarPage />);
+    expect(screen.queryByTestId("restore-titulo")).not.toBeInTheDocument();
+  });
+
+  it("Restaurar reverts the field to the generated value and PATCHes it", async () => {
+    useDraftStateMock.mockReturnValue(
+      draft({
+        staged_abstract: "resumen editado",
+        generated_abstract: "resumen del extractor",
+      }),
+    );
+    render(<EditarPage />);
+    expect(screen.getByLabelText("Resumen")).toHaveValue("resumen editado");
+
+    fireEvent.click(screen.getByTestId("restore-abstract"));
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Resumen")).toHaveValue(
+        "resumen del extractor",
+      ),
+    );
+    const opts = apiPatch.mock.calls[0]![1];
+    expect(opts.body).toMatchObject({ abstract: "resumen del extractor" });
+    await waitFor(() => expect(refreshDraft).toHaveBeenCalled());
+  });
+
+  it("Restaurar for keywords PATCHes the generated array", async () => {
+    useDraftStateMock.mockReturnValue(
+      draft({
+        staged_keywords: ["editado"],
+        generated_keywords: ["redes", "grafos"],
+      }),
+    );
+    render(<EditarPage />);
+    fireEvent.click(screen.getByTestId("restore-keywords"));
+    await waitFor(() => expect(apiPatch).toHaveBeenCalled());
+    const opts = apiPatch.mock.calls[0]![1];
+    expect(opts.body).toMatchObject({ keywords: ["redes", "grafos"] });
   });
 
   it("PATCHes title on blur", async () => {

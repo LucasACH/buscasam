@@ -160,6 +160,9 @@ class DraftState:
     staged_abstract: str | None
     staged_keywords: list[str]
     staged_fecha: date | None
+    generated_abstract: str | None
+    generated_keywords: list[str]
+    generated_fecha: date | None
     index_error: str | None
     publish_gate_reason: str | None
     is_owner: bool
@@ -594,6 +597,10 @@ async def write_indexed_candidate(
     # editar form while still `processing` can save their own staged_* via
     # save-on-blur. COALESCE leaves any column they already wrote untouched
     # (staged_* are NULL until first written), so the author edit always wins.
+    # generated_* is the immutable extractor snapshot (issue #94): written once
+    # here from the raw meta, never COALESCE-guarded and never touched by an
+    # author edit, so any staged field can be reverted to what the extractor
+    # produced.
     await session.execute(
         text(
             "UPDATE document_versions SET "
@@ -601,6 +608,9 @@ async def write_indexed_candidate(
             "  staged_abstract = COALESCE(staged_abstract, :abstract), "
             "  staged_keywords = COALESCE(staged_keywords, :keywords), "
             "  staged_fecha = COALESCE(staged_fecha, :fecha), "
+            "  generated_abstract = :abstract, "
+            "  generated_keywords = :keywords, "
+            "  generated_fecha = :fecha, "
             "  headline_fingerprint = :fp, "
             "  extract_pipeline_version = :pv, "
             "  indexed_at = now() "
@@ -1261,6 +1271,8 @@ async def get_draft_state(
             text(
                 "SELECT v.id AS version_id, v.index_status, v.staged_abstract, "
                 "       v.staged_keywords, v.staged_fecha, v.index_error, "
+                "       v.generated_abstract, v.generated_keywords, "
+                "       v.generated_fecha, "
                 "       v.headline_fingerprint, d.titulo, d.visibility, "
                 "       (SELECT a.user_id FROM document_authors a "
                 "         WHERE a.doc_id = d.id AND a.status = 'owner' LIMIT 1) "
@@ -1349,6 +1361,9 @@ async def get_draft_state(
         staged_abstract=row["staged_abstract"],
         staged_keywords=row["staged_keywords"] or [],
         staged_fecha=row["staged_fecha"],
+        generated_abstract=row["generated_abstract"],
+        generated_keywords=row["generated_keywords"] or [],
+        generated_fecha=row["generated_fecha"],
         index_error=row["index_error"],
         publish_gate_reason=_publish_gate_reason(
             row["index_status"], matches

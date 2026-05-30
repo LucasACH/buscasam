@@ -905,6 +905,12 @@ export interface components {
             staged_keywords: string[];
             /** Staged Fecha */
             staged_fecha: string | null;
+            /** Generated Abstract */
+            generated_abstract: string | null;
+            /** Generated Keywords */
+            generated_keywords: string[];
+            /** Generated Fecha */
+            generated_fecha: string | null;
             /** Index Error */
             index_error: string | null;
             /** Publish Gate Reason */

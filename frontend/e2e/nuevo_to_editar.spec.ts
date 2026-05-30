@@ -143,11 +143,11 @@ test("upload happy path: nuevo → editar pill flips from Procesando to Listo", 
   await expect(page.getByTestId("indexing-block")).toBeVisible();
 
   // 5. After the mocked worker advances, the page unblocks: the pill flips to
-  // Listo and the suggestions populate.
+  // Listo and the generated metadata prefills the form inputs.
   await expect(page.getByTestId("status-pill")).toHaveText(/Listo para publicar/, {
     timeout: 10_000,
   });
-  await expect(page.getByTestId("suggestion-abstract")).toContainText(
+  await expect(page.getByLabel("Resumen")).toHaveValue(
     /Resumen extraído por el worker/,
   );
 });

@@ -282,6 +282,9 @@ class DraftStateDTO(BaseModel):
     staged_abstract: str | None
     staged_keywords: list[str]
     staged_fecha: date | None
+    generated_abstract: str | None
+    generated_keywords: list[str]
+    generated_fecha: date | None
     index_error: str | None
     publish_gate_reason: str | None
     is_owner: bool
@@ -322,6 +325,9 @@ async def get_draft(
         staged_abstract=state.staged_abstract,
         staged_keywords=state.staged_keywords,
         staged_fecha=state.staged_fecha,
+        generated_abstract=state.generated_abstract,
+        generated_keywords=state.generated_keywords,
+        generated_fecha=state.generated_fecha,
         index_error=state.index_error,
         publish_gate_reason=state.publish_gate_reason,
         is_owner=state.is_owner,
