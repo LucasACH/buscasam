@@ -758,15 +758,6 @@ export interface components {
              */
             status: "owner" | "pending" | "accepted" | "declined" | "external";
         };
-        /** ExternalAuthorInput */
-        ExternalAuthorInput: {
-            /** Name */
-            name: string;
-            /** Surname */
-            surname: string;
-            /** Email */
-            email: string;
-        };
         /** CreateDraftRequest */
         CreateDraftRequest: {
             /** Title */
@@ -921,7 +912,10 @@ export interface components {
             publish_gate_reason: string | null;
             /** Is Owner */
             is_owner: boolean;
-            /** Visibility */
+            /**
+             * Visibility
+             * @enum {string}
+             */
             visibility: "publico" | "interno" | "privado";
             /** Area Path */
             area_path: string;
@@ -948,15 +942,19 @@ export interface components {
             /** Is Current */
             is_current: boolean;
         };
+        /** ExternalAuthorInput */
+        ExternalAuthorInput: {
+            /** Name */
+            name: string;
+            /** Surname */
+            surname: string;
+            /** Email */
+            email: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
-        };
-        /** HideBody */
-        HideBody: {
-            /** Reason */
-            reason: string;
         };
         /** InspectMetadataDTO */
         InspectMetadataDTO: {
@@ -972,6 +970,8 @@ export interface components {
             tipo: string;
             /** Area Path */
             area_path: string;
+            /** Report Reasons */
+            report_reasons: string[];
         };
         /** InvitationBannerDTO */
         InvitationBannerDTO: {
@@ -1072,6 +1072,8 @@ export interface components {
             visibility: string;
             /** Published At */
             published_at: string | null;
+            /** Moderation Hidden */
+            moderation_hidden: boolean;
         };
         /** QueueEntryDTO */
         QueueEntryDTO: {
@@ -2330,7 +2332,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["HideBody"];
+                "application/json": components["schemas"]["ActionBody"];
             };
         };
         responses: {

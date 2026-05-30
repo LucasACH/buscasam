@@ -8,6 +8,16 @@ import { Button } from "@/components/ui/button";
 import { useUser } from "@/lib/useUser";
 import { useInspect, type ActionError, type InspectMetadata } from "./useInspect";
 
+// Reporter-chosen categories (document_reports.reason), shown so the moderator
+// sees why the document was reported. Distinct from the moderator's free-text
+// "Motivo" note below.
+const REASON_LABELS: Record<string, string> = {
+  spam: "Spam",
+  contenido_inadecuado: "Contenido inadecuado",
+  plagio: "Plagio",
+  error: "Error en el contenido",
+};
+
 export default function InspectPage() {
   const { user, isInvitado, isLoading } = useUser();
   const router = useRouter();
@@ -94,6 +104,11 @@ function InspectView({
           {metadata.palabras_clave.join(", ")}
         </Meta>
         <Meta label="Resumen">{metadata.abstract}</Meta>
+        <Meta label="Reportado por">
+          {(metadata.report_reasons ?? [])
+            .map((r) => REASON_LABELS[r] ?? r)
+            .join(", ")}
+        </Meta>
       </dl>
 
       <a
@@ -117,7 +132,7 @@ function InspectView({
         <div className="flex gap-2">
           <Button
             variant="destructive"
-            disabled={pending || reason.trim() === ""}
+            disabled={pending}
             onClick={() => run(hide)}
           >
             Ocultar

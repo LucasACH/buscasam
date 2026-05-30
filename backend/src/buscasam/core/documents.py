@@ -195,6 +195,7 @@ class OwnDocSummary:
     publication_status: str
     visibility: str
     published_at: datetime | None
+    moderation_hidden: bool
 
 
 @dataclass(frozen=True)
@@ -1432,7 +1433,8 @@ async def list_own_documents(
         await session.execute(
             text(
                 f"SELECT d.id, d.titulo, d.publication_status, d.visibility, "
-                f"       d.published_at "
+                f"       d.published_at, "
+                f"       d.moderation_hidden_at IS NOT NULL AS moderation_hidden "
                 f"FROM documents d WHERE {where} ORDER BY d.id"
             ),
             params,
@@ -1445,6 +1447,7 @@ async def list_own_documents(
             publication_status=r["publication_status"],
             visibility=r["visibility"],
             published_at=r["published_at"],
+            moderation_hidden=r["moderation_hidden"],
         )
         for r in rows
     ]

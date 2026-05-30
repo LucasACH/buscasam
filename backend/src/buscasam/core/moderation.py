@@ -117,7 +117,7 @@ _NOTIFY_KIND = {
 
 
 async def hide(
-    session: AsyncSession, docente_ctx: UserCtx, report_id: int, reason: Reason
+    session: AsyncSession, docente_ctx: UserCtx, report_id: int, reason: str | None = None
 ) -> ActionOutcome | None:
     """Stamp `documents.moderation_hidden_at`, append a `hide` action, resolve
     all open reports on the doc, and notify every registered author — one
@@ -127,7 +127,7 @@ async def hide(
 
 
 async def unhide(
-    session: AsyncSession, docente_ctx: UserCtx, report_id: int, reason: Reason | None = None
+    session: AsyncSession, docente_ctx: UserCtx, report_id: int, reason: str | None = None
 ) -> ActionOutcome | None:
     """Clear `moderation_hidden_at`, append an `unhide` action, resolve all open
     reports, and notify every registered author — one transaction. None on an
@@ -136,7 +136,7 @@ async def unhide(
 
 
 async def dismiss(
-    session: AsyncSession, docente_ctx: UserCtx, report_id: int, reason: Reason | None = None
+    session: AsyncSession, docente_ctx: UserCtx, report_id: int, reason: str | None = None
 ) -> ActionOutcome | None:
     """Append a `dismiss` action and resolve all open reports — the matter is
     settled for the document — without touching `moderation_hidden_at` and
@@ -149,7 +149,7 @@ async def _act(
     docente_ctx: UserCtx,
     report_id: int,
     action: str,
-    reason: Reason | None,
+    reason: str | None,
 ) -> ActionOutcome | None:
     """Shared resolve-all-open + audit-append. Sole writer of
     `documents.moderation_hidden_at` (arch test); touches no other `documents`
@@ -212,7 +212,7 @@ async def _act(
 
 
 async def _notify_authors(
-    session: AsyncSession, *, action_id: int, doc_id: int, kind: str, reason: Reason | None
+    session: AsyncSession, *, action_id: int, doc_id: int, kind: str, reason: str | None
 ) -> None:
     """Notify every registered author (owner + accepted, `user_id NOT NULL`);
     external authors are skipped. Moderation owns who-to-notify; the per-author

@@ -40,6 +40,7 @@ const META = {
   ],
   tipo: "tesis",
   area_path: "ingenieria.sistemas",
+  report_reasons: ["spam", "plagio"],
 };
 
 function docente() {
@@ -98,16 +99,17 @@ describe("/moderacion/[reportId] inspect view", () => {
     ).toHaveAttribute("href", "/api/moderation/reports/42/download");
   });
 
-  it("disables Ocultar until a reason is entered", () => {
+  it("shows why the document was reported", () => {
     render(<InspectPage />);
 
-    const ocultar = screen.getByRole("button", { name: /ocultar/i });
-    expect(ocultar).toBeDisabled();
+    expect(screen.getByText("Reportado por")).toBeInTheDocument();
+    expect(screen.getByText("Spam, Plagio")).toBeInTheDocument();
+  });
 
-    fireEvent.change(screen.getByLabelText(/motivo/i), {
-      target: { value: "plagio comprobado" },
-    });
-    expect(ocultar).toBeEnabled();
+  it("allows Ocultar without a motivo (it is an optional note)", () => {
+    render(<InspectPage />);
+
+    expect(screen.getByRole("button", { name: /ocultar/i })).toBeEnabled();
   });
 
   it("hides with the reason and returns to the queue on success", async () => {

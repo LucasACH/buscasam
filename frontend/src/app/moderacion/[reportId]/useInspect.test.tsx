@@ -33,6 +33,7 @@ const META: InspectMetadataDTO = {
   autores: [{ display_name: "Ana", user_id: 1 }],
   tipo: "tesis",
   area_path: "ing.sistemas",
+  report_reasons: ["spam"],
 };
 
 describe("useInspect", () => {

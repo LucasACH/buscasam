@@ -90,6 +90,11 @@ function Section({
                 className="block px-4 py-3 text-sm hover:bg-muted"
               >
                 {d.title}
+                {d.moderation_hidden && (
+                  <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
+                    Oculto por moderación
+                  </span>
+                )}
                 {d.published_at && (
                   <span className="text-muted-foreground ml-2 text-xs">
                     Publicado el {new Date(d.published_at).toLocaleDateString("es-AR")}
