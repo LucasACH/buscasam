@@ -407,7 +407,7 @@ def _parse_llm_metadata(raw: str) -> _LlmMetadata:
     if not all(isinstance(k, str) for k in keywords):
         raise ValueError("metadata LLM returned invalid keyword schema")
     return _LlmMetadata(
-        abstract=abstract.strip(),
+        abstract=_truncate_words(abstract.strip(), _ABSTRACT_WORD_CAP),
         keywords=_clean_keywords(keywords),
     )
 

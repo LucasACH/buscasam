@@ -27,6 +27,7 @@ resource "google_compute_instance" "metadata_llm" {
     provisioning_model          = "SPOT"
     preemptible                 = true
     automatic_restart           = false
+    on_host_maintenance         = "TERMINATE"
     instance_termination_action = "STOP"
   }
 
