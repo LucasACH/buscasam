@@ -53,6 +53,7 @@ ROLE_BY_HD: Mapping[str, Role] = MappingProxyType(
     {
         "estudiantes.unsam.edu.ar": "estudiante",
         "unsam.edu.ar": "docente",
+        "unsam-bue.edu.ar": "docente",
     }
 )
 
