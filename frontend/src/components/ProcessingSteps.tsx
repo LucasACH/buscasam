@@ -16,12 +16,20 @@ const STAGE_STEPS: Record<string, { label: string; step: number }> = {
 };
 const TOTAL_STEPS = 4;
 
-export function ProcessingSteps({ stage }: { stage: string | null }) {
+export function ProcessingSteps({
+  stage,
+  queued = false,
+}: {
+  stage: string | null;
+  queued?: boolean;
+}) {
   const current = stage ? STAGE_STEPS[stage] : undefined;
-  // Before the worker claims the row (pending/queued) there is no stage yet;
-  // show the first step so the bar never starts empty.
+  // Before the worker claims the row there is no stage yet; show the first step
+  // so the bar never starts empty. "En cola" is honest only while genuinely
+  // queued — once the worker is running the stage may briefly lag a poll behind,
+  // and "Procesando…" never contradicts the active job.
   const step = current?.step ?? 1;
-  const label = current?.label ?? "En cola";
+  const label = current?.label ?? (queued ? "En cola" : "Procesando…");
   const pct = Math.round((step / TOTAL_STEPS) * 100);
 
   return (

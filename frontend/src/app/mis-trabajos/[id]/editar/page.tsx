@@ -73,7 +73,10 @@ export default function EditarPage() {
             data-testid="indexing-block"
             className="flex flex-col items-center gap-4 py-24 text-center"
           >
-            <ProcessingSteps stage={state.lifecycle.stage} />
+            <ProcessingSteps
+              stage={state.lifecycle.stage}
+              queued={state.lifecycle.queued}
+            />
             <p className="text-muted-foreground max-w-md text-sm">
               Estamos procesando tu archivo. Esto puede tardar unos minutos.
               Podés cerrar esta página y volver más tarde: el trabajo sigue

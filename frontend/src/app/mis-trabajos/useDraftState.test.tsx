@@ -121,6 +121,7 @@ describe("useDraftState", () => {
       formSeedKey: "indexed",
       statusLabel: "Listo para publicar",
       stage: null,
+      queued: false,
       showSuggestionsSpinner: false,
       gateMessage: null,
       canPublish: true,
