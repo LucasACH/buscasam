@@ -75,6 +75,16 @@ services:
     mem_limit: 2g
     logging: *default-logging
 
+  backup:
+    image: buscasam-backend:${BUSCASAM_VERSION:-latest}
+    build:
+      context: ../backend
+    env_file: ./.env
+    volumes:
+      - /var/lib/buscasam/blobs:/var/lib/buscasam/blobs:ro
+      - /backup/buscasam:/backup/buscasam
+    logging: *default-logging
+
   frontend:
     image: buscasam-frontend:${BUSCASAM_VERSION:-latest}
     build:

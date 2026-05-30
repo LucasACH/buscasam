@@ -16,6 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from buscasam.core.document_access import readable_where
+from buscasam.core.embed import halfvec_literal
 
 if TYPE_CHECKING:
     from buscasam.core.auth import UserCtx
@@ -142,10 +143,6 @@ def _filter_params(filters: Filters) -> dict[str, object]:
     if filters.hasta is not None:
         params["hasta"] = filters.hasta
     return params
-
-
-def _halfvec_literal(embedding: np.ndarray) -> str:
-    return "[" + ",".join(f"{float(v):.6f}" for v in embedding) + "]"
 
 
 async def run(
@@ -380,7 +377,7 @@ async def _run_hybrid(
     )
     params: dict[str, object] = {
         "q": filters.q,
-        "embedding": _halfvec_literal(embedding),
+        "embedding": halfvec_literal(embedding),
         "min_sim": min_semantic_similarity,
         "rrf_k": RRF_K,
         "cap": RELEVANCE_CAP,
