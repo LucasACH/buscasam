@@ -185,9 +185,12 @@ def role_from_claims(claims: Mapping[str, object]) -> Role | None:
     if claims.get("email_verified") is not True:
         return None
     hd = claims.get("hd")
-    if not isinstance(hd, str):
-        return None
-    return ROLE_BY_HD.get(hd)
+    if isinstance(hd, str) and hd in ROLE_BY_HD:
+        return ROLE_BY_HD[hd]
+    # Local testing: any verified non-UNSAM email logs in as a student.
+    if settings.env != "prod":
+        return "estudiante"
+    return None
 
 
 async def upsert_user(
@@ -391,7 +394,7 @@ async def complete_login(
         session,
         google_sub=claims["sub"],
         email=claims["email"],
-        hd=claims["hd"],
+        hd=claims.get("hd") or claims["email"].rsplit("@", 1)[-1],
         role=role,
         name=claims.get("name", ""),
         picture_url=claims.get("picture"),
