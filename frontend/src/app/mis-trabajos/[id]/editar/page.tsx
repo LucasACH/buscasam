@@ -121,7 +121,7 @@ function EditarForm({
 }) {
   const router = useRouter();
   const [publishing, setPublishing] = useState(false);
-  const { register, getValues, setValue, formState } = useForm<FormValues>({
+  const { register, getValues, setValue, watch, formState } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     mode: "onBlur",
     defaultValues: {
@@ -220,17 +220,26 @@ function EditarForm({
   const { lifecycle } = state;
 
   // The prefilled inputs subsume the old suggestions panel; Restaurar appears
-  // per field only while the staged value diverges from the generated snapshot.
+  // per field only while the live input diverges from the generated snapshot.
+  // Driven off watch() (not staged_*) so it toggles on every keystroke rather
+  // than waiting for the blur-time PATCH + refresh to land.
+  const watched = watch();
   const canRestoreAbstract =
     state.generated_abstract != null &&
-    (state.staged_abstract ?? "") !== state.generated_abstract;
+    (watched.abstract ?? "") !== state.generated_abstract;
   const canRestoreKeywords =
     state.generated_keywords != null &&
     state.generated_keywords.length > 0 &&
-    !keywordsEqual(state.staged_keywords ?? [], state.generated_keywords);
+    !keywordsEqual(
+      (watched.keywords ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+      state.generated_keywords,
+    );
   const canRestoreFecha =
     state.generated_fecha != null &&
-    (state.staged_fecha ?? "") !== state.generated_fecha;
+    (watched.fecha ?? "") !== state.generated_fecha;
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8">
