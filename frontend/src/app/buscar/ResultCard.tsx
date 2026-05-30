@@ -23,7 +23,7 @@ const VISIBILITY_LABEL: Record<string, string> = {
   privado: "Privado",
 };
 
-const TIPO_LABEL: Record<string, string> = {
+export const TIPO_LABEL: Record<string, string> = {
   tesis: "Tesis",
   paper: "Paper",
   trabajo_practico: "Trabajo práctico",
