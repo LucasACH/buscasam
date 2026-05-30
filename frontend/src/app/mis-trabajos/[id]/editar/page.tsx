@@ -344,9 +344,14 @@ function EditarForm({
         )}
       </form>
 
-      <div className="mt-8">
-        <CandidatePanel candidate={state.candidate} actions={actions} />
-      </div>
+      {/* Pre-publish, the initial version matches the candidate predicate and
+          its staged metadata equals the form fields above (always). The panel
+          is only meaningful for replacements, so render it once published. */}
+      {state.versions.length > 0 && (
+        <div className="mt-8">
+          <CandidatePanel candidate={state.candidate} actions={actions} />
+        </div>
+      )}
 
       <div className="mt-8">
         <VersionsPanel docId={docId} versions={state.versions} canManage />
