@@ -200,6 +200,9 @@ export function useDraftState(docId: number) {
         return "publish_failed";
       }
       await queryClient.invalidateQueries({ queryKey: draftQueryKey(docId) });
+      // The publish flow routes to Mis trabajos; invalidate the list so the
+      // freshly published doc shows without a manual refresh.
+      await queryClient.invalidateQueries({ queryKey: ["me", "documents"] });
       return "published";
     } catch {
       return "publish_failed";
