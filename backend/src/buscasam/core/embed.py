@@ -20,6 +20,11 @@ class EmbedUnavailable(Exception):
     """Raised when TEI is 5xx or times out — caller substitutes lexical-only."""
 
 
+def halfvec_literal(embedding: np.ndarray) -> str:
+    """Serialize a 1024-dim embedding as a pgvector `halfvec` SQL literal (ADR-0001 §5)."""
+    return "[" + ",".join(f"{float(v):.6f}" for v in embedding) + "]"
+
+
 def assert_model_revision_pinned() -> None:
     """ADR-0002 §5: refuse to start if the vendored tokenizer revision disagrees
     with the configured model revision."""

@@ -1,8 +1,7 @@
 # ADR-0009: single Docker Compose stack. This is the dev base; compose.prod.yaml
 # layers prod overrides (build mode, host-port lockdown, logging, mem limits).
 # Steady-state services (db, tei, api, worker_default, worker_ocr, frontend,
-# nginx) + `migrate` (run --rm) + `certbot` (TLS_MODE=self). Backup deferred
-# post-MVP (ADR-0009 §11).
+# nginx, backup) + `migrate` (run --rm) + `certbot` (TLS_MODE=self).
 #
 # Image tags below are pinned by digest in compose.prod.yaml (ADR-0009 §2).
 
@@ -92,6 +91,21 @@ services:
     environment: *backend_env
     volumes:
       - ./.data/blobs:/var/lib/buscasam/blobs
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Daily paired recovery point (ADR-0009 §11): pg_dump + blob rsync under one
+  # advisory lock. Reads blobs ro; writes recovery points to /backup/buscasam.
+  backup:
+    build:
+      context: ../backend
+    command: ["bash", "scripts/backup_loop.sh"]
+    environment: *backend_env
+    volumes:
+      - ./.data/blobs:/var/lib/buscasam/blobs:ro
+      - ./.data/backup:/backup/buscasam
     depends_on:
       db:
         condition: service_healthy
