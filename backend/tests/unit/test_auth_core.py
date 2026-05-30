@@ -33,6 +33,7 @@ def test_hd_to_role_mapping():
     assert auth.ROLE_BY_HD == {
         "estudiantes.unsam.edu.ar": "estudiante",
         "unsam.edu.ar": "docente",
+        "unsam-bue.edu.ar": "docente",
     }
 
     with pytest.raises(KeyError):
@@ -67,8 +68,28 @@ def test_next_validation_rejects_unsafe(raw):
         },
     ],
 )
-def test_claim_acceptance_matrix_rejects(claims):
+def test_claim_acceptance_matrix_rejects(claims, monkeypatch):
+    monkeypatch.setattr(auth.settings, "env", "prod")
     assert auth.role_from_claims(claims) is None
+
+
+@pytest.mark.parametrize(
+    "claims",
+    [
+        {"email_verified": True, "sub": "x"},  # no hd
+        {"email_verified": True, "sub": "x", "hd": "gmail.com"},  # non-unsam hd
+    ],
+)
+def test_non_prod_treats_non_unsam_as_estudiante(claims, monkeypatch):
+    monkeypatch.setattr(auth.settings, "env", "dev")
+    assert auth.role_from_claims(claims) == "estudiante"
+
+
+def test_non_prod_still_rejects_unverified_email(monkeypatch):
+    monkeypatch.setattr(auth.settings, "env", "dev")
+    assert (
+        auth.role_from_claims({"email_verified": False, "sub": "x"}) is None
+    )
 
 
 def test_claim_acceptance_matrix_accepts_estudiante():
