@@ -41,6 +41,7 @@ function returns(overrides: Partial<DraftStateDTO> = {}) {
     publish_gate_reason: null,
     is_owner: true,
     visibility: "publico",
+    area_path: "escuela.carrera.materia",
     attachments: [],
     coauthors: [
       { user_id: 1, display_name: "Ada", email_local: "ada", email: null, status: "owner" },

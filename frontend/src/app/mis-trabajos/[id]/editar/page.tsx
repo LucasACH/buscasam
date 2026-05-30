@@ -21,6 +21,7 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
+import { AreaField } from "@/components/AreaField";
 import { AttachmentsPanel } from "@/components/AttachmentsPanel";
 import { CandidatePanel } from "@/components/CandidatePanel";
 import { CoauthorsPanel } from "@/components/CoauthorsPanel";
@@ -263,6 +264,7 @@ function EditarForm({
             {...register("titulo", { onBlur: () => patchField("titulo") })}
           />
         </Field>
+        <AreaField areaPath={state.area_path} />
         <Field
           label="Resumen"
           htmlFor="abstract"

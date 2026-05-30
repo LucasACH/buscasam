@@ -919,6 +919,8 @@ export interface components {
             is_owner: boolean;
             /** Visibility */
             visibility: "publico" | "interno" | "privado";
+            /** Area Path */
+            area_path: string;
             /** Attachments */
             attachments: components["schemas"]["AttachmentDTO"][];
             /** Coauthors */

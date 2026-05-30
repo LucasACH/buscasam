@@ -39,6 +39,7 @@ export type DraftState = {
   };
   isOwner: boolean;
   visibility: DraftStateDTO["visibility"];
+  area_path: DraftStateDTO["area_path"];
   candidate: Candidate | null;
   versions: DraftVersion[];
   attachments: DraftAttachment[];
@@ -174,6 +175,7 @@ function projectDraftState(state: DraftStateDTO): DraftState {
     },
     isOwner: state.is_owner,
     visibility: state.visibility,
+    area_path: state.area_path,
     candidate: state.candidate ? projectCandidate(state.candidate) : null,
     versions: state.versions,
     attachments: state.attachments,

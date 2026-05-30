@@ -289,6 +289,7 @@ class DraftStateDTO(BaseModel):
     publish_gate_reason: str | None
     is_owner: bool
     visibility: Visibility
+    area_path: str
     attachments: list[AttachmentDTO]
     coauthors: list[CoauthorRowDTO]
     versions: list[DraftVersionDTO]
@@ -332,6 +333,7 @@ async def get_draft(
         publish_gate_reason=state.publish_gate_reason,
         is_owner=state.is_owner,
         visibility=state.visibility,
+        area_path=state.area_path,
         attachments=[
             AttachmentDTO(
                 id=a.id,
