@@ -153,3 +153,13 @@ BUSCASAM runs as a single Docker Compose stack on one UNSAM-provisioned VM, in d
 - **Backup mount:** off-host storage if available; otherwise same-VM redundancy.
 - **Root or sudo on the VM** for first-time host setup (creating `buscasam:buscasam`, installing Docker, creating `/var/lib/buscasam/` and `/backup/buscasam/`).
 - **Google Cloud OAuth client** scoped to the UNSAM Workspace tenants.
+
+## Addendum: deployment target is GCP Compute Engine
+
+The "single VM" of this ADR is a **GCP Compute Engine** instance. The topology is unchanged — it is still one Docker Compose stack on one stateful host — but the following are now fixed:
+
+1. **Files live under `infra/`**, not the repo root. `compose.yaml`, `compose.prod.yaml`, `.env.example`, and `nginx/` sit in `infra/` alongside the existing `infra/metadata-llm/`. Build contexts are `../backend` and `../frontend`; the two Dockerfiles stay with their source. §12 deploy runs from `infra/` (`docker compose -f compose.yaml -f compose.prod.yaml …`); the `cd` target and `-f` paths in §12 are superseded accordingly.
+2. **Machine type is x86_64** (e2/n2/c3). The TEI CPU image is pinned `platform: linux/amd64`; an Arm (Tau T2A) instance would emulate and is excluded.
+3. **State on a persistent disk** mounted at `/var/lib/buscasam` (§7). Blobs and `PGDATA` are local-FS by design (ADR-0001, ADR-0006); managed services (Cloud SQL, GCS, Cloud Run, GKE) are explicitly out of scope and would contradict those ADRs.
+4. **TLS terminates at a GCP HTTPS Load Balancer** → `TLS_MODE=upstream`. `TRUSTED_PROXY_CIDR` is the Google front-end range set `130.211.0.0/22,35.191.0.0/16` (the value is comma/space-separated; `nginx/entrypoint.sh` emits one `set_real_ip_from` per CIDR). `TLS_MODE=self` (§9) remains available for a no-LB VM.
+5. **Egress** for build (`ghcr.io`, `pypi.org`, `registry.npmjs.org`, `github.com`) and the one-time model pre-stage (`huggingface.co`) is via the VPC default route or Cloud NAT.

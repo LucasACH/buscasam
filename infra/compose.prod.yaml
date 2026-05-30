@@ -1,0 +1,109 @@
+# ADR-0009 prod overrides. Apply with:
+#   docker compose -f compose.yaml -f compose.prod.yaml ... (scripts/deploy.sh wraps this)
+#
+# Differences from the dev base:
+#   - all images pinned by digest (§2)         - capped json-file logging (§15)
+#   - db host port removed (§6)                 - mem limits + db oom guard (§14)
+#   - persistent state under /var/lib/buscasam (§7)
+#   - TEI offline + pinned revision (§10)       - nginx :443 for TLS_MODE=self (§9)
+#
+# TODO: replace every `@sha256:...` placeholder with the resolved digest before
+# the first prod deploy. CI fails the compose smoke check until they are real.
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  db:
+    image: pgvector/pgvector:pg16@sha256:REPLACE_ME
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
+    ports: []
+    volumes:
+      - /var/lib/buscasam/postgres:/var/lib/postgresql/data
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    oom_score_adj: -500
+    env_file: ./.env
+    logging: *default-logging
+
+  tei:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.6@sha256:REPLACE_ME
+    command:
+      - "--model-id"
+      - "${EMBEDDING_MODEL_ID:-intfloat/multilingual-e5-large}"
+      - "--revision"
+      - "${EMBEDDING_MODEL_REVISION:?set EMBEDDING_MODEL_REVISION}"
+      - "--port"
+      - "80"
+    environment:
+      HF_HUB_OFFLINE: "1"
+    volumes:
+      - /var/lib/buscasam/tei-cache:/data
+    mem_limit: 3g
+    logging: *default-logging
+
+  api:
+    image: buscasam-backend:${BUSCASAM_VERSION:-latest}
+    build:
+      context: ../backend
+      args:
+        UID: "1000"
+        GID: "1000"
+    env_file: ./.env
+    volumes:
+      - /var/lib/buscasam/blobs:/var/lib/buscasam/blobs
+    logging: *default-logging
+
+  worker_default:
+    image: buscasam-backend:${BUSCASAM_VERSION:-latest}
+    build:
+      context: ../backend
+    env_file: ./.env
+    volumes:
+      - /var/lib/buscasam/blobs:/var/lib/buscasam/blobs
+    logging: *default-logging
+
+  worker_ocr:
+    image: buscasam-backend:${BUSCASAM_VERSION:-latest}
+    build:
+      context: ../backend
+    env_file: ./.env
+    volumes:
+      - /var/lib/buscasam/blobs:/var/lib/buscasam/blobs
+    mem_limit: 2g
+    logging: *default-logging
+
+  frontend:
+    image: buscasam-frontend:${BUSCASAM_VERSION:-latest}
+    build:
+      context: ../frontend
+    logging: *default-logging
+
+  nginx:
+    image: nginx:1.27-alpine@sha256:REPLACE_ME
+    ports:
+      - "80:80"
+      - "443:443"   # only served when TLS_MODE=self
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - ./nginx/entrypoint.sh:/entrypoint.sh:ro
+      - /var/lib/buscasam/blobs:/var/lib/buscasam/blobs:ro
+      - /etc/letsencrypt:/etc/letsencrypt
+      - /var/www/certbot:/var/www/certbot
+    logging: *default-logging
+
+  migrate:
+    image: buscasam-backend:${BUSCASAM_VERSION:-latest}
+    build:
+      context: ../backend
+    env_file: ./.env
+
+  certbot:
+    image: certbot/certbot@sha256:REPLACE_ME
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt
+      - /var/www/certbot:/var/www/certbot
+    logging: *default-logging

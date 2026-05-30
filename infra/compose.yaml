@@ -1,0 +1,154 @@
+# ADR-0009: single Docker Compose stack. This is the dev base; compose.prod.yaml
+# layers prod overrides (build mode, host-port lockdown, logging, mem limits).
+# Steady-state services (db, tei, api, worker_default, worker_ocr, frontend,
+# nginx) + `migrate` (run --rm) + `certbot` (TLS_MODE=self). Backup deferred
+# post-MVP (ADR-0009 §11).
+#
+# Image tags below are pinned by digest in compose.prod.yaml (ADR-0009 §2).
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-buscasam}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-buscasam}
+      POSTGRES_DB: ${POSTGRES_DB:-buscasam}
+    ports:
+      - "127.0.0.1:5432:5432"   # dev only; removed in prod (ADR-0009 §6)
+    volumes:
+      - ./.data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-buscasam} -d ${POSTGRES_DB:-buscasam}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  tei:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.6
+    platform: linux/amd64
+    # Dev: download from HF on first boot. Prod pins --revision + HF_HUB_OFFLINE=1.
+    command:
+      - "--model-id"
+      - "${EMBEDDING_MODEL_ID:-intfloat/multilingual-e5-large}"
+      - "--port"
+      - "80"
+    volumes:
+      - ./.data/tei-cache:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ../backend
+    command: ["uvicorn", "buscasam.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    environment: &backend_env
+      BUSCASAM_ENV: ${BUSCASAM_ENV:-dev}
+      BUSCASAM_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-buscasam}:${POSTGRES_PASSWORD:-buscasam}@db:5432/${POSTGRES_DB:-buscasam}
+      BUSCASAM_TEI_URL: http://tei
+      BUSCASAM_BASE_URL: ${BUSCASAM_BASE_URL:-http://localhost:3000}
+      BUSCASAM_BLOB_ROOT: /var/lib/buscasam/blobs
+      BUSCASAM_MIN_SEMANTIC_SIMILARITY: ${BUSCASAM_MIN_SEMANTIC_SIMILARITY:-0.78}
+      BUSCASAM_EMBED_QUERY_TIMEOUT_S: ${BUSCASAM_EMBED_QUERY_TIMEOUT_S:-0.5}
+      BUSCASAM_EXTRACT_PIPELINE_VERSION: ${BUSCASAM_EXTRACT_PIPELINE_VERSION:-extract-v2}
+      BUSCASAM_SECRET_KEY: ${BUSCASAM_SECRET_KEY:-dev-secret-do-not-use-in-prod}
+      BUSCASAM_OIDC_CLIENT_ID: ${BUSCASAM_OIDC_CLIENT_ID:-dev-client-id}
+      BUSCASAM_OIDC_CLIENT_SECRET: ${BUSCASAM_OIDC_CLIENT_SECRET:-dev-client-secret}
+      BUSCASAM_METADATA_LLM_ENABLED: ${BUSCASAM_METADATA_LLM_ENABLED:-0}
+      BUSCASAM_METADATA_LLM_URL: ${BUSCASAM_METADATA_LLM_URL:-http://localhost:11434}
+      BUSCASAM_METADATA_LLM_MODEL: ${BUSCASAM_METADATA_LLM_MODEL:-qwen2.5:7b-instruct}
+    volumes:
+      - ./.data/blobs:/var/lib/buscasam/blobs
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker_default:
+    build:
+      context: ../backend
+    command: ["procrastinate", "--app=buscasam.core.jobs.app", "worker", "--queues=default", "--concurrency=8"]
+    environment: *backend_env
+    volumes:
+      - ./.data/blobs:/var/lib/buscasam/blobs
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker_ocr:
+    build:
+      context: ../backend
+    command: ["procrastinate", "--app=buscasam.core.jobs.app", "worker", "--queues=ocr", "--concurrency=1"]
+    environment: *backend_env
+    volumes:
+      - ./.data/blobs:/var/lib/buscasam/blobs
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../frontend
+    environment:
+      NODE_ENV: production
+      BUSCASAM_API_URL: http://api:8000
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    entrypoint: ["/entrypoint.sh"]
+    environment:
+      TLS_MODE: ${TLS_MODE:-upstream}
+      SERVER_NAME: ${SERVER_NAME:-_}
+      TRUSTED_PROXY_CIDR: ${TRUSTED_PROXY_CIDR:-0.0.0.0/0}
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - ./nginx/entrypoint.sh:/entrypoint.sh:ro
+      - ./.data/blobs:/var/lib/buscasam/blobs:ro
+    depends_on:
+      api:
+        condition: service_started
+      frontend:
+        condition: service_started
+    restart: unless-stopped
+
+  # Invoked only via `docker compose run --rm migrate` (ADR-0009 §13).
+  migrate:
+    build:
+      context: ../backend
+    command: ["bash", "-c", "alembic upgrade head && procrastinate schema --apply"]
+    environment: *backend_env
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles: ["migrate"]
+    restart: "no"
+
+  # Only meaningful in TLS_MODE=self (ADR-0009 §9).
+  certbot:
+    image: certbot/certbot
+    entrypoint: ["sh", "-c", "trap exit TERM; while :; do certbot certonly --webroot -w /var/www/certbot --renew-by-default -n; sleep 12h & wait $${!}; done"]
+    volumes:
+      - ./.data/letsencrypt:/etc/letsencrypt
+      - ./.data/certbot-www:/var/www/certbot
+    profiles: ["self"]
+    restart: unless-stopped
