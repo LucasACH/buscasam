@@ -5,14 +5,30 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 
-import { ResultCard } from "./ResultCard";
-import { useSearch } from "./useSearch";
+import { ResultCard, TIPO_LABEL } from "./ResultCard";
+import { SearchFilters, type FilterPatch } from "./SearchFilters";
+import { useSearch, type Orden, type Tipo } from "./useSearch";
 
 const PAGE_SIZE = 10;
+const RELEVANCE_PAGE_CAP = 20;
+const TIPO_VALUES = Object.keys(TIPO_LABEL) as Tipo[];
 
 function parsePagina(raw: string | null): number {
   const n = Number(raw);
   return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
+}
+
+function parseYear(raw: string | null): number | null {
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1000 && n <= 9999 ? n : null;
+}
+
+function parseOrden(raw: string | null): Orden {
+  return raw === "recientes" ? "recientes" : "relevancia";
+}
+
+function parseTipos(raw: string[]): Tipo[] {
+  return raw.filter((t): t is Tipo => TIPO_VALUES.includes(t as Tipo));
 }
 
 export default function BuscarPage() {
@@ -28,16 +44,32 @@ function BuscarPageInner() {
   const params = useSearchParams();
   const q = params.get("q") ?? "";
   const pagina = parsePagina(params.get("pagina"));
+  const area = params.get("area");
+  const tipos = parseTipos(params.getAll("tipo"));
+  const desde = parseYear(params.get("desde"));
+  const hasta = parseYear(params.get("hasta"));
+  const orden = parseOrden(params.get("orden"));
   const [qInput, setQInput] = useState(q);
 
   const update = useCallback(
-    (next: { q?: string; pagina?: number }) => {
+    (next: FilterPatch & { q?: string; pagina?: number }) => {
       const sp = new URLSearchParams(params.toString());
-      if (next.q !== undefined) {
-        if (next.q) sp.set("q", next.q);
-        else sp.delete("q");
-        sp.delete("pagina");
+      const set = (key: string, val: string | null | undefined) => {
+        if (val) sp.set(key, val);
+        else sp.delete(key);
+      };
+      if (next.q !== undefined) set("q", next.q);
+      if (next.area !== undefined) set("area", next.area);
+      if (next.desde !== undefined) set("desde", next.desde?.toString());
+      if (next.hasta !== undefined) set("hasta", next.hasta?.toString());
+      if (next.orden !== undefined)
+        set("orden", next.orden === "recientes" ? "recientes" : null);
+      if (next.tipos !== undefined) {
+        sp.delete("tipo");
+        for (const t of next.tipos) sp.append("tipo", t);
       }
+      // any change other than pagination resets to page 1
+      if (Object.keys(next).some((k) => k !== "pagina")) sp.delete("pagina");
       if (next.pagina !== undefined) {
         if (next.pagina > 1) sp.set("pagina", String(next.pagina));
         else sp.delete("pagina");
@@ -48,9 +80,19 @@ function BuscarPageInner() {
     [params, router],
   );
 
-  const { data, isLoading, isError } = useSearch({ q, pagina });
+  const { data, isLoading, isError } = useSearch({
+    q,
+    pagina,
+    area,
+    tipos,
+    desde,
+    hasta,
+    orden,
+  });
+  const active = q.length > 0 || orden === "recientes";
   const total = data?.total ?? 0;
-  const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  let lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (orden === "relevancia") lastPage = Math.min(lastPage, RELEVANCE_PAGE_CAP);
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8">
@@ -76,7 +118,16 @@ function BuscarPageInner() {
         />
       </form>
 
-      {q && (
+      <SearchFilters
+        area={area}
+        tipos={tipos}
+        desde={desde}
+        hasta={hasta}
+        orden={orden}
+        onChange={update}
+      />
+
+      {active && (
         <p className="text-muted-foreground mt-3 text-xs">
           {isLoading
             ? "Buscando…"
@@ -92,7 +143,7 @@ function BuscarPageInner() {
         ))}
       </section>
 
-      {q && total > PAGE_SIZE && (
+      {active && total > PAGE_SIZE && (
         <nav
           className="mt-8 flex items-center justify-between"
           aria-label="Paginación"

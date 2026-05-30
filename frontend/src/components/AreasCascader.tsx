@@ -27,13 +27,24 @@ function parentOf(area_path: string): string {
 export type AreasCascaderProps = {
   onChange: (area_path: string | null) => void;
   requireLeaf?: boolean;
+  value?: string | null;
 };
 
-export function AreasCascader({ onChange, requireLeaf }: AreasCascaderProps) {
+function segmentAt(value: string | null | undefined, level: number): string {
+  if (!value) return "";
+  const parts = value.split(".");
+  return parts.length >= level ? parts.slice(0, level).join(".") : "";
+}
+
+export function AreasCascader({
+  onChange,
+  requireLeaf,
+  value,
+}: AreasCascaderProps) {
   const { data } = useQuery({ queryKey: ["areas"], queryFn: fetchAreas });
-  const [escuela, setEscuela] = useState<string>("");
-  const [carrera, setCarrera] = useState<string>("");
-  const [materia, setMateria] = useState<string>("");
+  const [escuela, setEscuela] = useState<string>(() => segmentAt(value, 1));
+  const [carrera, setCarrera] = useState<string>(() => segmentAt(value, 2));
+  const [materia, setMateria] = useState<string>(() => segmentAt(value, 3));
 
   function emit(nextEscuela: string, nextCarrera: string, nextMateria: string) {
     if (requireLeaf) {
