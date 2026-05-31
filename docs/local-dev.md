@@ -36,6 +36,8 @@ BUSCASAM_METADATA_LLM_TIMEOUT_S=60
 
 `BUSCASAM_EMBED_QUERY_TIMEOUT_S=5` overrides the prod default of `0.5` so semantic search actually fires on Apple Silicon (TEI runs amd64-emulated and easily blows past 500 ms).
 
+`BUSCASAM_FUZZY_WORD_SIMILARITY_THRESHOLD` (default `0.3`) is the pg_trgm `word_similarity` floor for the typo-tolerant fallback that runs only when exact retrieval returns 0 rows. Lower it for more permissive matching, raise it to cut false positives.
+
 `BUSCASAM_SERVE_BLOBS_INLINE=1` makes download endpoints stream the blob from disk instead of emitting `X-Accel-Redirect` for nginx (which doesn't exist locally). Leave unset in prod.
 
 Optional staged metadata cleanup uses a local Ollama-compatible model. Install Ollama, run `ollama pull llama3.2:3b`, keep `ollama serve` listening on `http://localhost:11434`, then set `BUSCASAM_METADATA_LLM_ENABLED=1`. The worker calls `/api/generate` with `BUSCASAM_METADATA_LLM_MODEL` and a hard `BUSCASAM_METADATA_LLM_TIMEOUT_S=60`; timeout, outage, invalid JSON, or invalid schema falls back to deterministic extraction + YAKE and indexing still completes.
@@ -190,7 +192,7 @@ rm -rf backend/var/blobs
 - **"No se pudo subir el archivo"**: `backend/var/blobs/` not writable, or `BUSCASAM_BLOB_ROOT` unset. Check `backend/.env` is loaded (restart uvicorn after editing).
 - **Upload sticks on "Procesando…"**: worker not running, or TEI not healthy. Tail the worker output and run `curl http://localhost:8080/health`.
 - **Indexing jobs fail with `EmbedUnavailable`**: TEI cold or model still downloading. `docker logs buscasam-tei` and wait for `Ready`.
-- **Search returns 0 results for slight typos**: `BUSCASAM_EMBED_QUERY_TIMEOUT_S` too low → silent lexical fallback. Look for `"lexical_fallback": true` in the `/api/search` response.
+- **Search returns 0 results for slight typos**: typos within the trigram floor surface via the fuzzy fallback (`"fuzzy_fallback": true` in the `/api/search` response). If a typo still returns nothing, the term scored below `BUSCASAM_FUZZY_WORD_SIMILARITY_THRESHOLD` — lower it. Separately, `BUSCASAM_EMBED_QUERY_TIMEOUT_S` too low forces a silent lexical-only path (`"lexical_fallback": true`), which loses the semantic recall that often covers near-misses.
 - **Login bounces to `/login?error=not_unsam`**: account isn't on a UNSAM Workspace domain (`hd` claim missing or not in `ROLE_BY_HD`).
 - **Failed Procrastinate job won't retry**: `UPDATE procrastinate_jobs SET status='todo', attempts=0 WHERE id=<n>` and the worker picks it back up.
 - **Attachment upload returns 415**: extension not in the allowlist (see Attachments). 413 → over 20 MB. 409 with `attachment_cap_exceeded` → doc already has 5 attachments.

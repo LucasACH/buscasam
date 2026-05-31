@@ -124,6 +124,52 @@ def _lexical_candidates_ctes(
     return ctes, params
 
 
+def _fuzzy_candidates_ctes(
+    *,
+    where: str,
+    filter_clauses: str,
+    cap: int | None,
+) -> tuple[str, dict[str, object]]:
+    """Trigram sibling of `_lexical_candidates_ctes`, exposing `fz_ranked
+    (doc_id, body_text, score, rank)` — readable docs whose body has a word
+    similar to `:q`. Caller must bind `:q` and `set_config` the
+    `pg_trgm.word_similarity_threshold` GUC; when `cap` is not None the params
+    dict adds `:fz_cap`."""
+    cap_clause = "ORDER BY score DESC LIMIT :fz_cap" if cap is not None else ""
+    ctes = f"""
+        fz_scored AS (
+            SELECT c.doc_id,
+                   c.body_text,
+                   word_similarity(:q, c.body_text) AS score
+            FROM chunks c
+            JOIN documents d ON d.id = c.doc_id
+            WHERE :q <% c.body_text
+              AND c.is_current
+              AND {where}
+              {filter_clauses}
+        ),
+        fz_best AS (
+            SELECT doc_id, body_text, score
+            FROM (
+                SELECT doc_id, body_text, score,
+                       ROW_NUMBER() OVER (PARTITION BY doc_id ORDER BY score DESC) AS rn
+                FROM fz_scored
+            ) s
+            WHERE rn = 1
+        ),
+        fz_ranked AS (
+            SELECT doc_id, body_text, score,
+                   ROW_NUMBER() OVER (ORDER BY score DESC) AS rank
+            FROM fz_best
+            {cap_clause}
+        )
+    """
+    params: dict[str, object] = {}
+    if cap is not None:
+        params["fz_cap"] = cap
+    return ctes, params
+
+
 def _headline_expr(body_col: str) -> str:
     """ts_headline SQL expression; caller must bind `:q` and `:headline_opts`."""
     return (
@@ -178,6 +224,105 @@ async def run_count(
         return await _count_lexical(session, filters, user_ctx)
     return await _count_hybrid(
         session, filters, user_ctx, embedding, min_semantic_similarity
+    )
+
+
+async def run_fuzzy(
+    session: AsyncSession,
+    *,
+    filters: Filters,
+    user_ctx: UserCtx,
+    threshold: float = 0.3,
+) -> Results:
+    """Trigram typo-tolerant retrieval. Orchestration (`core/search`) calls this
+    only when exact retrieval returns 0 rows for a relevance query."""
+    where, where_params = readable_where("d", user_ctx)
+    filter_clauses = _filter_clauses(filters)
+    fz_ctes, fz_params = _fuzzy_candidates_ctes(
+        where=where, filter_clauses=filter_clauses, cap=RELEVANCE_CAP
+    )
+    offset = (filters.pagina - 1) * PAGE_SIZE
+    await _set_word_similarity_threshold(session, threshold)
+    sql = text(
+        f"""
+        WITH {fz_ctes}
+        SELECT
+            d.id           AS doc_id,
+            d.titulo       AS titulo,
+            d.fecha        AS fecha,
+            d.area_path::text AS area_path,
+            d.tipo         AS tipo,
+            d.abstract     AS abstract,
+            d.visibility   AS visibility,
+            {_headline_expr("fz.body_text")} AS snippet,
+            (SELECT count(*) FROM fz_ranked) AS total
+        FROM fz_ranked fz
+        JOIN documents d ON d.id = fz.doc_id
+        ORDER BY fz.rank
+        LIMIT :limit OFFSET :offset
+        """
+    )
+    params: dict[str, object] = {
+        "q": filters.q,
+        "headline_opts": TS_HEADLINE_OPTS,
+        "limit": PAGE_SIZE,
+        "offset": offset,
+        **fz_params,
+        **where_params,
+        **_filter_params(filters),
+    }
+    rows = (await session.execute(sql, params)).all()
+    total = rows[0].total if rows else 0
+    return Results(
+        rows=[
+            ResultRow(
+                doc_id=r.doc_id,
+                titulo=r.titulo,
+                fecha=r.fecha,
+                area_path=r.area_path,
+                tipo=r.tipo,
+                abstract=r.abstract,
+                snippet=r.snippet,
+                snippet_is_html=True,
+                visibility=r.visibility,
+            )
+            for r in rows
+        ],
+        total=total,
+        saturated=total >= RELEVANCE_CAP,
+    )
+
+
+async def run_fuzzy_count(
+    session: AsyncSession,
+    *,
+    filters: Filters,
+    user_ctx: UserCtx,
+    threshold: float = 0.3,
+) -> int:
+    """Count-only sibling of `run_fuzzy` for the unfiltered_total seam."""
+    where, where_params = readable_where("d", user_ctx)
+    filter_clauses = _filter_clauses(filters)
+    fz_ctes, fz_params = _fuzzy_candidates_ctes(
+        where=where, filter_clauses=filter_clauses, cap=RELEVANCE_CAP
+    )
+    await _set_word_similarity_threshold(session, threshold)
+    sql = text(f"WITH {fz_ctes} SELECT count(*) AS total FROM fz_ranked")
+    params: dict[str, object] = {
+        "q": filters.q,
+        **fz_params,
+        **where_params,
+        **_filter_params(filters),
+    }
+    return (await session.execute(sql, params)).scalar_one()
+
+
+async def _set_word_similarity_threshold(
+    session: AsyncSession, threshold: float
+) -> None:
+    await session.execute(
+        text("SELECT set_config('pg_trgm.word_similarity_threshold', :thr, true)"),
+        {"thr": str(threshold)},
     )
 
 

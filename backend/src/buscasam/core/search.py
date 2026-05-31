@@ -34,6 +34,7 @@ class ExecuteResult:
     saturated: bool
     unfiltered_total: int | None
     lexical_fallback: bool
+    fuzzy_fallback: bool
 
 
 def _has_filter(filters: Filters) -> bool:
@@ -71,6 +72,7 @@ async def execute(
     filters: Filters,
     user_ctx: UserCtx,
     min_semantic_similarity: float,
+    fuzzy_word_similarity_threshold: float,
 ) -> ExecuteResult:
     if filters.orden == "recientes":
         embedding: np.ndarray | None = None
@@ -90,22 +92,46 @@ async def execute(
         min_semantic_similarity=min_semantic_similarity,
     )
 
+    # Typo-tolerant fallback: only when exact retrieval found nothing for a
+    # relevance query. Replaces the empty result set if it surfaces anything.
+    fuzzy_fallback = False
+    if result.total == 0 and filters.q and filters.orden == "relevancia":
+        fuzzy = await search_query.run_fuzzy(
+            session,
+            filters=filters,
+            user_ctx=user_ctx,
+            threshold=fuzzy_word_similarity_threshold,
+        )
+        if fuzzy.total > 0:
+            result = fuzzy
+            fuzzy_fallback = True
+            logger.info("fuzzy_fallback_hit", extra={"q_len": len(filters.q)})
+
     unfiltered_total: int | None = None
     if _has_filter(filters):
-        unfiltered_total = await search_query.run_count(
-            session,
-            filters=replace(
-                filters,
-                pagina=1,
-                area_path=None,
-                tipos=(),
-                desde=None,
-                hasta=None,
-            ),
-            user_ctx=user_ctx,
-            embedding=embedding,
-            min_semantic_similarity=min_semantic_similarity,
+        base = replace(
+            filters,
+            pagina=1,
+            area_path=None,
+            tipos=(),
+            desde=None,
+            hasta=None,
         )
+        if fuzzy_fallback:
+            unfiltered_total = await search_query.run_fuzzy_count(
+                session,
+                filters=base,
+                user_ctx=user_ctx,
+                threshold=fuzzy_word_similarity_threshold,
+            )
+        else:
+            unfiltered_total = await search_query.run_count(
+                session,
+                filters=base,
+                user_ctx=user_ctx,
+                embedding=embedding,
+                min_semantic_similarity=min_semantic_similarity,
+            )
 
     return ExecuteResult(
         rows=result.rows,
@@ -113,4 +139,5 @@ async def execute(
         saturated=result.saturated,
         unfiltered_total=unfiltered_total,
         lexical_fallback=lexical_fallback,
+        fuzzy_fallback=fuzzy_fallback,
     )

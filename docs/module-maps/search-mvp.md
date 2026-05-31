@@ -50,11 +50,11 @@ Implements the `/buscar` slice end-to-end: URL-driven hybrid search over the pú
 
 ### `core/search`
 
-**Interface:** `search.execute(session, tei, *, filters, user_ctx, min_semantic_similarity) -> ExecuteResult`. Inputs: validated `Filters`, the requester's `UserCtx`, the TEI client, and the calibrated semantic floor. Returns `ExecuteResult { rows, total, saturated, unfiltered_total: int | None, lexical_fallback: bool }`. Invariants: `unfiltered_total` is populated iff any filter is active and is computed under the same `user_ctx` and `embedding` as the primary call; `lexical_fallback` is always `False` under `orden=recientes` (no embedding requested).
+**Interface:** `search.execute(session, tei, *, filters, user_ctx, min_semantic_similarity, fuzzy_word_similarity_threshold) -> ExecuteResult`. Inputs: validated `Filters`, the requester's `UserCtx`, the TEI client, the calibrated semantic floor, and the trigram word-similarity floor for the typo fallback. Returns `ExecuteResult { rows, total, saturated, unfiltered_total: int | None, lexical_fallback: bool, fuzzy_fallback: bool }`. Invariants: `unfiltered_total` is populated iff any filter is active and is computed under the same retrieval mode (fuzzy when the fuzzy fallback fired, else `user_ctx` + `embedding`) as the primary call; `lexical_fallback` is always `False` under `orden=recientes` (no embedding requested); `fuzzy_fallback` is `True` only when exact retrieval returned 0 rows for a relevance query and the trigram fallback surfaced ≥1 row.
 
-**Responsibilities:** Sole owner of the silent lexical-fallback policy (ADR-0002 §8: catch `EmbedUnavailable`, substitute `embedding=None`, log `lexical_fallback_rate`); sole owner of the "second call with filters dropped" rule for `unfiltered_total`; chooses whether to embed at all (skipped under `orden=recientes`).
+**Responsibilities:** Sole owner of the silent lexical-fallback policy (ADR-0002 §8: catch `EmbedUnavailable`, substitute `embedding=None`, log `lexical_fallback_rate`); sole owner of the typo-tolerant fuzzy-fallback policy (relevance query with 0 exact rows → `search_query.run_fuzzy`, swap in if non-empty, log `fuzzy_fallback_hit`); sole owner of the "second call with filters dropped" rule for `unfiltered_total`; chooses whether to embed at all (skipped under `orden=recientes`).
 
-**Seams:** Embedder is concrete (`core.embed`) — no adapter at MVP. The retrieval adapter is `core.search_query.run` (single implementation).
+**Seams:** Embedder is concrete (`core.embed`) — no adapter at MVP. The retrieval adapter is `core.search_query.run` / `.run_fuzzy` (single implementation each).
 
 **Depth note:** Sits between router and `search_query`. Deletion test: the three policies (fallback, unfiltered double-call, embed-skip on recientes) would each leak into the router and have to be re-pasted into every future authenticated route (PRD-2 onward). The route shrinks to validation + DTO shaping — both URL-shape concerns it correctly owns.
 
@@ -62,7 +62,7 @@ Implements the `/buscar` slice end-to-end: URL-driven hybrid search over the pú
 
 ### `api/search` (FastAPI router)
 
-**Interface:** `GET /api/search?q=&area=&tipo=&tipo=&desde=&hasta=&orden=&pagina=`. Returns `{results: ResultDTO[], total: int, saturated: bool, unfiltered_total: int | null, lexical_fallback: bool}`. Validates `q` empty ↔ `orden=recientes` (rejects `orden=relevancia` with empty q). Validates `pagina ≤ 20` under relevance. Validates `desde ≤ hasta`.
+**Interface:** `GET /api/search?q=&area=&tipo=&tipo=&desde=&hasta=&orden=&pagina=`. Returns `{results: ResultDTO[], total: int, saturated: bool, unfiltered_total: int | null, lexical_fallback: bool, fuzzy_fallback: bool}`. Validates `q` empty ↔ `orden=recientes` (rejects `orden=relevancia` with empty q). Validates `pagina ≤ 20` under relevance. Validates `desde ≤ hasta`.
 
 **Responsibilities:** URL-param → Pydantic Query validation; constructs `Filters` and the invitado `UserCtx`; calls `search.execute(...)`; shapes ORM-free `ResultDTO`s onto `SearchResponse`. Orchestration (embed/fallback, unfiltered double-call, telemetry) lives in `core/search`.
 
