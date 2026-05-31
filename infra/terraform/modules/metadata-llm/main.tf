@@ -1,19 +1,3 @@
-terraform {
-  required_version = ">= 1.5"
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = "~> 6.0"
-    }
-  }
-}
-
-provider "google" {
-  project = var.project_id
-  region  = var.region
-  zone    = var.zone
-}
-
 # Spot L4 keeps the GPU ~70% cheaper. Indexing is an async background job and
 # an Ollama outage is non-fatal (suggest_metadata falls back to heuristics), so
 # preemption only delays the queue — it never fails a document.
@@ -45,7 +29,8 @@ resource "google_compute_instance" "metadata_llm" {
   }
 
   network_interface {
-    network = var.network
+    network    = var.network
+    subnetwork = var.subnetwork
     # No external IP: only the app/worker subnet reaches Ollama, over the
     # internal network (see the firewall rule below).
   }

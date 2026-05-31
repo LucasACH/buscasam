@@ -17,9 +17,13 @@ A Spot **NVIDIA L4** VM runs [Ollama](https://ollama.com) serving
 
 ## Usage
 
+Consumed as a submodule from `infra/terraform/` (the root wires `zone`,
+`network`, `model`, `running`, `app_source_ranges`). Apply the whole stack:
+
 ```sh
+cd infra/terraform
 terraform init
-terraform apply -var project_id=YOUR_PROJECT -var 'app_source_ranges=["10.0.0.0/8"]'
+terraform apply
 ```
 
 Then point the backend at the output:
@@ -32,11 +36,12 @@ BUSCASAM_METADATA_LLM_MODEL=qwen2.5:7b-instruct
 
 ## Scale-to-zero
 
-Stop the VM when the queue drains, start it on backlog:
+Stop the VM when the queue drains, start it on backlog — flip
+`metadata_llm_running` in `terraform.tfvars`:
 
 ```sh
-terraform apply -var running=false   # STOP
-terraform apply -var running=true    # RUNNING
+terraform apply -var metadata_llm_running=false   # STOP
+terraform apply -var metadata_llm_running=true    # RUNNING
 ```
 
 For automation, drive `running` from a queue-depth check (Cloud Scheduler →
