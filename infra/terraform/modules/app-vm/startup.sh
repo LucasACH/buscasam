@@ -31,9 +31,8 @@ curl -fsSL https://get.docker.com | sh
 # --- host user + state dirs (ADR-0009 §7) ---
 id buscasam >/dev/null 2>&1 || useradd --system --uid 1000 --user-group --shell /usr/sbin/nologin buscasam
 usermod -aG docker buscasam || true
-mkdir -p /var/lib/buscasam/postgres /var/lib/buscasam/blobs/.tmp /var/lib/buscasam/tei-cache /backup/buscasam
+mkdir -p /var/lib/buscasam/postgres /var/lib/buscasam/blobs/.tmp /var/lib/buscasam/tei-cache /var/lib/buscasam/backup
 chown -R buscasam:buscasam /var/lib/buscasam
-chown buscasam:buscasam /backup/buscasam
 
 TOKEN=$(curl -s -H "Metadata-Flavor: Google" \
   "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" | jq -r .access_token)

@@ -4,8 +4,8 @@ output "lb_ip" {
 }
 
 output "metadata_llm_url" {
-  description = "Set BUSCASAM_METADATA_LLM_URL to this value."
-  value       = module.metadata_llm.metadata_llm_url
+  description = "Set BUSCASAM_METADATA_LLM_URL to this value (null when disabled)."
+  value       = one(module.metadata_llm[*].metadata_llm_url)
 }
 
 output "image_repo_path" {

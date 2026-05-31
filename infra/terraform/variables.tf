@@ -48,6 +48,11 @@ variable "metadata_llm_model" {
   default = "qwen2.5:7b-instruct"
 }
 
+variable "metadata_llm_enabled" {
+  type    = bool
+  default = false # off at launch (ADR-0012); avoids coupling apply to L4/Spot quota
+}
+
 variable "metadata_llm_running" {
   type    = bool
   default = false # scale-to-zero by default; the spot L4 is the biggest cost line

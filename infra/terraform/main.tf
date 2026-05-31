@@ -61,6 +61,7 @@ module "lb" {
 
 module "metadata_llm" {
   source = "./modules/metadata-llm"
+  count  = var.metadata_llm_enabled ? 1 : 0
 
   zone       = var.zone
   network    = module.network.network_name

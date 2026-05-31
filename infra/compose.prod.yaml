@@ -71,7 +71,7 @@ services:
     image: ${BUSCASAM_IMAGE_REPO}/backend:${BUSCASAM_VERSION:-latest}
     volumes:
       - /var/lib/buscasam/blobs:/var/lib/buscasam/blobs:ro
-      - /backup/buscasam:/backup/buscasam
+      - /var/lib/buscasam/backup:/backup/buscasam
     logging: *default-logging
 
   frontend:
