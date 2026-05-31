@@ -19,4 +19,7 @@ compose up -d db
 # A failed migrate exits non-zero here, before any app container is rolled.
 compose run --rm migrate
 compose up -d
+# Recreated api/frontend get new IPs; nginx caches upstream IPs at start, so
+# re-resolve them to avoid stale-upstream 502s after a deploy.
+compose restart nginx
 docker image prune -f
