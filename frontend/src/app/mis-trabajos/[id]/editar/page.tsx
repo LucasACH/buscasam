@@ -21,7 +21,7 @@ import {
 
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
-import { type BadgeTone } from "@/components/StatusBadge";
+import { TONE_CLASSES, type BadgeTone } from "@/components/StatusBadge";
 import {
   AlertDialog,
   AlertDialogTrigger,
@@ -60,14 +60,6 @@ const STATUS_TONE: Record<string, BadgeTone> = {
   "Listo para publicar": "green",
   "Procesando…": "amber",
   "Falló el procesamiento": "red",
-};
-
-const PILL_TONE: Record<BadgeTone, string> = {
-  neutral: "bg-status-neutral-bg text-status-neutral-fg",
-  amber: "bg-status-amber-bg text-status-amber-fg",
-  green: "bg-status-green-bg text-status-green-fg",
-  red: "bg-status-red-bg text-status-red-fg",
-  blue: "bg-status-blue-bg text-status-blue-fg",
 };
 
 const formSchema = z.object({
@@ -496,7 +488,7 @@ function StatusPill({ label }: { label: string }) {
   return (
     <span
       data-testid="status-pill"
-      className={`inline-flex h-[26px] items-center gap-1 rounded-full px-3 text-[13px] font-medium whitespace-nowrap ${PILL_TONE[tone]}`}
+      className={`inline-flex h-[26px] items-center gap-1 rounded-full px-3 text-[13px] font-medium whitespace-nowrap ${TONE_CLASSES[tone]}`}
     >
       {label}
     </span>

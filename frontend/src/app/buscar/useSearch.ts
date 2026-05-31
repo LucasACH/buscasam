@@ -59,6 +59,5 @@ export function useSearch(params: SearchParams) {
     data: query.data,
     isLoading: query.isLoading,
     isError: query.isError,
-    isLexicalFallback: query.data?.lexical_fallback ?? false,
   };
 }

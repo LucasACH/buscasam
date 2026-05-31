@@ -552,7 +552,7 @@ describe("draft attachment actions", () => {
     );
 
     const deleting = result.current.actions.attachments.remove(
-      result.current.state?.attachments[0]!,
+      result.current.state!.attachments[0],
     );
     await waitFor(() => expect(result.current.state?.attachments).toEqual([]));
     expect(apiDelete).toHaveBeenCalledWith(
