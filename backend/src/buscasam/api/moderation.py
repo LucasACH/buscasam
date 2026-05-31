@@ -24,6 +24,7 @@ from buscasam.core import auth
 from buscasam.core.document_access import moderation_inspection_where
 from buscasam.core.moderation import (
     DocumentNotReadable,
+    OwnDocumentReport,
     Reason,
     dismiss,
     file_report,
@@ -72,6 +73,8 @@ async def create_report(
         await file_report(session, user_ctx, body.doc_id, body.reason)
     except DocumentNotReadable:
         raise _not_found()
+    except OwnDocumentReport:
+        raise HTTPException(status_code=403, detail="own_document")
     return Response(status_code=204)
 
 

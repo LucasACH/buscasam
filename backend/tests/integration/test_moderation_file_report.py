@@ -61,14 +61,15 @@ async def test_file_report_on_non_readable_doc_raises(session):
     assert await _reports(session, doc_id) == []
 
 
-async def test_coauthor_may_report_own_privado_doc(session):
+async def test_owner_may_not_report_own_doc(session):
     doc_id = await make_document(session, visibility="privado")
     owner = await make_user(session)
     await make_document_author(session, doc_id, user_id=owner, status="owner")
 
-    await moderation.file_report(session, _ctx(owner), doc_id, "error")
+    with pytest.raises(moderation.OwnDocumentReport):
+        await moderation.file_report(session, _ctx(owner), doc_id, "error")
 
-    assert await _reports(session, doc_id) == [(owner, "error", "open")]
+    assert await _reports(session, doc_id) == []
 
 
 async def test_new_report_accepted_after_prior_resolved(session):
