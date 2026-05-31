@@ -57,3 +57,20 @@ variable "metadata_llm_running" {
   type    = bool
   default = false # scale-to-zero by default; the spot L4 is the biggest cost line
 }
+
+variable "metadata_llm_provider" {
+  type        = string
+  default     = "ollama"
+  description = "Metadata LLM provider: vertex (Gemini, prod default) or ollama (ADR-0012)."
+}
+
+variable "vertex_project" {
+  type        = string
+  default     = ""
+  description = "GCP project for Vertex AI; empty falls back to project_id."
+}
+
+variable "vertex_location" {
+  type    = string
+  default = "us-central1"
+}

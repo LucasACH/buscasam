@@ -31,3 +31,34 @@ Staged `abstract`/`keywords` suggestions (ADR-0007 §6–7) may be refined by a 
 7. Inference host is out-of-stack and scale-to-zero. The model is **not** a Compose service. ADR-0009's "single Docker Compose stack on one VM" still holds for the application: GPU inference would not fit the CPU-only host, so it runs on a separate Spot **NVIDIA L4** GCP Compute Engine VM defined in `infra/terraform/modules/metadata-llm/`. The VM has no external IP; only the app/worker subnet (`app_source_ranges`) reaches Ollama on `:11434`. Because §3 makes an outage non-fatal, the VM may be scaled to zero (`terraform apply -var metadata_llm_running=false`) when the indexing queue is idle. Automated start/stop on queue depth is not in scope; the toggle is a manual operator action at MVP.
 
 8. MVP posture: shipped disabled. `metadata_llm_enabled` defaults to false in code, `.env.example`, and `compose` env. The default deployment is heuristic-only and identical to ADR-0007. Enabling the feature is an explicit operator decision that also requires setting `metadata_llm_running=true` in the Terraform root. The feature is not a launch gate.
+
+## Amendment (2026-05-31): configurable provider, Vertex Gemini as the prod default
+
+The metadata LLM is now **provider-pluggable**, selected by
+`BUSCASAM_METADATA_LLM_PROVIDER` (`vertex` | `ollama`). The chokepoint, the
+heuristic floor, the non-fatal contract, the Spanish guard, the prompt, and the
+`{abstract, keywords}` JSON contract (locked items 1–5) are unchanged — only the
+transport behind `core/extract._call_metadata_llm` is dispatched per provider.
+
+- **`vertex` (new default for the production deployment).** Uses the
+  `google-genai` unified SDK against **Vertex AI + Gemini 2.5 Flash** in-project
+  (`us-central1`). Serverless, pay-per-token, $0 idle, no GPU VM to operate, and
+  data stays governed under Vertex enterprise terms — which honors this ADR's
+  self-hosted / no-external-consumer-API intent while removing the standing cost
+  and ops burden of item 7's L4 VM. Auth is ADC via the app VM service account,
+  granted `roles/aiplatform.user` in `modules/app-vm`; no API key or secret. The
+  schema maps to `response_mime_type=application/json` + `response_schema`
+  (`additionalProperties` dropped — Gemini rejects it).
+- **`ollama` (retained).** The original transport (item 5) and the out-of-stack
+  scale-to-zero GPU VM (item 7) remain available for operators who require a
+  fully self-hosted model; select with `provider=ollama` +
+  `metadata_llm_enabled=true`, which gates `modules/metadata-llm`.
+
+Configuration adds `metadata_llm_provider`, `vertex_project`, and
+`vertex_location` to the item-6 settings list, all `BUSCASAM_`-prefixed.
+`vertex_project` is required when `enabled and provider=="vertex"` (settings
+validator). The code default stays `provider=ollama` for dev/backward
+compatibility; production opts into `vertex` via Terraform (`startup.sh` renders
+the `.env`). The non-fatal contract (item 3) is unchanged — any Vertex error,
+timeout, or malformed/non-Spanish output degrades to the heuristic fallback —
+so this remains not a launch gate.

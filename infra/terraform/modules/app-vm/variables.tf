@@ -69,3 +69,30 @@ variable "secret_ids" {
   type        = list(string)
   description = "Secret Manager IDs (== .env var names) the VM fetches at boot."
 }
+
+variable "metadata_llm_enabled" {
+  type    = bool
+  default = false
+}
+
+variable "metadata_llm_provider" {
+  type        = string
+  default     = "ollama"
+  description = "Metadata LLM provider written to .env: ollama or vertex (ADR-0012)."
+}
+
+variable "metadata_llm_model" {
+  type    = string
+  default = "qwen2.5:7b-instruct"
+}
+
+variable "vertex_project" {
+  type        = string
+  default     = ""
+  description = "GCP project for Vertex AI (provider=vertex). Defaults to project_id when empty."
+}
+
+variable "vertex_location" {
+  type    = string
+  default = "us-central1"
+}

@@ -30,6 +30,13 @@ resource "google_storage_bucket_iam_member" "app_config_reader" {
   member = "serviceAccount:${google_service_account.app.email}"
 }
 
+# Vertex AI metadata LLM (ADR-0012) authenticates via ADC = this SA.
+resource "google_project_iam_member" "vertex_user" {
+  project = var.project_id
+  role    = "roles/aiplatform.user"
+  member  = "serviceAccount:${google_service_account.app.email}"
+}
+
 # Persistent state (PGDATA, blobs, tei-cache). Survives VM recreation.
 resource "google_compute_disk" "data" {
   name = "buscasam-data"
@@ -78,6 +85,11 @@ resource "google_compute_instance" "app" {
       server_name              = var.server_name
       trusted_proxy_cidr       = var.trusted_proxy_cidr
       embedding_model_revision = var.embedding_model_revision
+      metadata_llm_enabled     = var.metadata_llm_enabled
+      metadata_llm_provider    = var.metadata_llm_provider
+      metadata_llm_model       = var.metadata_llm_model
+      vertex_project           = coalesce(var.vertex_project, var.project_id)
+      vertex_location          = var.vertex_location
       secret_ids               = join(" ", var.secret_ids)
     })
   }
