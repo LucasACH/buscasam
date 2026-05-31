@@ -464,6 +464,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/docs/popular": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Popular */
+        get: operations["get_popular_api_docs_popular_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/docs/{doc_id}": {
         parameters: {
             query?: never;
@@ -844,6 +861,8 @@ export interface components {
             archivo_principal: components["schemas"]["MainFileDTO"];
             /** Adjuntos */
             adjuntos: components["schemas"]["AttachmentDTO"][];
+            /** Owner Email */
+            owner_email: string | null;
             /** Versions */
             versions?: components["schemas"]["DetailVersionDTO"][] | null;
             /** Manageable */
@@ -892,6 +911,8 @@ export interface components {
             archivo_principal: components["schemas"]["MainFileDTO"];
             /** Adjuntos */
             adjuntos: components["schemas"]["AttachmentDTO"][];
+            /** Owner Email */
+            owner_email: string | null;
             /** Versions */
             versions?: components["schemas"]["DetailVersionDTO"][] | null;
             /** Manageable */
@@ -1093,6 +1114,28 @@ export interface components {
             published_at: string | null;
             /** Moderation Hidden */
             moderation_hidden: boolean;
+        };
+        /** PopularResponse */
+        PopularResponse: {
+            /** Results */
+            results: components["schemas"]["PopularResultDTO"][];
+            /** Public Total */
+            public_total: number;
+        };
+        /** PopularResultDTO */
+        PopularResultDTO: {
+            /** Doc Id */
+            doc_id: number;
+            /** Titulo */
+            titulo: string;
+            /** Area Path */
+            area_path: string;
+            /** Tipo */
+            tipo: string;
+            /** Fecha */
+            fecha: string | null;
+            /** Reads */
+            reads: number;
         };
         /** QueueEntryDTO */
         QueueEntryDTO: {
@@ -2041,6 +2084,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeletedDocDTO"][];
+                };
+            };
+        };
+    };
+    get_popular_api_docs_popular_get: {
+        parameters: {
+            query?: {
+                window?: "week";
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PopularResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
