@@ -23,6 +23,11 @@ class DocumentNotReadable(Exception):
     uniform 404 so hidden/private/deleted existence never leaks."""
 
 
+class OwnDocumentReport(Exception):
+    """The reporter owns the target document — reporting one's own publication is
+    meaningless (the owner can edit or delete it). Router maps this to 403."""
+
+
 async def file_report(
     session: AsyncSession, user_ctx: UserCtx, doc_id: int, reason: Reason
 ) -> None:
@@ -31,7 +36,8 @@ async def file_report(
     A second open report by the same reporter on the same doc is a harmless
     no-op (`ON CONFLICT` on the unique partial index
     `(doc_id, reporter_user_id) WHERE status='open'`). A non-readable doc raises
-    `DocumentNotReadable` — `require_authenticated` is the caller's job."""
+    `DocumentNotReadable`; the doc's owner raises `OwnDocumentReport` —
+    `require_authenticated` is the caller's job."""
     where, params = readable_where("d", user_ctx)
     readable = (
         await session.execute(
@@ -41,6 +47,18 @@ async def file_report(
     ).scalar_one_or_none()
     if readable is None:
         raise DocumentNotReadable
+
+    is_owner = (
+        await session.execute(
+            text(
+                "SELECT 1 FROM document_authors "
+                "WHERE doc_id = :doc_id AND user_id = :user_id AND status = 'owner'"
+            ),
+            {"doc_id": doc_id, "user_id": user_ctx.user_id},
+        )
+    ).scalar_one_or_none()
+    if is_owner is not None:
+        raise OwnDocumentReport
 
     await session.execute(
         text(

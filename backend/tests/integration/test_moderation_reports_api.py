@@ -141,7 +141,7 @@ async def test_unauthenticated_post_is_rejected(client, session):
     assert await _reports(session, doc_id) == []
 
 
-async def test_coauthor_reports_own_privado_doc_returns_204(client, session):
+async def test_owner_reports_own_doc_returns_403(client, session):
     doc_id = await make_document(session, visibility="privado")
     owner = await make_user(session)
     await make_document_author(session, doc_id, user_id=owner, status="owner")
@@ -153,8 +153,8 @@ async def test_coauthor_reports_own_privado_doc_returns_204(client, session):
         headers=_headers(cookie),
     )
 
-    assert r.status_code == 204
-    assert await _reports(session, doc_id) == [(owner, "error", "open")]
+    assert r.status_code == 403
+    assert await _reports(session, doc_id) == []
 
 
 async def test_fresh_report_after_resolving_prior_returns_204_and_new_row(
