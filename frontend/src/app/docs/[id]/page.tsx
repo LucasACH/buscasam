@@ -9,7 +9,7 @@ import { VersionsPanel } from "@/components/VersionsPanel";
 import { Button } from "@/components/ui/button";
 import { TIPO_LABEL, VISIBILITY_LABEL } from "@/lib/labels";
 
-import { fetchAreas, fetchDocDetail } from "./fetchDetail";
+import { fetchAreas, fetchDocDetail, type Area } from "./fetchDetail";
 import { RelatedRail } from "./RelatedRail";
 import type { DetailDoc, DetailWithInvitationDoc, MinimalInviteDoc } from "./types";
 
@@ -42,10 +42,24 @@ export default async function DocDetailPage({ params }: PageProps) {
   if (detail.view === "minimal") {
     return <MinimalInviteView detail={detail} docId={docId} />;
   }
-  const areaName =
-    areas.find((a) => a.area_path === detail.area_path)?.display_name ??
-    detail.area_path;
-  return <DetailView detail={detail} docId={docId} areaName={areaName} />;
+  return (
+    <DetailView
+      detail={detail}
+      docId={docId}
+      areaName={areaLabel(areas, detail.area_path)}
+    />
+  );
+}
+
+// Resolve an ltree leaf path to an Escuela › Carrera › Materia breadcrumb,
+// mapping each ancestor segment to its display_name and falling back to the raw
+// segment. Mirrors useAreaLabel for this server-rendered view.
+function areaLabel(areas: Area[], areaPath: string): string {
+  const byPath = new Map(areas.map((a) => [a.area_path, a.display_name]));
+  const segments = areaPath.split(".");
+  return segments
+    .map((_, i) => byPath.get(segments.slice(0, i + 1).join(".")) ?? segments[i])
+    .join(" › ");
 }
 
 function MinimalInviteView({
