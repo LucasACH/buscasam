@@ -25,6 +25,7 @@ vi.mock("@/api/client", () => ({ api: { POST: apiPost } }));
 // hermetic and don't reach the network through the typed client.
 vi.mock("@/lib/useNotifications", () => ({
   NOTIFICATIONS_QUERY_KEY: ["notifications"],
+  usePrefetchNotifications: () => {},
   useUnreadCount: () => ({ count: 0, isLoading: false }),
   useNotifications: () => ({
     items: [],
