@@ -32,7 +32,11 @@ curl -fsSL https://get.docker.com | sh
 id buscasam >/dev/null 2>&1 || useradd --system --uid 1000 --user-group --shell /usr/sbin/nologin buscasam
 usermod -aG docker buscasam || true
 mkdir -p /var/lib/buscasam/postgres /var/lib/buscasam/blobs/.tmp /var/lib/buscasam/tei-cache /var/lib/buscasam/backup
-chown -R buscasam:buscasam /var/lib/buscasam
+# Only the app-owned dirs go to buscasam. NOT postgres: its data is owned by the
+# db container's postgres user (uid 999); a recursive chown here breaks Postgres
+# on every reboot ("could not open file ...: Permission denied").
+chown buscasam:buscasam /var/lib/buscasam
+chown -R buscasam:buscasam /var/lib/buscasam/blobs /var/lib/buscasam/tei-cache /var/lib/buscasam/backup
 
 TOKEN=$(curl -s -H "Metadata-Flavor: Google" \
   "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" | jq -r .access_token)
