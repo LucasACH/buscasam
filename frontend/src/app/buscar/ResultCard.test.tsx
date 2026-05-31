@@ -38,6 +38,25 @@ describe("ResultCard", () => {
     ).toBeInTheDocument();
   });
 
+  it("falls back to abstract when the snippet has no highlight (no exact match)", () => {
+    const { container } = renderCard({
+      doc_id: 3,
+      titulo: "Multa",
+      fecha: "2026-01-01",
+      area_path: "ingenieria",
+      tipo: "tesis",
+      abstract: "Francisco presenta un descargo ante un acta de comprobación.",
+      snippet: "Francisco presenta un descargo ante un acta de comprobación.",
+      snippet_is_html: true,
+      visibility: "publico",
+    });
+
+    expect(container.querySelectorAll("p").length).toBe(1);
+    expect(
+      screen.getByText("Francisco presenta un descargo ante un acta de comprobación."),
+    ).toBeInTheDocument();
+  });
+
   it("omits snippet block when snippet is undefined (related rail shape)", () => {
     const { container } = renderCard({
       doc_id: 7,

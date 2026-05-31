@@ -54,6 +54,8 @@ export function ResultCard({ result }: { result: ResultCardData }) {
   const autores = result.autores?.map((a) => a.display_name).join(", ");
   const areaLabel = useAreaLabel(result.area_path, true);
   const meta = [year, areaLabel, tipo].filter(Boolean) as string[];
+  const hasHighlight =
+    result.snippet_is_html === true && result.snippet?.includes("<mark>");
   return (
     <article className="group border-border hover:border-border-strong relative rounded-lg border bg-card px-5 py-[18px] transition-all hover:shadow-[0_2px_8px_-2px_rgba(23,23,23,0.08)]">
       <h2 className="text-[17px] leading-[1.3] font-semibold tracking-tight">
@@ -80,21 +82,21 @@ export function ResultCard({ result }: { result: ResultCardData }) {
           </span>
         )}
       </div>
-      {result.abstract && (
+      {hasHighlight ? (
+        <p className="mt-2.5 text-sm leading-relaxed text-neutral-700">
+          {renderHighlightedSnippet(result.snippet!)}
+        </p>
+      ) : result.abstract ? (
         <p className="mt-2.5 text-sm leading-relaxed text-neutral-700">
           {truncate(result.abstract, 280)}
         </p>
-      )}
-      {result.snippet !== undefined &&
-        (result.snippet_is_html ? (
-          <p className="mt-2.5 text-sm leading-relaxed text-neutral-700">
-            {renderHighlightedSnippet(result.snippet)}
-          </p>
-        ) : (
+      ) : (
+        result.snippet && (
           <p className="mt-2.5 text-sm leading-relaxed text-neutral-700">
             {result.snippet}
           </p>
-        ))}
+        )
+      )}
     </article>
   );
 }

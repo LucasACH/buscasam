@@ -6,7 +6,10 @@ const { useMostRead } = vi.hoisted(() => ({ useMostRead: vi.fn() }));
 const { useAreaLabel } = vi.hoisted(() => ({ useAreaLabel: vi.fn() }));
 vi.mock("@/lib/useUser", () => ({ useUser }));
 vi.mock("./useMostRead", () => ({ useMostRead }));
-vi.mock("@/lib/useAreas", () => ({ useAreaLabel, useAreas: vi.fn() }));
+vi.mock("@/lib/useAreas", () => ({
+  useAreaLabel,
+  useAreas: vi.fn(() => ({ isLoading: false })),
+}));
 
 const POPULAR = [
   {
