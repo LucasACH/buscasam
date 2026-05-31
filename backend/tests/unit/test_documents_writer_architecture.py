@@ -12,7 +12,9 @@ import re
 from pathlib import Path
 
 SRC_ROOT = Path(__file__).resolve().parent.parent.parent / "src" / "buscasam"
-DOCUMENTS_FILE = SRC_ROOT / "core" / "documents.py"
+# core/documents is a package split by capability; the whole subtree is the
+# chokepoint, so the exemption is the directory, not a single file.
+DOCUMENTS_DIR = SRC_ROOT / "core" / "documents"
 MODERATION_FILE = SRC_ROOT / "core" / "moderation.py"
 SEED_FILE = SRC_ROOT / "fixtures" / "seed.py"
 
@@ -44,7 +46,7 @@ def _request_path_python_files(*exempt: Path):
     for p in SRC_ROOT.rglob("*.py"):
         if "__pycache__" in p.parts or "migrations" in p.parts:
             continue
-        if p in exempt:
+        if any(p == e or e in p.parents for e in exempt):
             continue
         yield p
 
@@ -52,7 +54,7 @@ def _request_path_python_files(*exempt: Path):
 def test_document_versions_written_only_by_core_documents():
     offenders = [
         p
-        for p in _request_path_python_files(DOCUMENTS_FILE, SEED_FILE)
+        for p in _request_path_python_files(DOCUMENTS_DIR, SEED_FILE)
         if _WRITE_RE.search(p.read_text(encoding="utf-8"))
     ]
     assert offenders == [], (
@@ -66,7 +68,7 @@ def test_soft_deleted_at_written_only_by_core_documents():
     writer, so the stamp-once and owner-only rules cannot drift."""
     offenders = [
         p
-        for p in _request_path_python_files(DOCUMENTS_FILE, SEED_FILE)
+        for p in _request_path_python_files(DOCUMENTS_DIR, SEED_FILE)
         if _SOFT_DELETE_WRITE_RE.search(p.read_text(encoding="utf-8"))
     ]
     assert offenders == [], (
