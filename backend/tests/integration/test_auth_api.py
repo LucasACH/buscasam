@@ -351,6 +351,7 @@ async def test_me_200_and_401(client, session):
         "user_id": uid,
         "role": "docente",
         "name": "Ada Lovelace",
+        "email": "ada@unsam.edu.ar",
         "picture_url": "https://example.test/a.png",
         "hd": "unsam.edu.ar",
     }

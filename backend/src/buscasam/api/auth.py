@@ -23,6 +23,7 @@ class MeResponse(BaseModel):
     user_id: int
     role: auth.Role
     name: str
+    email: str
     picture_url: str | None
     hd: str
 
@@ -106,7 +107,7 @@ async def me(
     row = (
         await session.execute(
             text(
-                "SELECT role, name, picture_url, hd "
+                "SELECT role, name, email, picture_url, hd "
                 "FROM users WHERE id = :uid"
             ),
             {"uid": user_ctx.user_id},
