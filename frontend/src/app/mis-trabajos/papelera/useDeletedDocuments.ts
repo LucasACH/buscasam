@@ -11,7 +11,6 @@ type DeletedDocDTO = components["schemas"]["DeletedDocDTO"];
 export type DeletedDoc = {
   id: number;
   title: string;
-  publicationStatus: string;
   daysRemaining: number;
 };
 
@@ -31,7 +30,6 @@ function project(dto: DeletedDocDTO, now: number): DeletedDoc {
   return {
     id: dto.id,
     title: dto.title,
-    publicationStatus: dto.publication_status,
     daysRemaining: daysRemaining(dto.purge_at, now),
   };
 }

@@ -1,11 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Calendar, Check, ChevronDown, Layers, X } from "lucide-react";
 
-import { api } from "@/api/client";
-import type { components } from "@/api/schema";
 import { AreasCascader } from "@/components/AreasCascader";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +11,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { useAreaLabel } from "@/lib/useAreas";
 
 const FILTER_BASE =
   "inline-flex h-8 items-center gap-1.5 rounded-lg border bg-card px-2.5 text-[13px] font-medium transition-colors";
@@ -23,8 +21,6 @@ const FILTER_SET = "border-primary bg-primary-tint text-primary-hover";
 
 import { TIPO_LABEL } from "./ResultCard";
 import type { Orden, Tipo } from "./useSearch";
-
-type Area = components["schemas"]["AreaDTO"];
 
 const TIPO_VALUES = Object.keys(TIPO_LABEL) as Tipo[];
 
@@ -45,20 +41,17 @@ export type SearchFiltersProps = {
   onChange: (patch: FilterPatch) => void;
 };
 
-async function fetchAreas(): Promise<Area[]> {
-  const { data, error } = await api.GET("/api/areas");
-  if (error) throw error;
-  return data ?? [];
-}
-
-function useAreaLabel(area: string | null): string | null {
-  const { data } = useQuery({ queryKey: ["areas"], queryFn: fetchAreas });
-  if (!area) return null;
-  const byPath = new Map((data ?? []).map((a) => [a.area_path, a.display_name]));
-  const segments = area.split(".");
-  return segments
-    .map((_, i) => byPath.get(segments.slice(0, i + 1).join(".")) ?? segments[i])
-    .join(" › ");
+// Local input mirrors the committed prop but stays editable between blurs;
+// re-sync during render (not an effect) when the prop changes externally, e.g.
+// when the year filter is cleared elsewhere.
+function useSyncedInput(source: string) {
+  const [value, setValue] = useState(source);
+  const [prev, setPrev] = useState(source);
+  if (source !== prev) {
+    setPrev(source);
+    setValue(source);
+  }
+  return [value, setValue] as const;
 }
 
 export function SearchFilters({
@@ -71,13 +64,10 @@ export function SearchFilters({
 }: SearchFiltersProps) {
   const areaLabel = useAreaLabel(area);
   const [areaOpen, setAreaOpen] = useState(false);
-  const [desdeInput, setDesdeInput] = useState(desde?.toString() ?? "");
-  const [hastaInput, setHastaInput] = useState(hasta?.toString() ?? "");
+  const [desdeInput, setDesdeInput] = useSyncedInput(desde?.toString() ?? "");
+  const [hastaInput, setHastaInput] = useSyncedInput(hasta?.toString() ?? "");
   const hasFilters =
     area !== null || tipos.length > 0 || desde !== null || hasta !== null;
-
-  useEffect(() => setDesdeInput(desde?.toString() ?? ""), [desde]);
-  useEffect(() => setHastaInput(hasta?.toString() ?? ""), [hasta]);
 
   function commitYear(key: "desde" | "hasta", raw: string) {
     const n = Number(raw);

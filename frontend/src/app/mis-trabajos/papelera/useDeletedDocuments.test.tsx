@@ -63,7 +63,6 @@ describe("useDeletedDocuments", () => {
       {
         id: 5,
         title: "Eliminado",
-        publicationStatus: "published",
         daysRemaining: 2,
       },
     ]);

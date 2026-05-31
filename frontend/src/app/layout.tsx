@@ -18,7 +18,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "BUSCASAM",
+  title: "BUSCASAM — Búsqueda de trabajos académicos de la UNSAM",
   description: "Búsqueda de trabajos académicos de la UNSAM.",
 };
 

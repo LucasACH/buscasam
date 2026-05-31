@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 
 export type BadgeTone = "neutral" | "amber" | "green" | "red" | "blue";
 
-const TONE: Record<BadgeTone, string> = {
+export const TONE_CLASSES: Record<BadgeTone, string> = {
   neutral: "bg-status-neutral-bg text-status-neutral-fg",
   amber: "bg-status-amber-bg text-status-amber-fg",
   green: "bg-status-green-bg text-status-green-fg",
@@ -23,7 +23,7 @@ export function StatusBadge({
     <span
       className={cn(
         "inline-flex h-[22px] items-center gap-1 rounded-full px-[9px] text-xs font-medium whitespace-nowrap",
-        TONE[tone],
+        TONE_CLASSES[tone],
         className,
       )}
     >

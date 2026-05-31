@@ -48,7 +48,7 @@ describe("/mis-trabajos/papelera page", () => {
 
   it("lists each deleted doc with a days-remaining label", () => {
     returns([
-      { id: 5, title: "Tesis borrada", publicationStatus: "published", daysRemaining: 2 },
+      { id: 5, title: "Tesis borrada", daysRemaining: 2 },
     ]);
 
     render(<PapeleraPage />);
@@ -59,7 +59,7 @@ describe("/mis-trabajos/papelera page", () => {
 
   it("Restaurar calls restore with the doc id", async () => {
     returns([
-      { id: 5, title: "Tesis borrada", publicationStatus: "published", daysRemaining: 2 },
+      { id: 5, title: "Tesis borrada", daysRemaining: 2 },
     ]);
 
     render(<PapeleraPage />);

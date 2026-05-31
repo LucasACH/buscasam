@@ -7,26 +7,11 @@ import { ReportDialog } from "@/components/ReportDialog";
 import { StatusBadge } from "@/components/StatusBadge";
 import { VersionsPanel } from "@/components/VersionsPanel";
 import { Button } from "@/components/ui/button";
+import { TIPO_LABEL, VISIBILITY_LABEL } from "@/lib/labels";
 
 import { fetchAreas, fetchDocDetail } from "./fetchDetail";
 import { RelatedRail } from "./RelatedRail";
 import type { DetailDoc, DetailWithInvitationDoc, MinimalInviteDoc } from "./types";
-
-const TIPO_LABEL: Record<string, string> = {
-  tesis: "Tesis",
-  paper: "Paper",
-  trabajo_practico: "Trabajo práctico",
-  proyecto_investigacion: "Proyecto de investigación",
-  monografia: "Monografía",
-  ponencia_poster: "Ponencia / Póster",
-  apunte_resumen: "Apunte / Resumen",
-  informe_catedra: "Informe de cátedra",
-};
-
-const VISIBILITY_LABEL: Record<string, string> = {
-  interno: "Interno",
-  privado: "Privado",
-};
 
 type PageProps = { params: Promise<{ id: string }> };
 

@@ -5,7 +5,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { ProcessingSteps } from "@/components/ProcessingSteps";
-import { type BadgeTone } from "@/components/StatusBadge";
+import { TONE_CLASSES, type BadgeTone } from "@/components/StatusBadge";
 import type {
   Candidate,
   DraftWorkspaceActions,
@@ -198,14 +198,6 @@ function ReplaceButton({
   );
 }
 
-const PILL_TONE: Record<BadgeTone, string> = {
-  neutral: "bg-status-neutral-bg text-status-neutral-fg",
-  amber: "bg-status-amber-bg text-status-amber-fg",
-  green: "bg-status-green-bg text-status-green-fg",
-  red: "bg-status-red-bg text-status-red-fg",
-  blue: "bg-status-blue-bg text-status-blue-fg",
-};
-
 function StatusPill({
   tone,
   children,
@@ -216,7 +208,7 @@ function StatusPill({
   return (
     <span
       data-testid="candidate-status-pill"
-      className={`inline-flex h-[22px] items-center gap-1 rounded-full px-[9px] text-xs font-medium whitespace-nowrap ${PILL_TONE[tone]}`}
+      className={`inline-flex h-[22px] items-center gap-1 rounded-full px-[9px] text-xs font-medium whitespace-nowrap ${TONE_CLASSES[tone]}`}
     >
       {children}
     </span>
