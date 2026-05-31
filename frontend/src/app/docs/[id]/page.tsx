@@ -170,7 +170,7 @@ function DetailView({
           <RelatedRail docId={docId} />
         </header>
 
-        <aside className="flex flex-col gap-4 lg:sticky lg:top-[84px] lg:max-h-[calc(100dvh-108px)] lg:overflow-y-auto">
+        <aside className="flex flex-col gap-4 lg:sticky lg:top-[93px] lg:max-h-[calc(100dvh-108px)] lg:overflow-y-auto">
           {detail.manageable && (
             <Button asChild className="w-full">
               <Link href={`/mis-trabajos/${docId}/editar`}>
