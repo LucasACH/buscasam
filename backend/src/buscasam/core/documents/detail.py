@@ -79,6 +79,10 @@ async def get_detail(
     `versions is None` and `manageable=False` (issue #44).
     """
     where, params = readable_where("d", user_ctx)
+    # Correlated EXISTS column on a distinct alias (dm) so the management check
+    # rides the main read instead of its own round-trip; manageable_where's
+    # :mgmt_user_id bind never collides with readable_where's :user_id/:is_unsam.
+    mgmt_where, mgmt_params = manageable_where("dm", user_ctx)
     row = (
         await session.execute(
             text(
@@ -87,44 +91,31 @@ async def get_detail(
                 "       COALESCE(d.keywords, ARRAY[]::text[]) AS keywords, "
                 "       dv.original_filename AS main_filename, "
                 "       dv.bytes AS main_bytes, "
-                "       dv.mime AS main_mime "
+                "       dv.mime AS main_mime, "
+                "       EXISTS (SELECT 1 FROM documents dm "
+                f"               WHERE dm.id = d.id AND ({mgmt_where})) AS manageable, "
+                "       (SELECT COALESCE(json_agg(json_build_object("
+                "                   'display_name', da2.display_name, "
+                "                   'user_id', da2.user_id) ORDER BY da2.id), '[]'::json) "
+                "        FROM document_authors da2 WHERE da2.doc_id = d.id) AS autores, "
+                "       (SELECT COALESCE(json_agg(json_build_object("
+                "                   'id', att.id, "
+                "                   'original_filename', att.original_filename, "
+                "                   'bytes', att.bytes, "
+                "                   'mime', att.mime) ORDER BY att.id), '[]'::json) "
+                "        FROM document_attachments att WHERE att.doc_id = d.id) AS adjuntos "
                 "FROM documents d "
                 "JOIN document_versions dv "
                 "  ON dv.doc_id = d.id AND dv.is_current "
                 f"WHERE d.id = :doc_id AND ({where})"
             ),
-            {"doc_id": doc_id, **params},
+            {"doc_id": doc_id, **params, **mgmt_params},
         )
     ).mappings().first()
     if row is None:
         return None
 
-    author_rows = (
-        await session.execute(
-            text(
-                "SELECT display_name, user_id "
-                "FROM document_authors WHERE doc_id = :d ORDER BY id"
-            ),
-            {"d": doc_id},
-        )
-    ).mappings().all()
-    attachment_rows = (
-        await session.execute(
-            text(
-                "SELECT id, original_filename, bytes, mime "
-                "FROM document_attachments WHERE doc_id = :d ORDER BY id"
-            ),
-            {"d": doc_id},
-        )
-    ).mappings().all()
-
-    mgmt_where, mgmt_params = manageable_where("d", user_ctx)
-    manageable = (
-        await session.execute(
-            text(f"SELECT 1 FROM documents d WHERE d.id = :doc_id AND ({mgmt_where})"),
-            {"doc_id": doc_id, **mgmt_params},
-        )
-    ).scalar_one_or_none() is not None
+    manageable = row["manageable"]
 
     versions: list[DetailVersion] | None = None
     if manageable:
@@ -142,7 +133,7 @@ async def get_detail(
         titulo=row["titulo"],
         autores=[
             AuthorDisplay(display_name=a["display_name"], user_id=a["user_id"])
-            for a in author_rows
+            for a in row["autores"]
         ],
         area_path=row["area_path"],
         tipo=row["tipo"],
@@ -162,7 +153,7 @@ async def get_detail(
                 size_bytes=a["bytes"],
                 mime=a["mime"],
             )
-            for a in attachment_rows
+            for a in row["adjuntos"]
         ],
         versions=versions,
         manageable=manageable,
