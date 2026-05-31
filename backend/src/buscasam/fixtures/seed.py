@@ -11,8 +11,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from buscasam.fixtures import embeddings as fixture_embeddings
+from buscasam.fixtures import unsam_areas
 from buscasam.fixtures.corpus import (
-    AREAS,
     CHUNKS,
     DOCUMENTS,
     EMBEDDING_MODEL_VERSION,
@@ -98,13 +98,11 @@ async def seed(conn: AsyncConnection) -> None:
 
     await conn.execute(
         text(
-            "INSERT INTO areas (area_path, display_name) VALUES "
-            + ",".join(
-                f"('{a.area_path}', '{a.display_name.replace(chr(39), chr(39) * 2)}')"
-                for a in AREAS
-            )
-            + " ON CONFLICT (area_path) DO NOTHING"
-        )
+            "INSERT INTO areas (area_path, display_name) "
+            "VALUES (:area_path, :display_name) "
+            "ON CONFLICT (area_path) DO NOTHING"
+        ),
+        unsam_areas.load(),
     )
 
     for doc in DOCUMENTS:
