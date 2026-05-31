@@ -4,22 +4,16 @@ import { Suspense, useCallback, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 
-import { Wordmark } from "@/components/Wordmark";
 import { Button } from "@/components/ui/button";
 
 import { ResultCard, ResultCardSkeleton, TIPO_LABEL } from "./ResultCard";
 import { SearchFilters, type FilterPatch } from "./SearchFilters";
+import { SearchLanding } from "./SearchLanding";
 import { useSearch, type Orden, type Tipo } from "./useSearch";
 
 const PAGE_SIZE = 10;
 const RELEVANCE_PAGE_CAP = 20;
 const TIPO_VALUES = Object.keys(TIPO_LABEL) as Tipo[];
-const QUICK_TIPOS: Tipo[] = [
-  "tesis",
-  "paper",
-  "trabajo_practico",
-  "monografia",
-];
 
 function parsePagina(raw: string | null): number {
   const n = Number(raw);
@@ -105,77 +99,7 @@ function BuscarPageInner() {
   if (orden === "relevancia") lastPage = Math.min(lastPage, RELEVANCE_PAGE_CAP);
 
   if (!showResults) {
-    return (
-      <main className="flex min-h-[calc(100dvh-61px)] flex-col items-center justify-center px-5 pt-10 pb-20">
-        <div className="flex w-full max-w-[640px] flex-col items-center text-center">
-          <Wordmark size="lg" />
-          <h1 className="mt-7 max-w-[540px] text-[34px] leading-tight font-semibold tracking-tight">
-            Encontrá trabajos académicos de la comunidad UNSAM
-          </h1>
-
-          <form
-            role="search"
-            className="mt-7 w-full max-w-[560px]"
-            onSubmit={(e) => {
-              e.preventDefault();
-              update({ q: qInput.trim() });
-            }}
-          >
-            <label htmlFor="q" className="sr-only">
-              Consulta
-            </label>
-            <div className="border-input bg-background focus-within:border-primary focus-within:ring-primary-tint flex h-15 items-center gap-2.5 rounded-lg border py-2 pr-2 pl-[18px] shadow-[0_1px_2px_rgba(23,23,23,0.03)] transition focus-within:ring-4">
-              <Search className="text-muted-foreground/70 size-[22px] shrink-0" />
-              <input
-                id="q"
-                type="text"
-                autoFocus
-                className="placeholder:text-muted-foreground/70 min-w-0 flex-1 bg-transparent text-[17px] outline-none"
-                placeholder="Buscar por título, tema, autor…"
-                value={qInput}
-                onChange={(e) => setQInput(e.target.value)}
-              />
-              {qInput && (
-                <button
-                  type="button"
-                  aria-label="Limpiar búsqueda"
-                  onClick={() => setQInput("")}
-                  className="text-muted-foreground/60 hover:text-foreground hover:bg-muted flex size-8 shrink-0 items-center justify-center rounded-full transition-colors"
-                >
-                  <X className="size-[18px]" />
-                </button>
-              )}
-              <button
-                type="submit"
-                className="bg-primary text-primary-foreground hover:bg-primary-hover inline-flex h-11 items-center rounded-lg px-[22px] text-base font-medium transition-colors"
-              >
-                Buscar
-              </button>
-            </div>
-          </form>
-
-          <div className="mt-5 flex flex-wrap justify-center gap-2">
-            {QUICK_TIPOS.map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => update({ tipos: [t] })}
-                className="border-input bg-background inline-flex h-[30px] items-center rounded-full border px-3 text-[13px] font-medium transition-colors hover:border-neutral-400 hover:bg-neutral-50"
-              >
-                {TIPO_LABEL[t]}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => update({ orden: "recientes" })}
-              className="border-primary-tint-2 text-primary hover:bg-primary-tint bg-background inline-flex h-[30px] items-center rounded-full border px-3 text-[13px] font-medium transition-colors"
-            >
-              Ver más recientes
-            </button>
-          </div>
-        </div>
-      </main>
-    );
+    return <SearchLanding onApply={update} />;
   }
 
   return (
