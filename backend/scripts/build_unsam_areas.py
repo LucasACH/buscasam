@@ -50,15 +50,19 @@ def build() -> list[dict[str, str]]:
             seen_paths.add(path)
             rows.append({"area_path": path, "display_name": name})
 
+    # Áreas are keyed by display name so slugs that normalize to the same name
+    # (e.g. ECyT's `ciencia` + `ecyt` → "Ciencia y Tecnología") collapse into a
+    # single node, merging their carreras instead of rendering twice.
+    carrera_labels: dict[str, set[str]] = {}
     for esc in data["escuelas"]:
         esc_path = f"escuela_{slug(esc['escuela_codigo'])}"
         emit(esc_path, esc["escuela_nombre"])
         for area in esc["areas"]:
-            area_path = f"{esc_path}.area_{slug(area['area_slug'])}"
+            area_path = f"{esc_path}.area_{slug(area['area_nombre'])}"
             emit(area_path, area["area_nombre"])
-            carrera_labels: set[str] = set()
+            seen = carrera_labels.setdefault(area_path, set())
             for carrera in area["carreras"]:
-                label = _unique(f"carrera_{slug(carrera['slug'])}", carrera_labels)
+                label = _unique(f"carrera_{slug(carrera['slug'])}", seen)
                 carrera_path = f"{area_path}.{label}"
                 emit(carrera_path, carrera["nombre"])
                 materia_labels: set[str] = set()
