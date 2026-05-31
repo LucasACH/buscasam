@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
@@ -23,7 +24,13 @@ def _vendored_tokenizer_revision() -> str:
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="BUSCASAM_", env_file=".env", extra="ignore")
+    # Tests set BUSCASAM_DISABLE_DOTENV to assert against committed defaults
+    # regardless of a developer's local `.env`.
+    model_config = SettingsConfigDict(
+        env_prefix="BUSCASAM_",
+        env_file=None if os.environ.get("BUSCASAM_DISABLE_DOTENV") else ".env",
+        extra="ignore",
+    )
 
     env: Literal["dev", "test", "prod"] = "dev"
 

@@ -18,7 +18,7 @@ def test_metadata_llm_defaults_are_local_opt_in():
     s = Settings()
     assert s.metadata_llm_enabled is False
     assert s.metadata_llm_url == "http://localhost:11434"
-    assert s.metadata_llm_model == "llama3.2:3b"
+    assert s.metadata_llm_model == "qwen2.5:7b-instruct"
     assert s.metadata_llm_timeout_s == 60.0
     assert s.extract_pipeline_version == "extract-v2"
 

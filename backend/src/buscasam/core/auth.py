@@ -178,9 +178,11 @@ async def end_session(
 def role_from_claims(claims: Mapping[str, object]) -> Role | None:
     """Return the mapped role iff the claim set is acceptable, else None.
 
-    Rejects (returns None) when `email_verified` is not literally True, when
-    `hd` is missing, or when `hd` is not in `ROLE_BY_HD`. The cookie / DB /
-    redirect machinery is the caller's job; this is the pure decision.
+    Always rejects (returns None) when `email_verified` is not literally True.
+    A known `hd` maps to its role. An unknown/missing `hd` is rejected in prod
+    but logs in as `estudiante` outside prod (508cf8c, local testing). The
+    cookie / DB / redirect machinery is the caller's job; this is the pure
+    decision.
     """
     if claims.get("email_verified") is not True:
         return None
