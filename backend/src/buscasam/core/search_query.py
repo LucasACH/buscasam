@@ -162,6 +162,25 @@ async def run(
     )
 
 
+async def run_count(
+    session: AsyncSession,
+    *,
+    filters: Filters,
+    user_ctx: UserCtx,
+    embedding: np.ndarray | None = None,
+    min_semantic_similarity: float = 0.78,
+) -> int:
+    """Count-only sibling of `run`: returns the same `total` the full query would,
+    stopping at the candidate CTE (no ts_headline, document join, or paging)."""
+    if filters.orden == "recientes":
+        return await _count_recientes(session, filters, user_ctx)
+    if embedding is None:
+        return await _count_lexical(session, filters, user_ctx)
+    return await _count_hybrid(
+        session, filters, user_ctx, embedding, min_semantic_similarity
+    )
+
+
 async def _run_recientes(
     session: AsyncSession, filters: Filters, user_ctx: UserCtx
 ) -> Results:
@@ -290,25 +309,12 @@ async def _run_lexical(
     )
 
 
-async def _run_hybrid(
-    session: AsyncSession,
-    filters: Filters,
-    user_ctx: UserCtx,
-    embedding: np.ndarray,
-    min_semantic_similarity: float,
-) -> Results:
-    await session.execute(text("SET LOCAL hnsw.iterative_scan = 'strict_order'"))
-    await session.execute(text(f"SET LOCAL hnsw.ef_search = {HNSW_EF_SEARCH}"))
-
-    where, where_params = readable_where("d", user_ctx)
-    filter_clauses = _filter_clauses(filters)
-    lex_ctes, lex_params = _lexical_candidates_ctes(
-        where=where, filter_clauses=filter_clauses, cap=RELEVANCE_CAP
-    )
-    offset = (filters.pagina - 1) * PAGE_SIZE
-    sql = text(
-        f"""
-        WITH {lex_ctes},
+def _hybrid_candidates_ctes(
+    *, lex_ctes: str, where: str, filter_clauses: str
+) -> str:
+    """CTEs layering `sem`/fusion onto `lex_ctes`, exposing `capped (doc_id,
+    body_text, lex_score, sem_sim, rrf)`. Embed as `WITH {ctes} SELECT ...`."""
+    return f"""{lex_ctes},
         sem AS (
             SELECT
                 c.doc_id,
@@ -355,6 +361,52 @@ async def _run_hybrid(
             ORDER BY rrf DESC
             LIMIT :cap
         )
+    """
+
+
+def _hybrid_params(
+    *,
+    filters: Filters,
+    embedding: np.ndarray,
+    min_semantic_similarity: float,
+    lex_params: dict[str, object],
+    where_params: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "q": filters.q,
+        "embedding": halfvec_literal(embedding),
+        "min_sim": min_semantic_similarity,
+        "rrf_k": RRF_K,
+        "cap": RELEVANCE_CAP,
+        "sem_chunk_cap": RELEVANCE_CAP * SEMANTIC_CHUNK_OVERFETCH,
+        **lex_params,
+        **where_params,
+        **_filter_params(filters),
+    }
+
+
+async def _run_hybrid(
+    session: AsyncSession,
+    filters: Filters,
+    user_ctx: UserCtx,
+    embedding: np.ndarray,
+    min_semantic_similarity: float,
+) -> Results:
+    await session.execute(text("SET LOCAL hnsw.iterative_scan = 'strict_order'"))
+    await session.execute(text(f"SET LOCAL hnsw.ef_search = {HNSW_EF_SEARCH}"))
+
+    where, where_params = readable_where("d", user_ctx)
+    filter_clauses = _filter_clauses(filters)
+    lex_ctes, lex_params = _lexical_candidates_ctes(
+        where=where, filter_clauses=filter_clauses, cap=RELEVANCE_CAP
+    )
+    ctes = _hybrid_candidates_ctes(
+        lex_ctes=lex_ctes, where=where, filter_clauses=filter_clauses
+    )
+    offset = (filters.pagina - 1) * PAGE_SIZE
+    sql = text(
+        f"""
+        WITH {ctes}
         SELECT
             d.id              AS doc_id,
             d.titulo          AS titulo,
@@ -376,18 +428,16 @@ async def _run_hybrid(
         """
     )
     params: dict[str, object] = {
-        "q": filters.q,
-        "embedding": halfvec_literal(embedding),
-        "min_sim": min_semantic_similarity,
-        "rrf_k": RRF_K,
-        "cap": RELEVANCE_CAP,
-        "sem_chunk_cap": RELEVANCE_CAP * SEMANTIC_CHUNK_OVERFETCH,
+        **_hybrid_params(
+            filters=filters,
+            embedding=embedding,
+            min_semantic_similarity=min_semantic_similarity,
+            lex_params=lex_params,
+            where_params=where_params,
+        ),
         "headline_opts": TS_HEADLINE_OPTS,
         "limit": PAGE_SIZE,
         "offset": offset,
-        **lex_params,
-        **where_params,
-        **_filter_params(filters),
     }
     rows = (await session.execute(sql, params)).all()
     total = rows[0].total if rows else 0
@@ -409,3 +459,75 @@ async def _run_hybrid(
         total=total,
         saturated=total >= RELEVANCE_CAP,
     )
+
+
+async def _count_recientes(
+    session: AsyncSession, filters: Filters, user_ctx: UserCtx
+) -> int:
+    where, where_params = readable_where("d", user_ctx)
+    filter_clauses = _filter_clauses(filters)
+    params: dict[str, object] = {**_filter_params(filters), **where_params}
+    if filters.q:
+        lex_ctes, lex_params = _lexical_candidates_ctes(
+            where=where, filter_clauses=filter_clauses, cap=None
+        )
+        params["q"] = filters.q
+        params.update(lex_params)
+        sql = text(f"WITH {lex_ctes} SELECT count(*) AS total FROM lex_best")
+    else:
+        sql = text(
+            f"""
+            SELECT count(*) AS total
+            FROM documents d
+            WHERE {where}
+              {filter_clauses}
+            """
+        )
+    return (await session.execute(sql, params)).scalar_one()
+
+
+async def _count_lexical(
+    session: AsyncSession, filters: Filters, user_ctx: UserCtx
+) -> int:
+    where, where_params = readable_where("d", user_ctx)
+    filter_clauses = _filter_clauses(filters)
+    lex_ctes, lex_params = _lexical_candidates_ctes(
+        where=where, filter_clauses=filter_clauses, cap=RELEVANCE_CAP
+    )
+    sql = text(f"WITH {lex_ctes} SELECT count(*) AS total FROM lex_ranked")
+    params: dict[str, object] = {
+        "q": filters.q,
+        **lex_params,
+        **where_params,
+        **_filter_params(filters),
+    }
+    return (await session.execute(sql, params)).scalar_one()
+
+
+async def _count_hybrid(
+    session: AsyncSession,
+    filters: Filters,
+    user_ctx: UserCtx,
+    embedding: np.ndarray,
+    min_semantic_similarity: float,
+) -> int:
+    await session.execute(text("SET LOCAL hnsw.iterative_scan = 'strict_order'"))
+    await session.execute(text(f"SET LOCAL hnsw.ef_search = {HNSW_EF_SEARCH}"))
+
+    where, where_params = readable_where("d", user_ctx)
+    filter_clauses = _filter_clauses(filters)
+    lex_ctes, lex_params = _lexical_candidates_ctes(
+        where=where, filter_clauses=filter_clauses, cap=RELEVANCE_CAP
+    )
+    ctes = _hybrid_candidates_ctes(
+        lex_ctes=lex_ctes, where=where, filter_clauses=filter_clauses
+    )
+    sql = text(f"WITH {ctes} SELECT count(*) AS total FROM capped")
+    params = _hybrid_params(
+        filters=filters,
+        embedding=embedding,
+        min_semantic_similarity=min_semantic_similarity,
+        lex_params=lex_params,
+        where_params=where_params,
+    )
+    return (await session.execute(sql, params)).scalar_one()

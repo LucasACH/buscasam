@@ -111,6 +111,20 @@ cd backend
 uv run procrastinate --app=buscasam.core.jobs.app worker
 ```
 
+Or run the worker as a container instead (no `uv`/venv on the host, and it
+survives terminal restarts). From `backend/`:
+
+```bash
+docker compose --profile worker up -d --build
+```
+
+This builds the backend image and starts `buscasam-worker`. It rewrites the
+`localhost` URLs from `.env` to the compose network (`db`, `tei`) and reaches
+Ollama via `host.docker.internal:11434`. Blobs are bind-mounted from
+`backend/var/blobs`, so the container and the host-run backend share the same
+content-addressed store. Don't run both the host worker and the container
+worker at once — they'd double-process the queue.
+
 **Frontend** (Next.js):
 
 ```bash

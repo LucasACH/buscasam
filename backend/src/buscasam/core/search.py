@@ -80,7 +80,7 @@ async def execute(
 
     unfiltered_total: int | None = None
     if _has_filter(filters):
-        unfiltered = await search_query.run(
+        unfiltered_total = await search_query.run_count(
             session,
             filters=replace(
                 filters,
@@ -94,7 +94,6 @@ async def execute(
             embedding=embedding,
             min_semantic_similarity=min_semantic_similarity,
         )
-        unfiltered_total = unfiltered.total
 
     return ExecuteResult(
         rows=result.rows,
