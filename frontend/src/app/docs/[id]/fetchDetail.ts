@@ -28,12 +28,12 @@ async function fetchDocDetailUncached(
 
 export const fetchDocDetail = cache(fetchDocDetailUncached);
 
-type AreaRow = { area_path: string; display_name: string };
+export type Area = { area_path: string; display_name: string };
 
-async function fetchAreasUncached(): Promise<AreaRow[]> {
+async function fetchAreasUncached(): Promise<Area[]> {
   const r = await fetch(`${internalApiBase()}/areas`, { cache: "no-store" });
   if (!r.ok) return [];
-  return (await r.json()) as AreaRow[];
+  return (await r.json()) as Area[];
 }
 
 export const fetchAreas = cache(fetchAreasUncached);
