@@ -119,6 +119,7 @@ services:
       context: ../frontend
     environment:
       NODE_ENV: production
+      HOSTNAME: "0.0.0.0"
       BUSCASAM_API_URL: http://api:8000
       BUSCASAM_BASE_URL: ${BUSCASAM_BASE_URL:-http://localhost:3000}
       BUSCASAM_INTERNAL_API_URL: ${BUSCASAM_INTERNAL_API_URL:-http://api:8000/api}
@@ -154,7 +155,7 @@ services:
   migrate:
     build:
       context: ../backend
-    command: ["bash", "-c", "alembic upgrade head && procrastinate --app=buscasam.core.jobs.app schema --apply"]
+    command: ["bash", "-c", "alembic upgrade head"]
     environment: *backend_env
     depends_on:
       db:
