@@ -111,7 +111,7 @@ function App() {
       <Header auth={auth} user={user} isGuest={isGuest} route={route} notifs={notifs} navigate={navigate}
         onLogout={onLogout} notifState={notifState} onMarkRead={markRead} onMarkAll={markAll} onInvite={onInvite} />
 
-      {route === "buscar" && !searched && <Landing navigate={navigate} onSearch={doSearch} />}
+      {route === "buscar" && !searched && <Landing navigate={navigate} onSearch={doSearch} user={user} isGuest={isGuest} />}
       {route === "buscar" && searched && <Results initial={searchInit} isGuest={isGuest} onOpen={(id) => navigate("docs", { id })} />}
       {route === "docs" && (
         <div style={{ position: "relative" }}>
