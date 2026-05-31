@@ -13,10 +13,11 @@ resource "google_compute_health_check" "app" {
 }
 
 resource "google_compute_backend_service" "app" {
-  name          = "buscasam-app"
-  protocol      = "HTTP"
-  port_name     = "http"
-  health_checks = [google_compute_health_check.app.id]
+  name                  = "buscasam-app"
+  protocol              = "HTTP"
+  port_name             = "http"
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+  health_checks         = [google_compute_health_check.app.id]
   backend {
     group = var.instance_group
   }
