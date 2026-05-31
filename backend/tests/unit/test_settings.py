@@ -23,10 +23,32 @@ def test_tei_url_default():
 def test_metadata_llm_defaults_are_local_opt_in():
     s = Settings()
     assert s.metadata_llm_enabled is False
+    assert s.metadata_llm_provider == "ollama"
     assert s.metadata_llm_url == "http://localhost:11434"
     assert s.metadata_llm_model == "qwen2.5:7b-instruct"
     assert s.metadata_llm_timeout_s == 60.0
+    assert s.vertex_project == ""
+    assert s.vertex_location == "us-central1"
     assert s.extract_pipeline_version == "extract-v2"
+
+
+def test_vertex_provider_requires_project_when_enabled():
+    with pytest.raises(ValueError, match="BUSCASAM_VERTEX_PROJECT"):
+        Settings(
+            metadata_llm_enabled=True,
+            metadata_llm_provider="vertex",
+            _env_file=None,
+        )
+
+
+def test_vertex_provider_ok_with_project():
+    s = Settings(
+        metadata_llm_enabled=True,
+        metadata_llm_provider="vertex",
+        vertex_project="buscasam-prod",
+        _env_file=None,
+    )
+    assert s.vertex_project == "buscasam-prod"
 
 
 def test_prod_env_rejects_dev_secret_key():

@@ -377,3 +377,88 @@ async def test_suggest_metadata_portuguese_output_falls_back(monkeypatch):
         await client.aclose()
 
     assert meta == derive_metadata(doc)
+
+
+class _FakeVertexResponse:
+    def __init__(self, text):
+        self.text = text
+
+
+class _FakeVertexClient:
+    """Mimics google-genai's `client.aio.models.generate_content` seam."""
+
+    def __init__(self, handler):
+        outer = self
+
+        class _Models:
+            async def generate_content(self, **kwargs):
+                return outer._handler(kwargs)
+
+        class _Aio:
+            models = _Models()
+
+        self._handler = handler
+        self.aio = _Aio()
+
+
+async def test_suggest_metadata_vertex_success(monkeypatch):
+    monkeypatch.setattr(settings, "metadata_llm_enabled", True)
+    monkeypatch.setattr(settings, "metadata_llm_provider", "vertex")
+    seen: list[dict] = []
+
+    def handler(kwargs):
+        seen.append(kwargs)
+        return _FakeVertexResponse(
+            '{"abstract": "Resumen generado por Gemini.", '
+            '"keywords": ["grafos", "Este trabajo", "redes"]}'
+        )
+
+    meta = await suggest_metadata(
+        _doc("Texto sin resumen explícito sobre grafos y redes."),
+        _FakeVertexClient(handler),
+    )
+
+    assert meta.abstract == "Resumen generado por Gemini."
+    assert meta.keywords == ["grafos", "redes"]
+    assert seen[0]["config"]["response_mime_type"] == "application/json"
+
+
+async def test_suggest_metadata_vertex_invalid_output_falls_back(monkeypatch):
+    monkeypatch.setattr(settings, "metadata_llm_enabled", True)
+    monkeypatch.setattr(settings, "metadata_llm_provider", "vertex")
+    doc = _doc("Primer párrafo usado como fallback.")
+
+    meta = await suggest_metadata(
+        doc, _FakeVertexClient(lambda kwargs: _FakeVertexResponse('{"abstract": 123}'))
+    )
+
+    assert meta == derive_metadata(doc)
+
+
+async def test_suggest_metadata_vertex_error_falls_back(monkeypatch):
+    monkeypatch.setattr(settings, "metadata_llm_enabled", True)
+    monkeypatch.setattr(settings, "metadata_llm_provider", "vertex")
+    doc = _doc("Primer párrafo usado como fallback.")
+
+    def handler(kwargs):
+        raise RuntimeError("vertex unreachable")
+
+    meta = await suggest_metadata(doc, _FakeVertexClient(handler))
+
+    assert meta == derive_metadata(doc)
+
+
+async def test_suggest_metadata_vertex_portuguese_falls_back(monkeypatch):
+    monkeypatch.setattr(settings, "metadata_llm_enabled", True)
+    monkeypatch.setattr(settings, "metadata_llm_provider", "vertex")
+    doc = _doc("Texto sobre modelos de series temporales y viento.")
+
+    def handler(kwargs):
+        return _FakeVertexResponse(
+            '{"abstract": "Este documento descreve a previsão de séries temporais.", '
+            '"keywords": ["redes neurais LSTM", "vento"]}'
+        )
+
+    meta = await suggest_metadata(doc, _FakeVertexClient(handler))
+
+    assert meta == derive_metadata(doc)

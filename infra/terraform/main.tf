@@ -50,6 +50,11 @@ module "app_vm" {
   app_version              = var.app_version
   server_name              = var.server_name
   embedding_model_revision = var.embedding_model_revision
+  metadata_llm_enabled     = var.metadata_llm_enabled
+  metadata_llm_provider    = var.metadata_llm_provider
+  metadata_llm_model       = var.metadata_llm_model
+  vertex_project           = var.vertex_project
+  vertex_location          = var.vertex_location
   secret_ids               = module.secrets.secret_ids
 }
 
@@ -61,7 +66,8 @@ module "lb" {
 
 module "metadata_llm" {
   source = "./modules/metadata-llm"
-  count  = var.metadata_llm_enabled ? 1 : 0
+  # Self-hosted GPU VM only for the ollama provider; vertex uses Vertex AI.
+  count = var.metadata_llm_enabled && var.metadata_llm_provider == "ollama" ? 1 : 0
 
   zone       = var.zone
   network    = module.network.network_name

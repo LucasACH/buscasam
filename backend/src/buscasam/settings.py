@@ -49,9 +49,12 @@ class Settings(BaseSettings):
     # ADR-0007 §12: per-row provenance stamp for the extraction pipeline.
     extract_pipeline_version: str = "extract-v2"
     metadata_llm_enabled: bool = False
+    metadata_llm_provider: Literal["ollama", "vertex"] = "ollama"
     metadata_llm_url: str = "http://localhost:11434"
     metadata_llm_model: str = "qwen2.5:7b-instruct"
     metadata_llm_timeout_s: float = 60.0
+    vertex_project: str = ""
+    vertex_location: str = "us-central1"
 
     base_url: str = "http://localhost:3000"
     blob_root: Path = Path("/var/lib/buscasam/blobs")
@@ -81,6 +84,19 @@ class Settings(BaseSettings):
                 f"(got {raw!r}); the Origin header never includes one"
             )
         return f"{parts.scheme}://{parts.netloc}"
+
+    @model_validator(mode="after")
+    def _require_vertex_project(self) -> "Settings":
+        if (
+            self.metadata_llm_enabled
+            and self.metadata_llm_provider == "vertex"
+            and not self.vertex_project
+        ):
+            raise ValueError(
+                "BUSCASAM_VERTEX_PROJECT must be set when "
+                "BUSCASAM_METADATA_LLM_PROVIDER=vertex and the metadata LLM is enabled"
+            )
+        return self
 
     @model_validator(mode="after")
     def _reject_dev_secrets_in_prod(self) -> "Settings":

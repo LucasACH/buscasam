@@ -217,6 +217,15 @@ _METADATA_LLM_SCHEMA = {
     "required": ["abstract", "keywords"],
     "additionalProperties": False,
 }
+# Gemini's response_schema rejects `additionalProperties`; same shape otherwise.
+_VERTEX_RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "abstract": {"type": "string"},
+        "keywords": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["abstract", "keywords"],
+}
 _PORTUGUESE_MARKERS = re.compile(
     r"\b(este documento descreve|previs[aã]o|s[eé]ries temporais|redes neurais|"
     r"m[eé]dia|avalia[cç][aã]o|utilizando|t[eé]cnicas estoc[aá]sticas|"
@@ -423,6 +432,14 @@ def _looks_portuguese(value: str) -> bool:
 
 
 async def _call_metadata_llm(
+    client, doc: ExtractedDoc, fallback: IndexableMetadata
+) -> _LlmMetadata:
+    if settings.metadata_llm_provider == "vertex":
+        return await _call_vertex(client, doc, fallback)
+    return await _call_ollama(client, doc, fallback)
+
+
+async def _call_ollama(
     client: httpx.AsyncClient, doc: ExtractedDoc, fallback: IndexableMetadata
 ) -> _LlmMetadata:
     response = await client.post(
@@ -443,9 +460,44 @@ async def _call_metadata_llm(
     return _parse_llm_metadata(raw)
 
 
-async def suggest_metadata(
-    doc: ExtractedDoc, client: httpx.AsyncClient | None = None
-) -> IndexableMetadata:
+async def _call_vertex(
+    client, doc: ExtractedDoc, fallback: IndexableMetadata
+) -> _LlmMetadata:
+    try:
+        response = await client.aio.models.generate_content(
+            model=settings.metadata_llm_model,
+            contents=_metadata_prompt(doc, fallback),
+            config={
+                "response_mime_type": "application/json",
+                "response_schema": _VERTEX_RESPONSE_SCHEMA,
+            },
+        )
+    except Exception as e:  # SDK raises its own error types; any failure -> fallback.
+        raise ValueError("vertex metadata call failed") from e
+    raw = getattr(response, "text", None)
+    if not isinstance(raw, str):
+        raise ValueError("metadata LLM response missing response string")
+    return _parse_llm_metadata(raw)
+
+
+def _new_metadata_client():
+    if settings.metadata_llm_provider == "vertex":
+        from google import genai
+
+        return genai.Client(
+            vertexai=True,
+            project=settings.vertex_project,
+            location=settings.vertex_location,
+        )
+    return httpx.AsyncClient(base_url=settings.metadata_llm_url)
+
+
+async def _close_metadata_client(client) -> None:
+    if isinstance(client, httpx.AsyncClient):
+        await client.aclose()
+
+
+async def suggest_metadata(doc: ExtractedDoc, client=None) -> IndexableMetadata:
     """Best-effort staged metadata path.
 
     Heuristics always produce the fallback. The local LLM may clean up fallback
@@ -457,7 +509,7 @@ async def suggest_metadata(
 
     owns_client = client is None
     if client is None:
-        client = httpx.AsyncClient(base_url=settings.metadata_llm_url)
+        client = _new_metadata_client()
     try:
         llm = await _call_metadata_llm(client, doc, fallback)
     except (httpx.TimeoutException, httpx.HTTPError, ValueError):
@@ -465,7 +517,7 @@ async def suggest_metadata(
         return fallback
     finally:
         if owns_client:
-            await client.aclose()
+            await _close_metadata_client(client)
 
     explicit = _derive_explicit_abstract(doc.text[:8000])
     abstract = explicit if explicit is not None else llm.abstract or fallback.abstract
