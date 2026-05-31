@@ -48,7 +48,13 @@ class OriginCheckMiddleware(BaseHTTPMiddleware):
 async def lifespan(app: FastAPI):
     # ADR-0002 §5: fail fast if the vendored tokenizer drifts from the model.
     assert_model_revision_pinned()
-    engine = create_async_engine(settings.database_url)
+    engine = create_async_engine(
+        settings.database_url,
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+        pool_pre_ping=True,
+        pool_recycle=settings.db_pool_recycle,
+    )
     app.state.engine = engine
     app.state.sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
     app.state.tei = httpx.AsyncClient(base_url=settings.tei_url)
