@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import Image from "next/image";
@@ -56,6 +57,7 @@ export function AuthNav() {
   const pathname = usePathname() ?? "/";
   const router = useRouter();
   const qc = useQueryClient();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -99,17 +101,19 @@ export function AuthNav() {
   }
 
   return (
-    <nav className="flex items-center gap-5">
-      <NavLink href="/mis-trabajos" active={pathname.startsWith("/mis-trabajos")}>
-        Mis trabajos
-      </NavLink>
-      {user.role === "docente" && (
-        <NavLink href="/moderacion" active={pathname.startsWith("/moderacion")}>
-          Moderación
+    <nav className="flex items-center gap-3 sm:gap-5">
+      <div className="hidden items-center gap-5 sm:flex">
+        <NavLink href="/mis-trabajos" active={pathname.startsWith("/mis-trabajos")}>
+          Mis trabajos
         </NavLink>
-      )}
+        {user.role === "docente" && (
+          <NavLink href="/moderacion" active={pathname.startsWith("/moderacion")}>
+            Moderación
+          </NavLink>
+        )}
+      </div>
       <NotificationBell />
-      <Popover>
+      <Popover open={menuOpen} onOpenChange={setMenuOpen}>
         <PopoverTrigger asChild>
           <button
             type="button"
@@ -132,7 +136,7 @@ export function AuthNav() {
                 {user.name.slice(0, 1).toUpperCase()}
               </span>
             )}
-            <span className="text-left leading-tight">
+            <span className="hidden text-left leading-tight sm:block">
               <span className="block text-sm font-semibold whitespace-nowrap">
                 {user.name}
               </span>
@@ -149,6 +153,24 @@ export function AuthNav() {
             <div className="text-muted-foreground mt-0.5 text-[11px]">
               {user.email}
             </div>
+          </div>
+          <div className="border-border border-b p-1.5 sm:hidden">
+            <Link
+              href="/mis-trabajos"
+              onClick={() => setMenuOpen(false)}
+              className="text-foreground hover:bg-neutral-100 block rounded-md px-2.5 py-2 text-sm transition-colors"
+            >
+              Mis trabajos
+            </Link>
+            {user.role === "docente" && (
+              <Link
+                href="/moderacion"
+                onClick={() => setMenuOpen(false)}
+                className="text-foreground hover:bg-neutral-100 block rounded-md px-2.5 py-2 text-sm transition-colors"
+              >
+                Moderación
+              </Link>
+            )}
           </div>
           <div className="p-1.5">
             <button
