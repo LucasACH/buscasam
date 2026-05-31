@@ -4,6 +4,7 @@ Single flat module. All `hd`→role mapping, claim validation, session lifecycle
 JIT user upsert, and `next` validation live here so the audit surface stays
 concentrated.
 """
+
 from __future__ import annotations
 
 import base64
@@ -14,7 +15,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from types import MappingProxyType
-from typing import Literal, Mapping
+from typing import Literal, Mapping, cast
 from urllib.parse import urlencode
 
 import httpx
@@ -347,18 +348,22 @@ async def begin_login(next_path: str | None) -> RedirectResponse:
         }
     )
 
-    authorize_url = discovery["authorization_endpoint"] + "?" + urlencode(
-        {
-            "response_type": "code",
-            "client_id": settings.oidc_client_id,
-            "redirect_uri": _redirect_uri(),
-            "scope": "openid email profile",
-            "nonce": nonce,
-            "state": state,
-            "code_challenge": challenge,
-            "code_challenge_method": "S256",
-            "hd": "*",
-        }
+    authorize_url = (
+        discovery["authorization_endpoint"]
+        + "?"
+        + urlencode(
+            {
+                "response_type": "code",
+                "client_id": settings.oidc_client_id,
+                "redirect_uri": _redirect_uri(),
+                "scope": "openid email profile",
+                "nonce": nonce,
+                "state": state,
+                "code_challenge": challenge,
+                "code_challenge_method": "S256",
+                "hd": "*",
+            }
+        )
     )
 
     resp = RedirectResponse(authorize_url, status_code=302)
@@ -393,20 +398,24 @@ async def complete_login(
     jwks_doc = await _get_json(discovery["jwks_uri"])
 
     try:
-        async with AsyncOAuth2Client(
+        oauth = AsyncOAuth2Client(
             client_id=settings.oidc_client_id,
             client_secret=settings.oidc_client_secret,
             redirect_uri=_redirect_uri(),
             scope="openid email profile",
-        ) as oauth:
+        )
+        try:
             token = await oauth.fetch_token(
                 discovery["token_endpoint"],
                 code=code,
                 grant_type="authorization_code",
                 code_verifier=cookie_payload["pkce_verifier"],
             )
+        finally:
+            await cast(httpx.AsyncClient, oauth).aclose()
         claims = jwt.decode(
-            token["id_token"], jwk.KeySet.import_key_set(jwks_doc)
+            token["id_token"],
+            jwk.KeySet.import_key_set(cast(jwk.KeySetSerialization, jwks_doc)),
         ).claims
     except (OAuthError, httpx.HTTPError, JoseError, KeyError) as e:
         log.warning("oauth callback rejected", exc_info=e)

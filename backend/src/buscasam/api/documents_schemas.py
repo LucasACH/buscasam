@@ -1,6 +1,7 @@
 """Pydantic request/response DTOs for the document-management endpoints
 (ADR-0003 §6: DTOs separate from ORM). Shapes the HTTP contract; orchestration
 lives in api/documents.py, domain logic in core/documents."""
+
 from __future__ import annotations
 
 from datetime import date, datetime

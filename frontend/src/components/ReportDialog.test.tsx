@@ -14,7 +14,11 @@ vi.mock("sonner", () => ({ toast: { success: toastSuccess } }));
 import { ReportDialog } from "./ReportDialog";
 
 function asInvitado() {
-  useUserMock.mockReturnValue({ user: null, isInvitado: true, isLoading: false });
+  useUserMock.mockReturnValue({
+    user: null,
+    isInvitado: true,
+    isLoading: false,
+  });
 }
 
 function asAuthenticated() {

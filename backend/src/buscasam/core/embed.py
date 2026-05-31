@@ -3,6 +3,7 @@
 ADR-0002 §3 (single seam to TEI), §8 (degrade-to-lexical on TEI failure).
 Module map § `core/embed`.
 """
+
 from __future__ import annotations
 
 import re

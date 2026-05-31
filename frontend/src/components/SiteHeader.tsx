@@ -11,7 +11,7 @@ export function SiteHeader() {
   if (pathname === "/login") return null;
 
   return (
-    <header className="border-border sticky top-0 z-50 border-b bg-background/85 backdrop-blur-md backdrop-saturate-150">
+    <header className="border-border bg-background/85 sticky top-0 z-50 border-b backdrop-blur-md backdrop-saturate-150">
       <div className="mx-auto flex h-15 w-full max-w-[1120px] items-center justify-between gap-3 px-4 sm:gap-4 sm:px-6">
         <Link href="/buscar" aria-label="BUSCASAM — inicio">
           <Wordmark />

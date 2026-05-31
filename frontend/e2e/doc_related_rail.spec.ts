@@ -3,7 +3,10 @@ import { expect, test } from "@playwright/test";
 import { setMockRoute } from "./mock-helpers";
 
 const AREAS = [
-  { area_path: "escuela_ciencia", display_name: "Escuela de Ciencia y Tecnología" },
+  {
+    area_path: "escuela_ciencia",
+    display_name: "Escuela de Ciencia y Tecnología",
+  },
   {
     area_path: "escuela_ciencia.carrera_informatica",
     display_name: "Ing. Informática",

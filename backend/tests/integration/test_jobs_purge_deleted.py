@@ -5,6 +5,7 @@ Module map §core/jobs: `_run_purge_deleted` is the testable chokepoint —
 cascading to versions/attachments/chunks. In-window and never-deleted documents
 are untouched; the run is idempotent (ADR-0006 §12).
 """
+
 from __future__ import annotations
 
 import secrets
@@ -47,11 +48,15 @@ async def test_purge_leaves_in_window_and_never_deleted_documents(session):
     await jobs._run_purge_deleted(session)
 
     survivors = (
-        await session.execute(
-            text("SELECT id FROM documents WHERE id = ANY(:ids) ORDER BY id"),
-            {"ids": [in_window, never_deleted]},
+        (
+            await session.execute(
+                text("SELECT id FROM documents WHERE id = ANY(:ids) ORDER BY id"),
+                {"ids": [in_window, never_deleted]},
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert survivors == sorted([in_window, never_deleted])
 
 

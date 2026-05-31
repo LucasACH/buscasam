@@ -17,7 +17,7 @@ Detalle completo de comportamiento en [docs/SPEC.md](docs/SPEC.md).
 
 ## Estado
 
-En desarrollo inicial. Sin código aún — el repositorio contiene la especificación y el workflow de trabajo.
+MVP en desarrollo. El repositorio contiene backend, frontend, infraestructura como código y documentación de producto y operación.
 
 ---
 
@@ -25,6 +25,7 @@ En desarrollo inicial. Sin código aún — el repositorio contiene la especific
 
 - [docs/SPEC.md](docs/SPEC.md) — especificación funcional (qué hace el sistema)
 - [docs/WORKFLOW.md](docs/WORKFLOW.md) — flujo de trabajo y principios de desarrollo
+- [docs/production-launch.md](docs/production-launch.md) — checklist operativo para habilitar producción
 - [CONTRIBUTING.md](CONTRIBUTING.md) — cómo llevar una feature o bug de idea a PR mergeado
 - [CLAUDE.md](CLAUDE.md) — instrucciones para agentes que trabajan sobre el código
 

@@ -2,6 +2,7 @@
 
 End-to-end coverage of the contract `core/auth` will rely on in slice 2.
 """
+
 import httpx
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from joserfc import jwk, jwt
@@ -26,9 +27,9 @@ async def test_authlib_completes_dance_with_configured_claims():
         )
 
         async with httpx.AsyncClient() as http:
-            discovery = (await http.get(
-                f"{issuer.issuer_url}/.well-known/openid-configuration"
-            )).json()
+            discovery = (
+                await http.get(f"{issuer.issuer_url}/.well-known/openid-configuration")
+            ).json()
             jwks = (await http.get(discovery["jwks_uri"])).json()
 
         client = AsyncOAuth2Client(
@@ -45,9 +46,7 @@ async def test_authlib_completes_dance_with_configured_claims():
             # The fixture's authorize endpoint mints a code without redirecting
             # (it never reaches a browser). Drive it directly.
             async with httpx.AsyncClient() as http:
-                code_resp = await http.get(
-                    authorize_url, follow_redirects=False
-                )
+                code_resp = await http.get(authorize_url, follow_redirects=False)
             assert code_resp.status_code == 200, code_resp.text
             code = code_resp.json()["code"]
 
@@ -86,9 +85,9 @@ async def test_configurable_rejected_claims_round_trip():
         )
 
         async with httpx.AsyncClient() as http:
-            discovery = (await http.get(
-                f"{issuer.issuer_url}/.well-known/openid-configuration"
-            )).json()
+            discovery = (
+                await http.get(f"{issuer.issuer_url}/.well-known/openid-configuration")
+            ).json()
             jwks = (await http.get(discovery["jwks_uri"])).json()
 
         client = AsyncOAuth2Client(
@@ -111,9 +110,7 @@ async def test_configurable_rejected_claims_round_trip():
         finally:
             await client.aclose()
 
-        claims = jwt.decode(
-            token["id_token"], jwk.KeySet.import_key_set(jwks)
-        ).claims
+        claims = jwt.decode(token["id_token"], jwk.KeySet.import_key_set(jwks)).claims
 
     assert claims["hd"] == "example.com"
     assert claims["email_verified"] is False

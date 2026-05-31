@@ -3,7 +3,10 @@ import { expect, test } from "@playwright/test";
 import { setMockRoute } from "./mock-helpers";
 
 const AREAS = [
-  { area_path: "escuela_ciencia", display_name: "Escuela de Ciencia y Tecnología" },
+  {
+    area_path: "escuela_ciencia",
+    display_name: "Escuela de Ciencia y Tecnología",
+  },
   {
     area_path: "escuela_ciencia.carrera_informatica",
     display_name: "Ing. Informática",
@@ -30,7 +33,12 @@ const PUBLICO_DETAIL = {
     mime: "application/pdf",
   },
   adjuntos: [
-    { id: 101, original_filename: "datos.csv", size_bytes: 512, mime: "text/csv" },
+    {
+      id: 101,
+      original_filename: "datos.csv",
+      size_bytes: 512,
+      mime: "text/csv",
+    },
   ],
   manageable: false,
 };
@@ -150,16 +158,16 @@ test.describe("/docs/[id] reader page (SSR)", () => {
     await expect(page).toHaveTitle(TITULO);
 
     const mainDl = page.waitForEvent("download");
-    await page.getByRole("link", { name: /descargar archivo principal/i }).click();
+    await page
+      .getByRole("link", { name: /descargar archivo principal/i })
+      .click();
     const mainDownload = await mainDl;
     expect(mainDownload.url()).toContain(`/api/docs/${DOC_ID}/download`);
 
     const attDl = page.waitForEvent("download");
     await page.getByRole("link", { name: /descargar datos\.csv/i }).click();
     const attDownload = await attDl;
-    expect(attDownload.url()).toContain(
-      `/api/docs/${DOC_ID}/attachments/101`,
-    );
+    expect(attDownload.url()).toContain(`/api/docs/${DOC_ID}/attachments/101`);
   });
 
   test("invitado on interno: same empty state as non-existent id, 404 status", async ({

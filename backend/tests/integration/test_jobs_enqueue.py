@@ -4,6 +4,7 @@ ADR-0008 §1: deferring through the active SQLAlchemy transaction's psycopg
 connection means the domain row and the job INSERT commit/roll back together.
 ADR-0008 §7: queueing_lock=`index:v{id}` so a duplicate enqueue is a no-op.
 """
+
 from __future__ import annotations
 
 import secrets
@@ -42,14 +43,18 @@ async def test_attach_main_version_enqueues_index_document_in_same_txn(session):
 
     # ADR-0008 §1: the procrastinate_jobs row visible from the same transaction.
     row = (
-        await session.execute(
-            text(
-                "SELECT task_name, args FROM procrastinate_jobs "
-                "WHERE args->>'version_id' = :vid"
-            ),
-            {"vid": str(version_id)},
+        (
+            await session.execute(
+                text(
+                    "SELECT task_name, args FROM procrastinate_jobs "
+                    "WHERE args->>'version_id' = :vid"
+                ),
+                {"vid": str(version_id)},
+            )
         )
-    ).mappings().one_or_none()
+        .mappings()
+        .one_or_none()
+    )
     assert row is not None
     assert row["task_name"].endswith("index_document")
 
@@ -84,15 +89,19 @@ async def test_enqueue_maintenance_jobs_defer_with_periodic_timestamp_arg(sessio
     await jobs.enqueue_sweep_orphan_blobs(session)
 
     rows = (
-        await session.execute(
-            text(
-                "SELECT task_name, args FROM procrastinate_jobs "
-                "WHERE status = 'todo' AND task_name LIKE '%jobs.%' "
-                "AND (task_name LIKE '%purge_deleted' "
-                "  OR task_name LIKE '%sweep_orphan_blobs')"
+        (
+            await session.execute(
+                text(
+                    "SELECT task_name, args FROM procrastinate_jobs "
+                    "WHERE status = 'todo' AND task_name LIKE '%jobs.%' "
+                    "AND (task_name LIKE '%purge_deleted' "
+                    "  OR task_name LIKE '%sweep_orphan_blobs')"
+                )
             )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
 
     by_task = {r["task_name"].rsplit(".", 1)[-1]: r["args"] for r in rows}
     assert set(by_task) == {"purge_deleted", "sweep_orphan_blobs"}

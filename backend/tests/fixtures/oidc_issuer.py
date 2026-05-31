@@ -4,6 +4,7 @@ Single test seam between integration tests and the Authlib client; production
 never references this module. Implements discovery, JWKS, authorize, and token
 endpoints sufficient for the Google OIDC dance described in ADR-0005.
 """
+
 from __future__ import annotations
 
 import secrets
@@ -35,10 +36,10 @@ class MockOIDCIssuer:
     """
 
     host: str = "127.0.0.1"
-    _server: uvicorn.Server = field(init=False, default=None)
-    _thread: threading.Thread = field(init=False, default=None)
+    _server: uvicorn.Server = field(init=False)
+    _thread: threading.Thread = field(init=False)
     _port: int = field(init=False, default=0)
-    _key: jwk.RSAKey = field(init=False, default=None)
+    _key: jwk.RSAKey = field(init=False)
     _claims: dict = field(init=False, default_factory=dict)
     _codes: dict[str, dict] = field(init=False, default_factory=dict)
 
@@ -135,12 +136,10 @@ class MockOIDCIssuer:
         async def token(request: Request) -> JSONResponse:
             body = (await request.body()).decode()
             form = {k: v[0] for k, v in parse_qs(body).items()}
-            code = form.get("code")
+            code = form.get("code", "")
             entry = self._codes.pop(code, None)
             if entry is None:
-                return JSONResponse(
-                    {"error": "invalid_grant"}, status_code=400
-                )
+                return JSONResponse({"error": "invalid_grant"}, status_code=400)
 
             now = int(time.time())
             claims = {

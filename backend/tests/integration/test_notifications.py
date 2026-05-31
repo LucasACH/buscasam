@@ -3,6 +3,7 @@
 All four routes are `require_authenticated`, Origin-checked on mutation, and
 return 404 (not 403) on cross-user access. Every query is owner-scoped.
 """
+
 from __future__ import annotations
 
 import base64
@@ -58,22 +59,30 @@ async def test_list_owned_only(client, session):
 
     base = _now()
     oldest = await make_notification(
-        session, user_id=me, kind="coauthor_invite",
+        session,
+        user_id=me,
+        kind="coauthor_invite",
         payload={"doc_title": "Redes", "inviter": "Ada"},
         created_at=base - timedelta(minutes=2),
     )
     newest = await make_notification(
-        session, user_id=me, kind="document_hidden",
+        session,
+        user_id=me,
+        kind="document_hidden",
         payload={"doc_title": "Grafos", "reason": "spam"},
         created_at=base,
     )
     middle = await make_notification(
-        session, user_id=me, kind="processing_failed",
+        session,
+        user_id=me,
+        kind="processing_failed",
         payload={"doc_title": "Compiladores"},
         created_at=base - timedelta(minutes=1),
     )
     await make_notification(
-        session, user_id=other, kind="coauthor_invite",
+        session,
+        user_id=other,
+        kind="coauthor_invite",
         payload={"doc_title": "Otro", "inviter": "Eve"},
         created_at=base,
     )
@@ -150,7 +159,9 @@ async def test_mark_all_read_bulk(client, session):
     already = await make_notification(
         session, user_id=me, kind="document_unhidden", read_at=_now()
     )
-    other_unread = await make_notification(session, user_id=other, kind="coauthor_invite")
+    other_unread = await make_notification(
+        session, user_id=other, kind="coauthor_invite"
+    )
 
     cookie = await _seed_session(session, user_id=me)
     r = await client.post(

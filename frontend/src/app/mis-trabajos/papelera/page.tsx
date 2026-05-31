@@ -37,7 +37,7 @@ export default function PapeleraPage() {
     <main className="mx-auto w-full max-w-3xl px-6 py-8">
       <Link
         href="/mis-trabajos"
-        className="-ml-1 mb-4 inline-flex items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground"
+        className="text-muted-foreground hover:text-foreground mb-4 -ml-1 inline-flex items-center gap-1 text-[13px]"
       >
         <ChevronLeft className="size-4" />
         Volver a Mis trabajos
@@ -45,36 +45,36 @@ export default function PapeleraPage() {
 
       <div className="mb-6">
         <h1 className="text-[28px] font-semibold tracking-tight">Papelera</h1>
-        <p className="mt-1.5 text-sm text-muted-foreground">
-          Los trabajos eliminados se conservan 180 días antes de borrarse de forma
-          permanente.
+        <p className="text-muted-foreground mt-1.5 text-sm">
+          Los trabajos eliminados se conservan 180 días antes de borrarse de
+          forma permanente.
         </p>
       </div>
 
       {docsLoading ? (
-        <div className="overflow-hidden rounded-lg border border-border bg-card">
-          <div className="divide-y divide-border">
+        <div className="border-border bg-card overflow-hidden rounded-lg border">
+          <div className="divide-border divide-y">
             {[0, 1, 2].map((i) => (
               <div key={i} className="flex items-center gap-3.5 px-4 py-3.5">
                 <div className="flex-1">
-                  <div className="h-3.5 w-3/5 animate-pulse rounded-sm bg-muted" />
-                  <div className="mt-2 h-2.5 w-2/5 animate-pulse rounded-sm bg-muted" />
+                  <div className="bg-muted h-3.5 w-3/5 animate-pulse rounded-sm" />
+                  <div className="bg-muted mt-2 h-2.5 w-2/5 animate-pulse rounded-sm" />
                 </div>
-                <div className="h-7 w-24 animate-pulse rounded-md bg-muted" />
+                <div className="bg-muted h-7 w-24 animate-pulse rounded-md" />
               </div>
             ))}
           </div>
         </div>
       ) : documents.length === 0 ? (
-        <div className="overflow-hidden rounded-lg border border-border bg-card">
+        <div className="border-border bg-card overflow-hidden rounded-lg border">
           <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
-            <div className="grid size-12 place-items-center rounded-lg border border-border bg-neutral-100 text-muted-foreground/70">
+            <div className="border-border text-muted-foreground/70 grid size-12 place-items-center rounded-lg border bg-neutral-100">
               <Trash2 className="size-5" />
             </div>
             <p className="text-base font-semibold">La papelera está vacía</p>
-            <p className="max-w-[340px] text-sm text-muted-foreground">
-              Cuando elimines un trabajo, vas a poder restaurarlo desde acá durante 180
-              días.
+            <p className="text-muted-foreground max-w-[340px] text-sm">
+              Cuando elimines un trabajo, vas a poder restaurarlo desde acá
+              durante 180 días.
             </p>
             <Button asChild className="mt-1">
               <Link href="/mis-trabajos">Volver a Mis trabajos</Link>
@@ -82,8 +82,8 @@ export default function PapeleraPage() {
           </div>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-border bg-card">
-          <ul className="divide-y divide-border">
+        <div className="border-border bg-card overflow-hidden rounded-lg border">
+          <ul className="divide-border divide-y">
             {documents.map((d) => (
               <Row key={d.id} doc={d} onRestore={onRestore} />
             ))}
@@ -121,7 +121,7 @@ function Row({
       <button
         type="button"
         onClick={() => onRestore(doc.id)}
-        className="inline-flex items-center gap-1 text-[11px] text-primary hover:text-primary-hover hover:underline"
+        className="text-primary hover:text-primary-hover inline-flex items-center gap-1 text-[11px] hover:underline"
       >
         <RotateCcw className="size-3" />
         Restaurar

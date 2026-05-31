@@ -22,22 +22,26 @@ async def test_notification_row_round_trip(session):
         text(
             "INSERT INTO notifications (user_id, event_key, kind, payload_json) "
             "VALUES (:uid, 'evt-1', 'coauthor_invite', "
-            "'{\"doc_id\": 7, \"inviter\": \"Ada\"}'::jsonb)"
+            '\'{"doc_id": 7, "inviter": "Ada"}\'::jsonb)'
         ),
         {"uid": uid},
     )
     await session.commit()
 
     row = (
-        await session.execute(
-            text(
-                "SELECT kind, payload_json->>'inviter' AS inviter, "
-                "read_at, created_at IS NOT NULL AS has_created "
-                "FROM notifications WHERE user_id = :uid"
-            ),
-            {"uid": uid},
+        (
+            await session.execute(
+                text(
+                    "SELECT kind, payload_json->>'inviter' AS inviter, "
+                    "read_at, created_at IS NOT NULL AS has_created "
+                    "FROM notifications WHERE user_id = :uid"
+                ),
+                {"uid": uid},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
 
     assert row["kind"] == "coauthor_invite"
     assert row["inviter"] == "Ada"
@@ -99,10 +103,7 @@ async def test_notifications_user_fk_cascades(session):
 
     count = (
         await session.execute(
-            text(
-                "SELECT count(*) FROM notifications "
-                "WHERE event_key = 'evt-cascade'"
-            )
+            text("SELECT count(*) FROM notifications WHERE event_key = 'evt-cascade'")
         )
     ).scalar_one()
     assert count == 0

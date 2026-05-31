@@ -35,7 +35,10 @@ async def test_areas_endpoint_returns_full_tree(client, session):
     assert r.status_code == 200
     body = r.json()
     assert body == [
-        {"area_path": "escuela_ciencia", "display_name": "Escuela de Ciencia y Tecnología"},
+        {
+            "area_path": "escuela_ciencia",
+            "display_name": "Escuela de Ciencia y Tecnología",
+        },
         {
             "area_path": "escuela_ciencia.carrera_informatica",
             "display_name": "Ing. Informática",

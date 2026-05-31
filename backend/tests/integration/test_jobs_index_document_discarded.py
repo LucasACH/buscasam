@@ -8,6 +8,7 @@ exercise the gate's `WHERE index_status='processing'` predicate in isolation.
 `test_descartar_completes_while_indexing_io_in_flight` adds the real
 two-connection proof that the new claim/finalize lifecycle releases the row lock
 before the extract IO, so descartar no longer blocks behind it."""
+
 from __future__ import annotations
 
 import asyncio
@@ -44,7 +45,9 @@ async def _seed_published_with_candidate(
     session, *, owner_user_id: int, candidate_status: str = "pending"
 ) -> tuple[int, int]:
     """Published doc + one non-current candidate. Returns (doc_id, candidate_vid)."""
-    doc_id = await make_document(session, publication_status="published", titulo="Tesis")
+    doc_id = await make_document(
+        session, publication_status="published", titulo="Tesis"
+    )
     await make_document_author(session, doc_id, user_id=owner_user_id, status="owner")
     await session.execute(
         text(
@@ -96,8 +99,9 @@ def _index_inputs(title: str = "Tesis", abstract: str = "Resumen"):
     embeds = [np.zeros(1024) for _ in [headline, *body]]
     meta = IndexableMetadata(abstract=abstract, keywords=["bd"], fecha=None)
     fp = headline_fingerprint(title, abstract)
-    return dict(body=body, headline=headline, embeds=embeds, meta=meta,
-               headline_fingerprint=fp)
+    return dict(
+        body=body, headline=headline, embeds=embeds, meta=meta, headline_fingerprint=fp
+    )
 
 
 async def test_write_indexed_candidate_aborts_when_discarded_mid_flight(session):

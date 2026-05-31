@@ -18,7 +18,9 @@ function json(body: unknown, status = 200) {
 
 // Editing título on /editar/{id} triggers a `Reindexando título…` gate; the
 // badge clears once the (mocked) headline reindex completes.
-test("editar título: reindexing_headline gate appears, then clears", async ({ page }) => {
+test("editar título: reindexing_headline gate appears, then clears", async ({
+  page,
+}) => {
   const DOC_ID = 42;
 
   // The mocked /draft response is a simple state machine driven by PATCH:
@@ -73,7 +75,9 @@ test("editar título: reindexing_headline gate appears, then clears", async ({ p
 
   // 1. Land on /editar with indexed state — no gate reason, no badge.
   await page.goto(`/mis-trabajos/${DOC_ID}/editar`);
-  await expect(page.getByTestId("status-pill")).toHaveText(/Listo para publicar/);
+  await expect(page.getByTestId("status-pill")).toHaveText(
+    /Listo para publicar/,
+  );
   await expect(page.getByTestId("gate-reason")).toHaveCount(0);
 
   // 2. Edit título and blur.
@@ -82,10 +86,15 @@ test("editar título: reindexing_headline gate appears, then clears", async ({ p
   await titulo.blur();
 
   // 3. Reindexando título… gate appears.
-  await expect(page.getByTestId("gate-reason")).toHaveText(/Reindexando título…/, {
-    timeout: 10_000,
-  });
+  await expect(page.getByTestId("gate-reason")).toHaveText(
+    /Reindexando título…/,
+    {
+      timeout: 10_000,
+    },
+  );
 
   // 4. Once the (mocked) reindex finishes, the gate clears.
-  await expect(page.getByTestId("gate-reason")).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByTestId("gate-reason")).toHaveCount(0, {
+    timeout: 15_000,
+  });
 });

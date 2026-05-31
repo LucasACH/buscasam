@@ -2,6 +2,7 @@
 deletion lifecycle (module map §core/documents, issue #65). Owner-only,
 stamp-once, and immediate reader-invisibility through the inherited
 soft_deleted_at IS NULL exclusion."""
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -115,14 +116,18 @@ async def test_soft_delete_moderation_hidden_is_still_deletable(session):
     await documents.soft_delete(session, _ctx(owner), doc_id)
 
     row = (
-        await session.execute(
-            text(
-                "SELECT soft_deleted_at, moderation_hidden_at, publication_status "
-                "FROM documents WHERE id = :id"
-            ),
-            {"id": doc_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT soft_deleted_at, moderation_hidden_at, publication_status "
+                    "FROM documents WHERE id = :id"
+                ),
+                {"id": doc_id},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     assert row["soft_deleted_at"] is not None
     assert row["moderation_hidden_at"] is not None
     assert row["publication_status"] == "published"
@@ -184,7 +189,9 @@ async def test_list_deleted_documents_returns_only_callers_own_soft_deleted(sess
     await make_document_author(session, other_deleted, user_id=other, status="owner")
     coautor_deleted = await make_document(session, soft_deleted=True)
     await make_document_author(session, coautor_deleted, user_id=other, status="owner")
-    await make_document_author(session, coautor_deleted, user_id=owner, status="accepted")
+    await make_document_author(
+        session, coautor_deleted, user_id=owner, status="accepted"
+    )
     await session.commit()
 
     rows = await documents.list_deleted_documents(session, _ctx(owner))
@@ -341,7 +348,8 @@ async def test_restore_returns_published_document_to_every_reader_surface(sessio
             target in [r.doc_id for r in res.rows]
             and res.total == 1
             and await documents.get_detail(session, target, GUEST) is not None
-            and await documents.get_readable_main_file(session, target, GUEST) is not None
+            and await documents.get_readable_main_file(session, target, GUEST)
+            is not None
             and target in await related_ids()
         )
 
@@ -356,7 +364,9 @@ async def test_restore_returns_published_document_to_every_reader_surface(sessio
     assert detail is not None
 
 
-async def test_restore_returns_draft_with_versions_attachments_coautores_intact(session):
+async def test_restore_returns_draft_with_versions_attachments_coautores_intact(
+    session,
+):
     """AC#4 (draft side): a restored draft returns to Mis trabajos editable with
     version history, attachments, and coautores intact — none were mutated by
     delete/restore (stories 8-11)."""

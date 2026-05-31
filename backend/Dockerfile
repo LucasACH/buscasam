@@ -1,6 +1,6 @@
 # ADR-0009 §2: backend image. Four containers run from it (api, worker_default,
 # worker_ocr, backup); the entrypoint is set per-service in compose.
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim@sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58
 
 ARG UID=1000
 ARG GID=1000

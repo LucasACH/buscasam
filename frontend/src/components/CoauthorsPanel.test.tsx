@@ -78,11 +78,36 @@ describe("CoauthorsPanel", () => {
     setup({
       isOwner: true,
       coauthors: [
-        { user_id: 1, display_name: "Ada", email_local: "ada", status: "owner" },
-        { user_id: 2, display_name: "Bob", email_local: "bob", status: "pending" },
-        { user_id: 3, display_name: "Carla", email_local: "carla", status: "accepted" },
-        { user_id: 4, display_name: "Dora", email_local: "dora", status: "declined" },
-        { user_id: null, display_name: "Ed", email_local: null, status: "external" },
+        {
+          user_id: 1,
+          display_name: "Ada",
+          email_local: "ada",
+          status: "owner",
+        },
+        {
+          user_id: 2,
+          display_name: "Bob",
+          email_local: "bob",
+          status: "pending",
+        },
+        {
+          user_id: 3,
+          display_name: "Carla",
+          email_local: "carla",
+          status: "accepted",
+        },
+        {
+          user_id: 4,
+          display_name: "Dora",
+          email_local: "dora",
+          status: "declined",
+        },
+        {
+          user_id: null,
+          display_name: "Ed",
+          email_local: null,
+          status: "external",
+        },
       ],
     });
     render(<CoauthorsPanel docId={1} />);
@@ -98,11 +123,36 @@ describe("CoauthorsPanel", () => {
     setup({
       isOwner: true,
       coauthors: [
-        { user_id: 1, display_name: "Ada", email_local: "ada", status: "owner" },
-        { user_id: 2, display_name: "Bob", email_local: "bob", status: "pending" },
-        { user_id: 3, display_name: "Carla", email_local: "carla", status: "accepted" },
-        { user_id: 4, display_name: "Dora", email_local: "dora", status: "declined" },
-        { user_id: null, display_name: "Ed", email_local: null, status: "external" },
+        {
+          user_id: 1,
+          display_name: "Ada",
+          email_local: "ada",
+          status: "owner",
+        },
+        {
+          user_id: 2,
+          display_name: "Bob",
+          email_local: "bob",
+          status: "pending",
+        },
+        {
+          user_id: 3,
+          display_name: "Carla",
+          email_local: "carla",
+          status: "accepted",
+        },
+        {
+          user_id: 4,
+          display_name: "Dora",
+          email_local: "dora",
+          status: "declined",
+        },
+        {
+          user_id: null,
+          display_name: "Ed",
+          email_local: null,
+          status: "external",
+        },
       ],
     });
     render(<CoauthorsPanel docId={1} />);
@@ -117,8 +167,18 @@ describe("CoauthorsPanel", () => {
     setup({
       isOwner: true,
       coauthors: [
-        { user_id: 1, display_name: "Ada", email_local: "ada", status: "owner" },
-        { user_id: 2, display_name: "Bob", email_local: "bob", status: "pending" },
+        {
+          user_id: 1,
+          display_name: "Ada",
+          email_local: "ada",
+          status: "owner",
+        },
+        {
+          user_id: 2,
+          display_name: "Bob",
+          email_local: "bob",
+          status: "pending",
+        },
       ],
     });
     render(<CoauthorsPanel docId={1} />);
@@ -133,8 +193,18 @@ describe("CoauthorsPanel", () => {
     setup({
       isOwner: true,
       coauthors: [
-        { user_id: 1, display_name: "Ada", email_local: "ada", status: "owner" },
-        { user_id: 42, display_name: "Already", email_local: "al", status: "pending" },
+        {
+          user_id: 1,
+          display_name: "Ada",
+          email_local: "ada",
+          status: "owner",
+        },
+        {
+          user_id: 42,
+          display_name: "Already",
+          email_local: "al",
+          status: "pending",
+        },
       ],
     });
     render(<CoauthorsPanel docId={1} />);
@@ -152,7 +222,12 @@ describe("CoauthorsPanel", () => {
     setup({
       isOwner: true,
       coauthors: [
-        { user_id: 1, display_name: "Ada", email_local: "ada", status: "owner" },
+        {
+          user_id: 1,
+          display_name: "Ada",
+          email_local: "ada",
+          status: "owner",
+        },
       ],
     });
     render(<CoauthorsPanel docId={1} />);

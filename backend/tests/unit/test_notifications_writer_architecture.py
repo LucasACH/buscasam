@@ -7,6 +7,7 @@ having exactly one writer of `INSERT INTO notifications`. Read-state mutations
 (`UPDATE … read_at`, `DELETE FROM notifications` on revoke) are consumer-side
 and intentionally not matched — only production inserts are guarded.
 """
+
 from __future__ import annotations
 
 import re

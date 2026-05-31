@@ -37,8 +37,7 @@ function LoginPageInner() {
           >
             <AlertTriangle className="text-destructive mt-px size-[17px] shrink-0" />
             <span className="text-[13px] leading-relaxed text-red-900">
-              Solo cuentas{" "}
-              <span className="font-mono">@unsam.edu.ar</span>,{" "}
+              Solo cuentas <span className="font-mono">@unsam.edu.ar</span>,{" "}
               <span className="font-mono">@estudiantes.unsam.edu.ar</span> o{" "}
               <span className="font-mono">@unsam-bue.edu.ar</span> pueden
               ingresar.

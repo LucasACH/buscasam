@@ -5,6 +5,7 @@ Revises: 0002
 Create Date: 2026-05-24
 
 """
+
 from alembic import op
 
 
@@ -24,8 +25,7 @@ def upgrade() -> None:
         """
     )
     op.execute(
-        "CREATE INDEX documents_area_path_gist "
-        "ON documents USING gist (area_path)"
+        "CREATE INDEX documents_area_path_gist ON documents USING gist (area_path)"
     )
 
 

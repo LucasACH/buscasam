@@ -5,6 +5,7 @@ keywords/fecha suggestions". Owns the per-format dispatch, the OCR gate
 threshold, the abstract regex, the YAKE configuration, the fecha cover-page
 heuristic, and the encrypted-PDF probe.
 """
+
 from __future__ import annotations
 
 import io
@@ -94,7 +95,9 @@ def _build_doc_from_paragraphs(paragraphs: list[str]) -> ExtractedDoc:
     text = "".join(pieces).rstrip()
     # Drop the final break if it lands past the rstrip
     breaks = [b for b in breaks if b <= len(text)]
-    return ExtractedDoc(text=text, paragraph_breaks=breaks, page_breaks=[], raw_metadata={})
+    return ExtractedDoc(
+        text=text, paragraph_breaks=breaks, page_breaks=[], raw_metadata={}
+    )
 
 
 def _extract_docx(data: bytes) -> ExtractedDoc:
@@ -265,7 +268,7 @@ def _clean_keywords(keywords: list[str]) -> list[str]:
 def _derive_abstract(text: str) -> str:
     if not text.strip():
         return ""
-    head = text[: 8000]  # first ~2 pages worth
+    head = text[:8000]  # first ~2 pages worth
     explicit = _derive_explicit_abstract(head)
     if explicit is not None:
         return explicit
@@ -280,7 +283,7 @@ def _derive_explicit_abstract(head: str) -> str | None:
     m = _ABSTRACT_HEADING.search(head)
     if not m:
         return None
-    body = head[m.end():]
+    body = head[m.end() :]
     nxt = _NEXT_HEADING.search(body)
     body = body[: nxt.start()] if nxt else body
     return _truncate_words(body.strip(), _ABSTRACT_WORD_CAP)
@@ -306,7 +309,7 @@ _PDF_CREATION_DATE_RE = re.compile(r"^D:(\d{4})")
 
 
 def _derive_fecha_from_text(text: str) -> date | None:
-    head = text[: 8000]
+    head = text[:8000]
     current_year = date.today().year
     best: int | None = None
     for m in _YEAR_RE.finditer(head):
@@ -315,7 +318,7 @@ def _derive_fecha_from_text(text: str) -> date | None:
             continue
         # check cover-token proximity (within 80 chars window before)
         window_start = max(0, m.start() - 80)
-        if _COVER_TOKENS.search(head[window_start: m.end()]):
+        if _COVER_TOKENS.search(head[window_start : m.end()]):
             if best is None or year > best:
                 best = year
     return date(best, 1, 1) if best else None

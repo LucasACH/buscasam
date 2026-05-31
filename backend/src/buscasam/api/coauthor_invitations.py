@@ -7,6 +7,7 @@ Both endpoints take the doc id from the URL and the invitee from
 never-invited) to a uniform 404 — same envelope as `api/docs`. Never opens
 transactions or touches `document_authors` / `notifications` directly.
 """
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Response

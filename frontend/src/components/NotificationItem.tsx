@@ -50,11 +50,7 @@ function CoauthorInviteItem({
       </p>
       {unread && docId != null && (
         <div className="mt-2 flex gap-1.5">
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => accept(docId)}
-          >
+          <Button type="button" size="sm" onClick={() => accept(docId)}>
             Aceptar
           </Button>
           <Button

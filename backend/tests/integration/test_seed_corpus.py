@@ -18,8 +18,7 @@ async def test_seed_documents_cover_every_dimension(session):
             (
                 await session.execute(
                     text(
-                        "SELECT visibility, count(*) FROM documents "
-                        "GROUP BY visibility"
+                        "SELECT visibility, count(*) FROM documents GROUP BY visibility"
                     )
                 )
             ).all()
@@ -71,8 +70,14 @@ async def test_seed_documents_cover_every_dimension(session):
     assert counts["by_publication"] == {"published": 14, "draft": 1}
     assert counts["by_lifecycle_flag"] == (1, 1)
     assert set(counts["by_tipo"].keys()) == {
-        "tesis", "paper", "trabajo_practico", "proyecto_investigacion",
-        "monografia", "ponencia_poster", "apunte_resumen", "informe_catedra",
+        "tesis",
+        "paper",
+        "trabajo_practico",
+        "proyecto_investigacion",
+        "monografia",
+        "ponencia_poster",
+        "apunte_resumen",
+        "informe_catedra",
     }
     assert set(counts["by_area_level"].keys()) == {1, 2, 3}
     assert counts["distinct_years"] >= 5

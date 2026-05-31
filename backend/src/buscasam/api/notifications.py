@@ -4,13 +4,16 @@ SQL stays inline here per the PRD until a second caller earns extraction.
 Every query is owner-scoped (`WHERE user_id = :uid`); cross-user access is
 indistinguishable from a missing row (404, never 403).
 """
+
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel
 from sqlalchemy import text
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from buscasam.api.deps import get_session
@@ -88,15 +91,19 @@ async def mark_read(
     # COALESCE keeps the first read_at on re-mark (idempotent); the user_id
     # predicate makes another user's row indistinguishable from a missing one.
     row = (
-        await session.execute(
-            text(
-                "UPDATE notifications SET read_at = COALESCE(read_at, now()) "
-                "WHERE id = :id AND user_id = :uid "
-                "RETURNING id, read_at"
-            ),
-            {"id": notification_id, "uid": user_ctx.user_id},
+        (
+            await session.execute(
+                text(
+                    "UPDATE notifications SET read_at = COALESCE(read_at, now()) "
+                    "WHERE id = :id AND user_id = :uid "
+                    "RETURNING id, read_at"
+                ),
+                {"id": notification_id, "uid": user_ctx.user_id},
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
     if row is None:
         raise HTTPException(status_code=404)
     return MarkReadResponse(**row)
@@ -107,11 +114,14 @@ async def mark_all_read(
     user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
     session: AsyncSession = Depends(get_session),
 ) -> MarkAllReadResponse:
-    result = await session.execute(
-        text(
-            "UPDATE notifications SET read_at = now() "
-            "WHERE user_id = :uid AND read_at IS NULL"
+    result = cast(
+        CursorResult[Any],
+        await session.execute(
+            text(
+                "UPDATE notifications SET read_at = now() "
+                "WHERE user_id = :uid AND read_at IS NULL"
+            ),
+            {"uid": user_ctx.user_id},
         ),
-        {"uid": user_ctx.user_id},
     )
     return MarkAllReadResponse(count=result.rowcount)

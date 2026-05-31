@@ -9,6 +9,7 @@ projection, `n` parsing, and the attachment `mime` fallback. Slice 3 wires
 `core/related.fetch_related` through `settings.min_semantic_similarity`,
 returning `RelatedDTO[]` or the uniform 404 envelope.
 """
+
 from __future__ import annotations
 
 from typing import Annotated, Literal
@@ -314,6 +315,7 @@ async def download_main_file(
     file = await get_readable_main_file(session, doc_id, user_ctx)
     if file is None:
         raise _not_found()
+    assert file.mime is not None
     return download_response(
         sha_hex=file.sha_hex, original_filename=file.original_filename, mime=file.mime
     )
@@ -358,6 +360,7 @@ async def download_version(
     file = await get_manageable_version_file(session, doc_id, version_n, user_ctx)
     if file is None:
         raise _not_found()
+    assert file.mime is not None
     return download_response(
         sha_hex=file.sha_hex, original_filename=file.original_filename, mime=file.mime
     )

@@ -14,15 +14,19 @@ async def test_users_row_round_trip_with_full_shape(session):
     await session.commit()
 
     row = (
-        await session.execute(
-            text(
-                "SELECT google_sub, email, hd, role, name, picture_url, "
-                "created_at IS NOT NULL AS has_created, "
-                "last_login_at IS NOT NULL AS has_last_login "
-                "FROM users WHERE google_sub = 'sub-1'"
+        (
+            await session.execute(
+                text(
+                    "SELECT google_sub, email, hd, role, name, picture_url, "
+                    "created_at IS NOT NULL AS has_created, "
+                    "last_login_at IS NOT NULL AS has_last_login "
+                    "FROM users WHERE google_sub = 'sub-1'"
+                )
             )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
 
     assert row["google_sub"] == "sub-1"
     assert row["email"] == "ada@unsam.edu.ar"

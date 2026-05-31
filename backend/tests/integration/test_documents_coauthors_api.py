@@ -2,6 +2,7 @@
 §api/documents). POST /api/documents/{id}/coauthors invites; DELETE
 .../{user_id} revokes pending rows. Owner-only; maps NotOwner→403,
 CoauthorAlreadyListed→409, CoauthorNotPending→404."""
+
 from __future__ import annotations
 
 import base64
@@ -100,6 +101,7 @@ async def test_get_draft_returns_is_owner_and_coauthors(client, session):
 
 def _fp(title: str) -> str:
     from buscasam.core.chunk import headline_fingerprint
+
     return headline_fingerprint(title, "")
 
 
@@ -120,8 +122,7 @@ async def test_post_coauthor_on_draft_inserts_pending_204(client, session):
     status = (
         await session.execute(
             text(
-                "SELECT status FROM document_authors "
-                "WHERE doc_id = :d AND user_id = :u"
+                "SELECT status FROM document_authors WHERE doc_id = :d AND user_id = :u"
             ),
             {"d": doc_id, "u": invitee},
         )
@@ -132,9 +133,7 @@ async def test_post_coauthor_on_draft_inserts_pending_204(client, session):
 async def test_post_coauthor_already_listed_409(client, session):
     doc_id, owner = await _seed_doc_with_owner(session)
     invitee = await make_user(session, name="Bob")
-    await make_document_author(
-        session, doc_id, user_id=invitee, status="declined"
-    )
+    await make_document_author(session, doc_id, user_id=invitee, status="declined")
     sid = await _seed_session(session, owner)
     await session.commit()
 
@@ -150,9 +149,7 @@ async def test_post_coauthor_already_listed_409(client, session):
 async def test_post_coauthor_non_owner_403(client, session):
     doc_id, _owner = await _seed_doc_with_owner(session)
     accepted = await make_user(session, name="Acc")
-    await make_document_author(
-        session, doc_id, user_id=accepted, status="accepted"
-    )
+    await make_document_author(session, doc_id, user_id=accepted, status="accepted")
     target = await make_user(session, name="Bob")
     sid = await _seed_session(session, accepted)
     await session.commit()
@@ -166,9 +163,7 @@ async def test_post_coauthor_non_owner_403(client, session):
     assert r.status_code == 403
 
 
-async def test_delete_coauthor_pending_drops_row_and_notification_204(
-    client, session
-):
+async def test_delete_coauthor_pending_drops_row_and_notification_204(client, session):
     doc_id, owner = await _seed_doc_with_owner(session, publication_status="published")
     invitee = await make_user(session, name="Bob")
     await make_document_author(session, doc_id, user_id=invitee, status="pending")

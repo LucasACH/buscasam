@@ -1,10 +1,12 @@
 """Attachment add/remove with the 5-file cap (ADR-0006 §7,
 module map §core/documents)."""
+
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import text
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from buscasam.core.document_access import manageable_where
@@ -80,12 +82,15 @@ async def remove_attachment(
     left for the orphan sweep (dedup-safe). Cross-user docs and missing rows
     both raise DocumentNotFound (→ 404)."""
     await assert_manageable(session, user_ctx, doc_id)
-    result = await session.execute(
-        text(
-            "DELETE FROM document_attachments "
-            "WHERE id = :att_id AND doc_id = :doc_id"
+    result = cast(
+        CursorResult[Any],
+        await session.execute(
+            text(
+                "DELETE FROM document_attachments "
+                "WHERE id = :att_id AND doc_id = :doc_id"
+            ),
+            {"att_id": att_id, "doc_id": doc_id},
         ),
-        {"att_id": att_id, "doc_id": doc_id},
     )
     if result.rowcount == 0:
         raise DocumentNotFound

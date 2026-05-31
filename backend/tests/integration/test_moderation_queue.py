@@ -3,6 +3,7 @@ map §core/moderation). The Docente triage queue read: one entry per reported
 document with title, reason(s), first/last reported_at, and reporter count,
 ordered for triage. Resolved-only documents do not appear.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -29,7 +30,13 @@ async def _file_report(
                 "(doc_id, reporter_user_id, reason, status, created_at) "
                 "VALUES (:d, :u, :r, :s, COALESCE(:c, now())) RETURNING id"
             ),
-            {"d": doc_id, "u": reporter_user_id, "r": reason, "s": status, "c": created_at},
+            {
+                "d": doc_id,
+                "u": reporter_user_id,
+                "r": reason,
+                "s": status,
+                "c": created_at,
+            },
         )
     ).scalar_one()
 
@@ -72,8 +79,12 @@ async def test_mixed_open_and_resolved_reports_aggregate_only_open(session):
     await _file_report(session, doc, await make_user(session), "spam", created_at=t1)
     await _file_report(session, doc, await make_user(session), "plagio", created_at=t2)
     await _file_report(
-        session, doc, await make_user(session), "error",
-        status="resolved", created_at=datetime(2026, 1, 20, tzinfo=timezone.utc),
+        session,
+        doc,
+        await make_user(session),
+        "error",
+        status="resolved",
+        created_at=datetime(2026, 1, 20, tzinfo=timezone.utc),
     )
 
     entries = await list_open_reports(session)
@@ -107,13 +118,19 @@ async def test_ordered_for_triage_count_then_recency(session):
 
     recent = await make_document(session, titulo="Recent")
     await _file_report(
-        session, recent, await make_user(session), "spam",
+        session,
+        recent,
+        await make_user(session),
+        "spam",
         created_at=datetime(2026, 1, 10, tzinfo=timezone.utc),
     )
 
     old = await make_document(session, titulo="Old")
     await _file_report(
-        session, old, await make_user(session), "spam",
+        session,
+        old,
+        await make_user(session),
+        "spam",
         created_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
     )
 

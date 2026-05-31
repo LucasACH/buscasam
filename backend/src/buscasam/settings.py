@@ -74,9 +74,7 @@ class Settings(BaseSettings):
         """
         parts = urlsplit(raw)
         if not parts.scheme or not parts.netloc:
-            raise ValueError(
-                f"BUSCASAM_BASE_URL must be an absolute URL, got {raw!r}"
-            )
+            raise ValueError(f"BUSCASAM_BASE_URL must be an absolute URL, got {raw!r}")
         if parts.path not in ("", "/") or parts.query or parts.fragment:
             raise ValueError(
                 "BUSCASAM_BASE_URL must not carry a path, query, or fragment "

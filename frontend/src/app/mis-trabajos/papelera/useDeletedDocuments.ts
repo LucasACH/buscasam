@@ -23,7 +23,10 @@ const MS_PER_DAY = 1000 * 60 * 60 * 24;
 // 180-día retention constant stays server-side in the purge_at projection. Ceil
 // so the countdown only reads "0 días" once the purge instant has passed.
 function daysRemaining(purgeAt: string, now: number): number {
-  return Math.max(0, Math.ceil((new Date(purgeAt).getTime() - now) / MS_PER_DAY));
+  return Math.max(
+    0,
+    Math.ceil((new Date(purgeAt).getTime() - now) / MS_PER_DAY),
+  );
 }
 
 function project(dto: DeletedDocDTO, now: number): DeletedDoc {

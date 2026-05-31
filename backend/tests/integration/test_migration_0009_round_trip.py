@@ -3,6 +3,7 @@
 Runs against an isolated database so the session-scoped `engine` fixture
 (which stays at `head`) is never disturbed.
 """
+
 from __future__ import annotations
 
 import os

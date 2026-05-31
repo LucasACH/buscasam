@@ -31,8 +31,9 @@ curl -fsSL https://get.docker.com | sh
 # --- host user + state dirs (ADR-0009 §7) ---
 id buscasam >/dev/null 2>&1 || useradd --system --uid 1000 --user-group --shell /usr/sbin/nologin buscasam
 usermod -aG docker buscasam || true
-mkdir -p /var/lib/buscasam/postgres /var/lib/buscasam/blobs/.tmp /var/lib/buscasam/tei-cache
+mkdir -p /var/lib/buscasam/postgres /var/lib/buscasam/blobs/.tmp /var/lib/buscasam/tei-cache /backup/buscasam
 chown -R buscasam:buscasam /var/lib/buscasam
+chown buscasam:buscasam /backup/buscasam
 
 TOKEN=$(curl -s -H "Metadata-Flavor: Google" \
   "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" | jq -r .access_token)
@@ -71,6 +72,7 @@ BUSCASAM_ENV=prod
 BUSCASAM_DATABASE_URL=postgresql+psycopg://buscasam:$${S[POSTGRES_PASSWORD]}@db:5432/buscasam
 BUSCASAM_TEI_URL=http://tei
 BUSCASAM_BASE_URL=https://${server_name}
+BUSCASAM_INTERNAL_API_URL=http://api:8000/api
 BUSCASAM_BLOB_ROOT=/var/lib/buscasam/blobs
 BUSCASAM_MIN_SEMANTIC_SIMILARITY=0.78
 BUSCASAM_EMBED_QUERY_TIMEOUT_S=0.5

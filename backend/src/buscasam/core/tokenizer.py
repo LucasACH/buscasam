@@ -5,6 +5,7 @@ special tokens included — against the e5 512-token budget without contacting
 TEI. The vendored `tokenizer.json` is pinned to the same HF revision SHA as the
 served model; `manifest.json` records that SHA so startup can verify the pin.
 """
+
 from __future__ import annotations
 
 import json

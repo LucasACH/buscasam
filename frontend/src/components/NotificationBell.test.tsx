@@ -14,6 +14,7 @@ const { unreadMock, notifMock, markAllRead, markRead } = vi.hoisted(() => ({
 vi.mock("@/lib/useNotifications", () => ({
   useNotifications: () => notifMock(),
   useUnreadCount: () => unreadMock(),
+  usePrefetchNotifications: () => {},
 }));
 vi.mock("@/lib/useCoauthorInvitation", () => ({
   useCoauthorInvitation: () => ({ accept: vi.fn(), decline: vi.fn() }),

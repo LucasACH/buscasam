@@ -78,7 +78,9 @@ describe("useNotifications hooks", () => {
     authenticated();
     apiGet.mockImplementation((path: string) => {
       if (path === "/api/notifications")
-        return Promise.resolve({ data: { items: [notif(1, false), notif(2, true)] } });
+        return Promise.resolve({
+          data: { items: [notif(1, false), notif(2, true)] },
+        });
       return Promise.resolve({ data: { count: 1 } });
     });
     const { wrapper } = harness();
@@ -131,7 +133,9 @@ describe("useNotifications hooks", () => {
     act(() => result.current.list.markRead(1));
 
     await waitFor(() => expect(result.current.count.count).toBe(2));
-    expect(result.current.list.items.find((n) => n.id === 1)!.read_at).toBeNull();
+    expect(
+      result.current.list.items.find((n) => n.id === 1)!.read_at,
+    ).toBeNull();
   });
 
   it("markAllRead optimistically flips every unread row and zeroes the count", async () => {
@@ -141,9 +145,9 @@ describe("useNotifications hooks", () => {
     act(() => result.current.list.markAllRead());
 
     await waitFor(() => expect(result.current.count.count).toBe(0));
-    expect(
-      result.current.list.items.every((n) => n.read_at !== null),
-    ).toBe(true);
+    expect(result.current.list.items.every((n) => n.read_at !== null)).toBe(
+      true,
+    );
   });
 
   it("markAllRead rolls back on mutation error", async () => {
@@ -153,8 +157,8 @@ describe("useNotifications hooks", () => {
     act(() => result.current.list.markAllRead());
 
     await waitFor(() => expect(result.current.count.count).toBe(2));
-    expect(
-      result.current.list.items.every((n) => n.read_at === null),
-    ).toBe(true);
+    expect(result.current.list.items.every((n) => n.read_at === null)).toBe(
+      true,
+    );
   });
 });

@@ -32,7 +32,9 @@ export function CoauthorInvitationBanner({
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
 
-  async function run(action: (id: number) => Promise<InvitationMutationError | undefined>) {
+  async function run(
+    action: (id: number) => Promise<InvitationMutationError | undefined>,
+  ) {
     setBusy(true);
     setFailed(false);
     const err = await action(docId);
@@ -97,7 +99,7 @@ export function CoauthorInvitationBanner({
         <UserPlus size={18} />
       </span>
       <div className="min-w-[220px] flex-1">
-        <p className="text-neutral-700 text-sm leading-relaxed">
+        <p className="text-sm leading-relaxed text-neutral-700">
           <span className="text-foreground font-semibold">{inviter}</span> te
           invitó como coautor en{" "}
           <span className="text-foreground font-semibold">«{titulo}»</span>.

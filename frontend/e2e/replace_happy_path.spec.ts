@@ -21,7 +21,11 @@ const OLD_BYTES = "PUBLISHED-ORIGINAL-BYTES";
 const NEW_BYTES = "REPLACEMENT-CANDIDATE-BYTES";
 
 function json(body: unknown, status = 200) {
-  return { status, contentType: "application/json", body: JSON.stringify(body) };
+  return {
+    status,
+    contentType: "application/json",
+    body: JSON.stringify(body),
+  };
 }
 
 type Phase = "none" | "processing" | "ready" | "published";
@@ -48,10 +52,7 @@ test("replace → processing → ready → publish, reader stays on old bytes un
 
   const versions = () =>
     phase === "published"
-      ? [
-          row(1, "original.pdf", false),
-          row(2, "nueva.pdf", true),
-        ]
+      ? [row(1, "original.pdf", false), row(2, "nueva.pdf", true)]
       : [row(1, "original.pdf", true)];
 
   function row(n: number, name: string, is_current: boolean) {
@@ -80,7 +81,12 @@ test("replace → processing → ready → publish, reader stays on old bytes un
       is_owner: true,
       attachments: [],
       coauthors: [
-        { user_id: 7, display_name: "Ada Lovelace", email_local: "ada", status: "owner" },
+        {
+          user_id: 7,
+          display_name: "Ada Lovelace",
+          email_local: "ada",
+          status: "owner",
+        },
       ],
       versions: versions(),
       candidate,
@@ -98,7 +104,9 @@ test("replace → processing → ready → publish, reader stays on old bytes un
       // First poll (the optimistic invalidation right after /replace) keeps it
       // processing; the next poll flips to ready.
       if (processingPolls >= 1) phase = "ready";
-      return route.fulfill(json({ ...draftBody(), candidate: stagedCandidate("processing") }));
+      return route.fulfill(
+        json({ ...draftBody(), candidate: stagedCandidate("processing") }),
+      );
     }
     return route.fulfill(json(draftBody()));
   });
@@ -106,7 +114,11 @@ test("replace → processing → ready → publish, reader stays on old bytes un
   await page.route(`**/api/documents/${DOC_ID}/replace`, (route) => {
     phase = "processing";
     processingPolls = 0;
-    return route.fulfill({ status: 202, contentType: "application/json", body: "{}" });
+    return route.fulfill({
+      status: 202,
+      contentType: "application/json",
+      body: "{}",
+    });
   });
 
   await page.route(`**/api/documents/${DOC_ID}/publish`, (route) => {
@@ -155,16 +167,19 @@ test("replace → processing → ready → publish, reader stays on old bytes un
     );
   const readerFilename = () =>
     page.evaluate(
-      (id) => fetch(`/api/docs/${id}`).then((r) => r.json()).then((d) => d.archivo_principal.original_filename),
+      (id) =>
+        fetch(`/api/docs/${id}`)
+          .then((r) => r.json())
+          .then((d) => d.archivo_principal.original_filename),
       DOC_ID,
     );
 
   // 1. Land on the editar page of a published doc with no candidate.
   await page.goto(`/mis-trabajos/${DOC_ID}/editar`);
-  const panel = page.locator("section").filter({ hasText: "Archivo principal" });
-  await expect(
-    panel.getByLabel("Reemplazar archivo principal"),
-  ).toBeAttached();
+  const panel = page
+    .locator("section")
+    .filter({ hasText: "Archivo principal" });
+  await expect(panel.getByLabel("Reemplazar archivo principal")).toBeAttached();
   await expect(
     page.getByText(
       "La versión previa permanece pública hasta que publiques la nueva.",
@@ -201,9 +216,9 @@ test("replace → processing → ready → publish, reader stays on old bytes un
   await panel.getByRole("button", { name: "Publicar" }).click();
 
   // 5. Panel resets to the no-candidate state.
-  await expect(
-    panel.getByLabel("Reemplazar archivo principal"),
-  ).toBeAttached({ timeout: 15_000 });
+  await expect(panel.getByLabel("Reemplazar archivo principal")).toBeAttached({
+    timeout: 15_000,
+  });
 
   // 6. Versiones anteriores now lists two rows, the new one marked (actual).
   const versionsPanel = page

@@ -1,4 +1,5 @@
 """manageable_where: owner+accepted access, pending+other excluded (ADR-0010 §8)."""
+
 from sqlalchemy import text
 
 from buscasam.core.auth import UserCtx
@@ -46,7 +47,9 @@ async def test_manageable_excludes_soft_deleted(session):
     await make_document_author(session, doc, user_id=uid, status="owner")
     await session.commit()
 
-    ids = await _manageable_ids(session, UserCtx(user_id=uid, is_unsam=True, role="estudiante"))
+    ids = await _manageable_ids(
+        session, UserCtx(user_id=uid, is_unsam=True, role="estudiante")
+    )
     assert doc not in ids
 
 
@@ -58,6 +61,8 @@ async def test_manageable_includes_draft_and_published(session):
     await make_document_author(session, published, user_id=uid, status="owner")
     await session.commit()
 
-    ids = await _manageable_ids(session, UserCtx(user_id=uid, is_unsam=True, role="estudiante"))
+    ids = await _manageable_ids(
+        session, UserCtx(user_id=uid, is_unsam=True, role="estudiante")
+    )
     assert draft in ids
     assert published in ids

@@ -6,6 +6,7 @@ lifecycle, coauthors, attachments, detail) sharing `_shared` helpers and
 soft_deleted_at (architecture guard). The public surface is re-exported here so
 callers keep importing from `buscasam.core.documents`.
 """
+
 from __future__ import annotations
 
 from buscasam.core.documents._shared import (

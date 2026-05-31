@@ -99,7 +99,9 @@ describe("/moderacion queue page", () => {
     render(<ModeracionPage />);
 
     await waitFor(() =>
-      expect(screen.getByText(/No hay reportes pendientes/)).toBeInTheDocument(),
+      expect(
+        screen.getByText(/No hay reportes pendientes/),
+      ).toBeInTheDocument(),
     );
   });
 });

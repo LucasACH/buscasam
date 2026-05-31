@@ -3,6 +3,7 @@
 Lives in `core/` so `core/auth` does not need to reach upward into `api/` for
 its FastAPI deps. `api/deps.py` re-exports from here for the api layer.
 """
+
 from __future__ import annotations
 
 from collections.abc import AsyncIterator

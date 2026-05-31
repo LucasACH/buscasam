@@ -8,6 +8,7 @@ The on-disk file `embeddings.npz` carries two parallel arrays:
 Invariant: `keys[i]` is the hash whose embedding lives at `embeddings[i]`.
 Callers never trust positional order — they look up by hash via `lookup`.
 """
+
 from __future__ import annotations
 
 from hashlib import blake2b

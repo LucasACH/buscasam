@@ -4,12 +4,14 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const { useUserMock } = vi.hoisted(() => ({
-  useUserMock: vi.fn<() => {
-    user: { user_id: number; role: string } | null;
-    isInvitado: boolean;
-    isLoading: boolean;
-    isError: boolean;
-  }>(() => ({
+  useUserMock: vi.fn<
+    () => {
+      user: { user_id: number; role: string } | null;
+      isInvitado: boolean;
+      isLoading: boolean;
+      isError: boolean;
+    }
+  >(() => ({
     user: { user_id: 1, role: "estudiante" },
     isInvitado: false,
     isLoading: false,
@@ -32,8 +34,14 @@ vi.mock("@/api/client", () => ({ api: { GET: apiGet, POST: apiPost } }));
 import NuevoPage from "./page";
 
 const AREAS = [
-  { area_path: "escuela_ciencia", display_name: "Escuela de Ciencia y Tecnología" },
-  { area_path: "escuela_ciencia.carrera_informatica", display_name: "Ing. Informática" },
+  {
+    area_path: "escuela_ciencia",
+    display_name: "Escuela de Ciencia y Tecnología",
+  },
+  {
+    area_path: "escuela_ciencia.carrera_informatica",
+    display_name: "Ing. Informática",
+  },
   {
     area_path: "escuela_ciencia.carrera_informatica.materia_bd",
     display_name: "Bases de Datos",
@@ -56,8 +64,12 @@ function mockUpload(handler: (url: string) => Response) {
 }
 
 function wrap(ui: React.ReactNode) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
+  );
 }
 
 async function fillRequiredFields() {
@@ -80,9 +92,13 @@ async function fillRequiredFields() {
   await user.selectOptions(screen.getByLabelText(/tipo/i), "tesis");
   await user.click(screen.getByLabelText(/público/i));
 
-  const file = new File([new Uint8Array([0x25, 0x50, 0x44, 0x46])], "tesis.pdf", {
-    type: "application/pdf",
-  });
+  const file = new File(
+    [new Uint8Array([0x25, 0x50, 0x44, 0x46])],
+    "tesis.pdf",
+    {
+      type: "application/pdf",
+    },
+  );
   await user.upload(screen.getByLabelText(/archivo/i), file);
   return user;
 }
@@ -113,7 +129,9 @@ describe("/mis-trabajos/nuevo page", () => {
     const user = await fillRequiredFields();
     await user.click(screen.getByRole("button", { name: /subir/i }));
 
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/mis-trabajos/42/editar"));
+    await waitFor(() =>
+      expect(replace).toHaveBeenCalledWith("/mis-trabajos/42/editar"),
+    );
 
     const createCall = apiPost.mock.calls.find(([p]) => p === "/api/documents");
     expect(createCall).toBeTruthy();
@@ -146,9 +164,9 @@ describe("/mis-trabajos/nuevo page", () => {
     const user = await fillRequiredFields();
     await user.click(screen.getByRole("button", { name: /subir/i }));
 
-    expect(
-      await screen.findByRole("alert"),
-    ).toHaveTextContent(/protegido por contraseña/);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /protegido por contraseña/,
+    );
     expect(replace).not.toHaveBeenCalled();
   });
 
@@ -156,10 +174,13 @@ describe("/mis-trabajos/nuevo page", () => {
     apiPost.mockResolvedValue({ data: { id: 42 } });
     mockUpload((url) => {
       if (url.endsWith("/api/documents/42/upload")) {
-        return new Response(JSON.stringify({ detail: "El archivo supera los 50 MB" }), {
-          status: 413,
-          headers: { "Content-Type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({ detail: "El archivo supera los 50 MB" }),
+          {
+            status: 413,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
       }
       return new Response("", { status: 404 });
     });

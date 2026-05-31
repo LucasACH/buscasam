@@ -1,5 +1,6 @@
 """Integration tests for core/documents.replace_main_version (module map
 §core/documents, issue #58). Exercises the candidate-replacement chokepoint."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -20,14 +21,18 @@ def _ctx(user_id: int) -> UserCtx:
 
 async def _enqueued_task_names(session, version_id: int) -> list[str]:
     rows = (
-        await session.execute(
-            text(
-                "SELECT task_name FROM procrastinate_jobs "
-                "WHERE args->>'version_id' = :vid"
-            ),
-            {"vid": str(version_id)},
+        (
+            await session.execute(
+                text(
+                    "SELECT task_name FROM procrastinate_jobs "
+                    "WHERE args->>'version_id' = :vid"
+                ),
+                {"vid": str(version_id)},
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return list(rows)
 
 
@@ -44,7 +49,10 @@ async def _seed_published_doc(
     (doc_id, current_version_id)."""
     keywords = keywords if keywords is not None else ["bd", "sql"]
     doc_id = await make_document(
-        session, publication_status="published", titulo=title, abstract=abstract,
+        session,
+        publication_status="published",
+        titulo=title,
+        abstract=abstract,
         fecha=fecha,
     )
     await session.execute(
@@ -63,21 +71,30 @@ async def _seed_published_doc(
                 " 'application/pdf', :uid, 'indexed', true, now(), :fp, now()) "
                 "RETURNING id"
             ),
-            {"d": doc_id, "uid": owner_user_id, "fp": headline_fingerprint(title, abstract)},
+            {
+                "d": doc_id,
+                "uid": owner_user_id,
+                "fp": headline_fingerprint(title, abstract),
+            },
         )
     ).scalar_one()
     return doc_id, version_id
 
 
-def _blob(sha: str = "cc" * 32, *, bytes_: int = 4096, mime: str = "application/pdf") -> BlobPutResult:
+def _blob(
+    sha: str = "cc" * 32, *, bytes_: int = 4096, mime: str = "application/pdf"
+) -> BlobPutResult:
     return BlobPutResult(sha256=sha, bytes=bytes_, sniffed_mime=mime)
 
 
 async def test_replace_inserts_candidate_and_leaves_published_untouched(session):
     owner = await make_user(session)
     doc_id, published_vid = await _seed_published_doc(
-        session, owner_user_id=owner, abstract="Resumen publicado",
-        keywords=["bd", "sql"], fecha=date(2024, 3, 1),
+        session,
+        owner_user_id=owner,
+        abstract="Resumen publicado",
+        keywords=["bd", "sql"],
+        fecha=date(2024, 3, 1),
     )
 
     new_vid = await documents.replace_main_version(
@@ -85,16 +102,20 @@ async def test_replace_inserts_candidate_and_leaves_published_untouched(session)
     )
 
     candidate = (
-        await session.execute(
-            text(
-                "SELECT version_no, is_current, index_status, first_published_at, "
-                "       staged_abstract, staged_keywords, staged_fecha, "
-                "       original_filename "
-                "FROM document_versions WHERE id = :id"
-            ),
-            {"id": new_vid},
+        (
+            await session.execute(
+                text(
+                    "SELECT version_no, is_current, index_status, first_published_at, "
+                    "       staged_abstract, staged_keywords, staged_fecha, "
+                    "       original_filename "
+                    "FROM document_versions WHERE id = :id"
+                ),
+                {"id": new_vid},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     assert candidate["version_no"] == 2
     assert candidate["is_current"] is False
     assert candidate["index_status"] == "pending"
@@ -106,31 +127,42 @@ async def test_replace_inserts_candidate_and_leaves_published_untouched(session)
     assert candidate["staged_fecha"] == date(2024, 3, 1)
 
     # index_document enqueued in the same transaction.
-    assert any(n.endswith("index_document") for n in await _enqueued_task_names(session, new_vid))
+    assert any(
+        n.endswith("index_document")
+        for n in await _enqueued_task_names(session, new_vid)
+    )
 
     # Published current version untouched.
     published = (
-        await session.execute(
-            text(
-                "SELECT is_current, first_published_at FROM document_versions "
-                "WHERE id = :id"
-            ),
-            {"id": published_vid},
+        (
+            await session.execute(
+                text(
+                    "SELECT is_current, first_published_at FROM document_versions "
+                    "WHERE id = :id"
+                ),
+                {"id": published_vid},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     assert published["is_current"] is True
     assert published["first_published_at"] is not None
 
     # documents row untouched.
     doc = (
-        await session.execute(
-            text(
-                "SELECT publication_status, abstract, keywords, fecha "
-                "FROM documents WHERE id = :id"
-            ),
-            {"id": doc_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT publication_status, abstract, keywords, fecha "
+                    "FROM documents WHERE id = :id"
+                ),
+                {"id": doc_id},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     assert doc["publication_status"] == "published"
     assert doc["abstract"] == "Resumen publicado"
     assert doc["keywords"] == ["bd", "sql"]
@@ -197,15 +229,19 @@ async def test_second_replace_discards_first_candidate(session):
 
     # The new candidate is the only live (non-discarded, never-public) candidate.
     live = (
-        await session.execute(
-            text(
-                "SELECT id FROM document_versions WHERE doc_id = :d "
-                "AND is_current = false AND index_status <> 'discarded' "
-                "AND first_published_at IS NULL"
-            ),
-            {"d": doc_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT id FROM document_versions WHERE doc_id = :d "
+                    "AND is_current = false AND index_status <> 'discarded' "
+                    "AND first_published_at IS NULL"
+                ),
+                {"d": doc_id},
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert live == [second]
 
 
@@ -221,8 +257,11 @@ async def test_draft_state_candidate_null_without_in_flight_candidate(session):
 async def test_draft_state_surfaces_processing_candidate(session):
     owner = await make_user(session)
     doc_id, _ = await _seed_published_doc(
-        session, owner_user_id=owner, abstract="Resumen publicado",
-        keywords=["bd", "sql"], fecha=date(2024, 3, 1),
+        session,
+        owner_user_id=owner,
+        abstract="Resumen publicado",
+        keywords=["bd", "sql"],
+        fecha=date(2024, 3, 1),
     )
     await documents.replace_main_version(
         session, _ctx(owner), doc_id, _blob(), original_filename="nueva.pdf"
@@ -245,7 +284,9 @@ async def test_draft_state_surfaces_processing_candidate(session):
 async def test_draft_state_ready_candidate_owner_can_publish(session):
     owner = await make_user(session)
     doc_id, _ = await _seed_published_doc(
-        session, owner_user_id=owner, title="Trabajo publicado",
+        session,
+        owner_user_id=owner,
+        title="Trabajo publicado",
         abstract="Resumen publicado",
     )
     new_vid = await documents.replace_main_version(

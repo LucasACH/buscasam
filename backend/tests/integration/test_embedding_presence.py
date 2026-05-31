@@ -26,7 +26,5 @@ async def test_every_seeded_chunk_has_nonnull_halfvec_1024(session):
     ).scalar_one()
     assert wrong_dim == 0
 
-    total = (
-        await session.execute(text("SELECT count(*) FROM chunks"))
-    ).scalar_one()
+    total = (await session.execute(text("SELECT count(*) FROM chunks"))).scalar_one()
     assert total == len(CHUNKS)

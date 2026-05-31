@@ -3,6 +3,7 @@
 Tests build minimal real PDF / DOCX / ODT bytes, write them through blob_store,
 then call extract(sha256, mime) and assert text + paragraph_breaks.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -14,7 +15,7 @@ import httpx
 import pytest
 from docx import Document as DocxDocument
 from odf.opendocument import OpenDocumentText
-from odf.text import H, P
+from odf.text import P
 
 from buscasam.core import blob_store
 from buscasam.core.extract import (
@@ -173,7 +174,9 @@ def _doc(text: str) -> ExtractedDoc:
         cursor += len(piece)
         breaks.append(cursor)
         cursor += 2
-    return ExtractedDoc(text=text, paragraph_breaks=breaks, page_breaks=[], raw_metadata={})
+    return ExtractedDoc(
+        text=text, paragraph_breaks=breaks, page_breaks=[], raw_metadata={}
+    )
 
 
 def test_derive_metadata_extracts_abstract_after_resumen_heading():
@@ -214,6 +217,7 @@ def test_derive_metadata_picks_recent_plausible_year_near_cover_tokens():
         "Otra cosa de 1850 sin contexto."
     )
     from datetime import date as _date
+
     meta = derive_metadata(doc)
     assert meta.fecha == _date(2024, 1, 1)
 
@@ -231,13 +235,15 @@ def test_derive_metadata_returns_some_keywords_for_real_text():
 
 
 def test_keyword_cleanup_filters_template_noise_and_duplicates():
-    assert _clean_keywords([
-        "Este trabajo",
-        " aprendizaje automático ",
-        "Aprendizaje automático",
-        "Universidad Nacional de San Martín",
-        "redes neuronales",
-    ]) == ["aprendizaje automático", "redes neuronales"]
+    assert _clean_keywords(
+        [
+            "Este trabajo",
+            " aprendizaje automático ",
+            "Aprendizaje automático",
+            "Universidad Nacional de San Martín",
+            "redes neuronales",
+        ]
+    ) == ["aprendizaje automático", "redes neuronales"]
 
 
 async def test_suggest_metadata_uses_llm_success(monkeypatch):

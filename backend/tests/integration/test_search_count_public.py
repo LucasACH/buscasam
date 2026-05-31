@@ -1,5 +1,6 @@
 """count_public_documents: the público catalog size for the landing footnote
 (issue #109, module map §core/search)."""
+
 from __future__ import annotations
 
 from buscasam.core import search

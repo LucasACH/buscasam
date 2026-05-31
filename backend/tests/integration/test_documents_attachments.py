@@ -1,5 +1,6 @@
 """Integration tests for core/documents attachment management (issue #31,
 module map §core/documents). Document-scoped add/remove with the 5-cap."""
+
 from __future__ import annotations
 
 import asyncio
@@ -18,11 +19,15 @@ def _ctx(user_id: int) -> UserCtx:
     return UserCtx(user_id=user_id, is_unsam=True, role="estudiante")
 
 
-def _blob(sha: str = "aa" * 32, size: int = 1234, mime: str = "text/csv") -> BlobPutResult:
+def _blob(
+    sha: str = "aa" * 32, size: int = 1234, mime: str = "text/csv"
+) -> BlobPutResult:
     return BlobPutResult(sha256=sha, bytes=size, sniffed_mime=mime)
 
 
-async def _seed_doc(session, owner_id: int, *, publication_status: str = "draft") -> int:
+async def _seed_doc(
+    session, owner_id: int, *, publication_status: str = "draft"
+) -> int:
     doc_id = await make_document(session, publication_status=publication_status)
     await make_document_author(session, doc_id, user_id=owner_id, status="owner")
     return doc_id
@@ -53,15 +58,19 @@ async def test_add_attachment_inserts_row(session):
     )
 
     row = (
-        await session.execute(
-            text(
-                "SELECT doc_id, original_filename, bytes, mime, "
-                "       encode(sha256, 'hex') AS sha "
-                "FROM document_attachments WHERE id = :id"
-            ),
-            {"id": att_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT doc_id, original_filename, bytes, mime, "
+                    "       encode(sha256, 'hex') AS sha "
+                    "FROM document_attachments WHERE id = :id"
+                ),
+                {"id": att_id},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     assert row["doc_id"] == doc_id
     assert row["original_filename"] == "data.csv"
     assert row["bytes"] == 1234
@@ -83,12 +92,20 @@ async def test_add_sixth_attachment_exceeds_cap(session):
     doc_id = await _seed_doc(session, owner)
     for i in range(5):
         await documents.add_attachment(
-            session, _ctx(owner), doc_id, _blob(sha=f"{i:02d}" * 32), original_filename=f"f{i}.csv"
+            session,
+            _ctx(owner),
+            doc_id,
+            _blob(sha=f"{i:02d}" * 32),
+            original_filename=f"f{i}.csv",
         )
 
     with pytest.raises(documents.AttachmentCapExceeded):
         await documents.add_attachment(
-            session, _ctx(owner), doc_id, _blob(sha="ff" * 32), original_filename="sixth.csv"
+            session,
+            _ctx(owner),
+            doc_id,
+            _blob(sha="ff" * 32),
+            original_filename="sixth.csv",
         )
 
     assert await _count(session, doc_id) == 5
@@ -151,7 +168,10 @@ async def test_parallel_adds_at_cap_minus_one_do_not_both_succeed(engine):
         doc_id = await _seed_doc(s, owner)
         for i in range(4):
             await documents.add_attachment(
-                s, _ctx(owner), doc_id, _blob(sha=f"{i:02d}" * 32),
+                s,
+                _ctx(owner),
+                doc_id,
+                _blob(sha=f"{i:02d}" * 32),
                 original_filename=f"f{i}.csv",
             )
         await s.commit()
@@ -177,7 +197,8 @@ async def test_parallel_adds_at_cap_minus_one_do_not_both_succeed(engine):
     finally:
         async with AsyncSession(engine) as s:
             await s.execute(
-                text("DELETE FROM document_attachments WHERE doc_id = :d"), {"d": doc_id}
+                text("DELETE FROM document_attachments WHERE doc_id = :d"),
+                {"d": doc_id},
             )
             await s.execute(
                 text("DELETE FROM document_authors WHERE doc_id = :d"), {"d": doc_id}
@@ -192,7 +213,10 @@ async def test_get_draft_state_includes_attachments(session):
     doc_id = await _seed_doc(session, owner)
     await _seed_version(session, doc_id, owner)
     att_id = await documents.add_attachment(
-        session, _ctx(owner), doc_id, _blob(size=4096, mime="text/csv"),
+        session,
+        _ctx(owner),
+        doc_id,
+        _blob(size=4096, mime="text/csv"),
         original_filename="data.csv",
     )
 

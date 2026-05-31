@@ -9,14 +9,27 @@ vi.mock("@/api/client", () => ({ api: { GET: apiGet } }));
 import { AreasCascader } from "./AreasCascader";
 
 function wrap(ui: React.ReactNode) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
+  );
 }
 
 const AREAS = [
-  { area_path: "escuela_ciencia", display_name: "Escuela de Ciencia y Tecnología" },
-  { area_path: "escuela_ciencia.carrera_informatica", display_name: "Ing. Informática" },
-  { area_path: "escuela_ciencia.carrera_informatica.materia_bd", display_name: "Bases de Datos" },
+  {
+    area_path: "escuela_ciencia",
+    display_name: "Escuela de Ciencia y Tecnología",
+  },
+  {
+    area_path: "escuela_ciencia.carrera_informatica",
+    display_name: "Ing. Informática",
+  },
+  {
+    area_path: "escuela_ciencia.carrera_informatica.materia_bd",
+    display_name: "Bases de Datos",
+  },
   { area_path: "escuela_humanidades", display_name: "Escuela de Humanidades" },
 ];
 
@@ -101,8 +114,9 @@ describe("AreasCascader", () => {
         name: /Escuela de Ciencia y Tecnología/,
       }),
     );
-    expect(await screen.findByRole("button", { name: /Ing\. Informática/ }))
-      .toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /Ing\. Informática/ }),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Volver/ }));
     expect(
@@ -123,8 +137,9 @@ describe("AreasCascader", () => {
     );
 
     // Opens drilled into the carrera, showing the selected materia.
-    expect(await screen.findByRole("button", { name: /Bases de Datos/ }))
-      .toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /Bases de Datos/ }),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Quitar área/ }));
     expect(onChange).toHaveBeenCalledWith(null);

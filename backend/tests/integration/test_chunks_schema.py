@@ -32,11 +32,15 @@ async def test_chunk_body_tsv_uses_es_unaccent_and_halfvec_accepts_1024(session)
     await session.commit()
 
     rows = (
-        await session.execute(
-            text(
-                "SELECT id FROM chunks "
-                "WHERE body_tsv @@ to_tsquery('es_unaccent', 'analisis')"
+        (
+            await session.execute(
+                text(
+                    "SELECT id FROM chunks "
+                    "WHERE body_tsv @@ to_tsquery('es_unaccent', 'analisis')"
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert rows == [100]

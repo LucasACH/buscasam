@@ -4,6 +4,7 @@ ADR-0010 §6/§7: the central security gate of the MVP corpus. Each persona
 (invitado, estudiante, docente, owner, accepted coauthor, pending coauthor)
 must see exactly the documents it is entitled to.
 """
+
 from sqlalchemy import text
 
 from buscasam.core.auth import GUEST, UserCtx
@@ -40,7 +41,9 @@ async def test_visibility_matrix(session):
     pending_uid = await make_user(session, role="estudiante")
 
     await make_document_author(session, privado, user_id=owner_uid, status="owner")
-    await make_document_author(session, privado, user_id=accepted_uid, status="accepted")
+    await make_document_author(
+        session, privado, user_id=accepted_uid, status="accepted"
+    )
     await make_document_author(session, privado, user_id=pending_uid, status="pending")
     await session.commit()
 

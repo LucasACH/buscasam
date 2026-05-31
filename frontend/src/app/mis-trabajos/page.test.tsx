@@ -23,8 +23,12 @@ vi.mock("@/api/client", () => ({ api: { GET: apiGet } }));
 import MisTrabajosPage from "./page";
 
 function wrap(ui: React.ReactNode) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
+  );
 }
 
 describe("/mis-trabajos page", () => {
@@ -46,7 +50,12 @@ describe("/mis-trabajos page", () => {
   it("lists Borradores from /api/me/documents with a link to /editar", async () => {
     apiGet.mockResolvedValue({
       data: [
-        { id: 7, title: "Mi tesis", publication_status: "draft", visibility: "interno" },
+        {
+          id: 7,
+          title: "Mi tesis",
+          publication_status: "draft",
+          visibility: "interno",
+        },
       ],
     });
 
@@ -62,8 +71,18 @@ describe("/mis-trabajos page", () => {
   it("separates Publicados rows from Borradores rows", async () => {
     apiGet.mockResolvedValue({
       data: [
-        { id: 7, title: "Borrador X", publication_status: "draft", visibility: "interno" },
-        { id: 8, title: "Publicado Y", publication_status: "published", visibility: "publico" },
+        {
+          id: 7,
+          title: "Borrador X",
+          publication_status: "draft",
+          visibility: "interno",
+        },
+        {
+          id: 8,
+          title: "Publicado Y",
+          publication_status: "published",
+          visibility: "publico",
+        },
       ],
     });
 
@@ -125,8 +144,6 @@ describe("/mis-trabajos page", () => {
 
     // Page chrome renders, but the empty-state copy must not appear during load.
     await screen.findByRole("heading", { name: /Mis trabajos/ });
-    expect(
-      screen.queryByText(/Aún no subiste ningún trabajo/),
-    ).toBeNull();
+    expect(screen.queryByText(/Aún no subiste ningún trabajo/)).toBeNull();
   });
 });

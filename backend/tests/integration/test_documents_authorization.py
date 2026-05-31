@@ -4,6 +4,7 @@ Every author-facing function in `core/documents` must apply `manageable_where`
 before mutating, so callers cannot accidentally skip the check by forgetting the
 ordering rule (module map §core/documents Invariants, ADR-0010 §7).
 """
+
 from __future__ import annotations
 
 import secrets

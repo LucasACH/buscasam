@@ -1,5 +1,6 @@
 """The report→queue→act→resolve→notify lifecycle and owner of the two
 moderation tables (module map §core/moderation, ADR-0010 §9)."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -93,20 +94,24 @@ async def list_open_reports(session: AsyncSession) -> list[QueueEntry]:
     makes `count(*)` the distinct-reporter count.
     """
     rows = (
-        await session.execute(
-            text(
-                "SELECT r.doc_id, max(r.id) AS report_id, d.titulo, "
-                "       array_agg(DISTINCT r.reason ORDER BY r.reason) AS reasons, "
-                "       min(r.created_at) AS first_reported_at, "
-                "       max(r.created_at) AS last_reported_at, "
-                "       count(*) AS report_count "
-                "FROM document_reports r JOIN documents d ON d.id = r.doc_id "
-                "WHERE r.status = 'open' "
-                "GROUP BY r.doc_id, d.titulo "
-                "ORDER BY report_count DESC, last_reported_at DESC, r.doc_id"
+        (
+            await session.execute(
+                text(
+                    "SELECT r.doc_id, max(r.id) AS report_id, d.titulo, "
+                    "       array_agg(DISTINCT r.reason ORDER BY r.reason) AS reasons, "
+                    "       min(r.created_at) AS first_reported_at, "
+                    "       max(r.created_at) AS last_reported_at, "
+                    "       count(*) AS report_count "
+                    "FROM document_reports r JOIN documents d ON d.id = r.doc_id "
+                    "WHERE r.status = 'open' "
+                    "GROUP BY r.doc_id, d.titulo "
+                    "ORDER BY report_count DESC, last_reported_at DESC, r.doc_id"
+                )
             )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     return [
         QueueEntry(
             doc_id=r["doc_id"],
@@ -137,7 +142,10 @@ _NOTIFY_KIND = {
 
 
 async def hide(
-    session: AsyncSession, docente_ctx: UserCtx, report_id: int, reason: str | None = None
+    session: AsyncSession,
+    docente_ctx: UserCtx,
+    report_id: int,
+    reason: str | None = None,
 ) -> ActionOutcome | None:
     """Stamp `documents.moderation_hidden_at`, append a `hide` action, resolve
     all open reports on the doc, and notify every registered author — one
@@ -147,7 +155,10 @@ async def hide(
 
 
 async def unhide(
-    session: AsyncSession, docente_ctx: UserCtx, report_id: int, reason: str | None = None
+    session: AsyncSession,
+    docente_ctx: UserCtx,
+    report_id: int,
+    reason: str | None = None,
 ) -> ActionOutcome | None:
     """Clear `moderation_hidden_at`, append an `unhide` action, resolve all open
     reports, and notify every registered author — one transaction. None on an
@@ -156,7 +167,10 @@ async def unhide(
 
 
 async def dismiss(
-    session: AsyncSession, docente_ctx: UserCtx, report_id: int, reason: str | None = None
+    session: AsyncSession,
+    docente_ctx: UserCtx,
+    report_id: int,
+    reason: str | None = None,
 ) -> ActionOutcome | None:
     """Append a `dismiss` action and resolve all open reports — the matter is
     settled for the document — without touching `moderation_hidden_at` and
@@ -239,16 +253,20 @@ async def _notify_authors(
     insert (event-key, payload, ON CONFLICT idempotency) is delegated to
     core/notifications so a retry of the same action never double-notifies."""
     rows = (
-        await session.execute(
-            text(
-                "SELECT da.user_id, d.titulo "
-                "FROM document_authors da JOIN documents d ON d.id = da.doc_id "
-                "WHERE da.doc_id = :doc_id AND da.status IN ('owner', 'accepted') "
-                "  AND da.user_id IS NOT NULL"
-            ),
-            {"doc_id": doc_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT da.user_id, d.titulo "
+                    "FROM document_authors da JOIN documents d ON d.id = da.doc_id "
+                    "WHERE da.doc_id = :doc_id AND da.status IN ('owner', 'accepted') "
+                    "  AND da.user_id IS NOT NULL"
+                ),
+                {"doc_id": doc_id},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     for r in rows:
         await notifications.notify_moderation_action(
             session,

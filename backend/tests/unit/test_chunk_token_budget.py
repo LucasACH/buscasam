@@ -1,4 +1,5 @@
 """ADR-0002 §4/§5/§7: chunk boundaries measured against the e5 token budget."""
+
 import httpx
 import pytest
 

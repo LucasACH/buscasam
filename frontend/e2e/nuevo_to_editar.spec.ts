@@ -9,8 +9,14 @@ const USER = {
 };
 
 const AREAS = [
-  { area_path: "escuela_ciencia", display_name: "Escuela de Ciencia y Tecnología" },
-  { area_path: "escuela_ciencia.carrera_informatica", display_name: "Ing. Informática" },
+  {
+    area_path: "escuela_ciencia",
+    display_name: "Escuela de Ciencia y Tecnología",
+  },
+  {
+    area_path: "escuela_ciencia.carrera_informatica",
+    display_name: "Ing. Informática",
+  },
   {
     area_path: "escuela_ciencia.carrera_informatica.materia_bd",
     display_name: "Bases de Datos",
@@ -44,7 +50,9 @@ test("upload happy path: nuevo → editar pill flips from Procesando to Listo", 
   }> = [];
 
   await page.route("**/api/me", (route) => route.fulfill(json(USER)));
-  await page.route("**/api/me/documents", (route) => route.fulfill(json(ownDocs)));
+  await page.route("**/api/me/documents", (route) =>
+    route.fulfill(json(ownDocs)),
+  );
   await page.route("**/api/notifications**", (route) =>
     route.fulfill(json({ items: [] })),
   );
@@ -54,7 +62,12 @@ test("upload happy path: nuevo → editar pill flips from Procesando to Listo", 
   await page.route("**/api/documents", async (route) => {
     if (route.request().method() === "POST") {
       ownDocs = [
-        { id: DOC_ID, title: "Mi tesis BD", publication_status: "draft", visibility: "publico" },
+        {
+          id: DOC_ID,
+          title: "Mi tesis BD",
+          publication_status: "draft",
+          visibility: "publico",
+        },
       ];
       await route.fulfill(json({ id: DOC_ID }, 201));
       return;
@@ -106,7 +119,9 @@ test("upload happy path: nuevo → editar pill flips from Procesando to Listo", 
 
   // 1. Land on /mis-trabajos/nuevo as signed-in user.
   await page.goto("/mis-trabajos/nuevo");
-  await expect(page.getByRole("heading", { name: /Nuevo trabajo/ })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /Nuevo trabajo/ }),
+  ).toBeVisible();
 
   // 2. Fill the form.
   await page.getByLabel(/Título/i).fill("Mi tesis BD");
@@ -137,9 +152,12 @@ test("upload happy path: nuevo → editar pill flips from Procesando to Listo", 
 
   // 5. After the mocked worker advances, the page unblocks: the pill flips to
   // Listo and the generated metadata prefills the form inputs.
-  await expect(page.getByTestId("status-pill")).toHaveText(/Listo para publicar/, {
-    timeout: 10_000,
-  });
+  await expect(page.getByTestId("status-pill")).toHaveText(
+    /Listo para publicar/,
+    {
+      timeout: 10_000,
+    },
+  );
   await expect(page.getByLabel("Resumen")).toHaveValue(
     /Resumen extraído por el worker/,
   );

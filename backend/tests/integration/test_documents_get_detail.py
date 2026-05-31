@@ -1,4 +1,5 @@
 """Integration tests for core/documents.get_detail (reader branch, issue #43)."""
+
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
@@ -33,7 +34,13 @@ async def _seed_current_version(
                 "VALUES (:d, 1, decode(:sha, 'hex'), :name, :b, :m, 'indexed', true) "
                 "RETURNING id"
             ),
-            {"d": doc_id, "sha": sha_hex, "name": original_filename, "b": bytes_, "m": mime},
+            {
+                "d": doc_id,
+                "sha": sha_hex,
+                "name": original_filename,
+                "b": bytes_,
+                "m": mime,
+            },
         )
     ).scalar_one()
 
@@ -54,7 +61,13 @@ async def _seed_attachment(
                 "(doc_id, sha256, original_filename, bytes, mime) "
                 "VALUES (:d, decode(:sha, 'hex'), :name, :b, :m) RETURNING id"
             ),
-            {"d": doc_id, "sha": sha_hex, "name": original_filename, "b": bytes_, "m": mime},
+            {
+                "d": doc_id,
+                "sha": sha_hex,
+                "name": original_filename,
+                "b": bytes_,
+                "m": mime,
+            },
         )
     ).scalar_one()
 
@@ -77,7 +90,9 @@ async def test_get_detail_returns_publico_reader_dto_for_invitado(session):
         session, doc_id, user_id=None, status="external", display_name="Grace Hopper"
     )
     await session.execute(
-        text("UPDATE documents SET keywords = ARRAY['busqueda', 'hibrida'] WHERE id = :d"),
+        text(
+            "UPDATE documents SET keywords = ARRAY['busqueda', 'hibrida'] WHERE id = :d"
+        ),
         {"d": doc_id},
     )
     await _seed_current_version(session, doc_id)
@@ -143,7 +158,11 @@ async def test_get_detail_returns_none_for_pending_coauthor_on_privado(session):
     pending_id = await make_user(session, name="Pending Coautor")
     await make_document_author(session, doc_id, user_id=owner_id, status="owner")
     await make_document_author(
-        session, doc_id, user_id=pending_id, status="pending", display_name="Pending Coautor"
+        session,
+        doc_id,
+        user_id=pending_id,
+        status="pending",
+        display_name="Pending Coautor",
     )
     await session.commit()
 
@@ -152,7 +171,9 @@ async def test_get_detail_returns_none_for_pending_coauthor_on_privado(session):
     assert await documents.get_detail(session, doc_id, _student(owner_id)) is not None
 
 
-async def test_get_detail_interno_visible_to_estudiante_blocked_for_privado_non_author(session):
+async def test_get_detail_interno_visible_to_estudiante_blocked_for_privado_non_author(
+    session,
+):
     estudiante_id = await make_user(session)
     interno_id = await make_document(session, visibility="interno")
     await _seed_current_version(session, interno_id)
@@ -319,9 +340,15 @@ async def test_get_detail_orders_multiple_authors_and_attachments(session):
         session, doc_id, user_id=None, status="external", display_name="Author C"
     )
     await _seed_current_version(session, doc_id)
-    await _seed_attachment(session, doc_id, original_filename="a.csv", sha_hex="a1" * 32)
-    await _seed_attachment(session, doc_id, original_filename="b.pdf", sha_hex="a2" * 32)
-    await _seed_attachment(session, doc_id, original_filename="c.txt", sha_hex="a3" * 32)
+    await _seed_attachment(
+        session, doc_id, original_filename="a.csv", sha_hex="a1" * 32
+    )
+    await _seed_attachment(
+        session, doc_id, original_filename="b.pdf", sha_hex="a2" * 32
+    )
+    await _seed_attachment(
+        session, doc_id, original_filename="c.txt", sha_hex="a3" * 32
+    )
     await session.commit()
 
     detail = await documents.get_detail(session, doc_id, GUEST)

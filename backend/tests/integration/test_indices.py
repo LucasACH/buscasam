@@ -26,13 +26,17 @@ async def test_hnsw_index_chosen_for_cosine_topk(session):
     await session.execute(text("SET LOCAL enable_seqscan = off"))
     q = "[" + ",".join(["0.5"] * 1024) + "]"
     plan_lines = (
-        await session.execute(
-            text(
-                "EXPLAIN SELECT id FROM chunks "
-                f"ORDER BY embedding <=> '{q}'::halfvec(1024) LIMIT 10"
+        (
+            await session.execute(
+                text(
+                    "EXPLAIN SELECT id FROM chunks "
+                    f"ORDER BY embedding <=> '{q}'::halfvec(1024) LIMIT 10"
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     plan = "\n".join(plan_lines)
 
     assert "chunks_embedding_hnsw" in plan, plan
@@ -48,13 +52,17 @@ async def test_gin_index_chosen_for_body_tsv_match(session):
 
     await session.execute(text("SET LOCAL enable_seqscan = off"))
     plan_lines = (
-        await session.execute(
-            text(
-                "EXPLAIN SELECT id FROM chunks "
-                "WHERE body_tsv @@ to_tsquery('es_unaccent', 'neuronales')"
+        (
+            await session.execute(
+                text(
+                    "EXPLAIN SELECT id FROM chunks "
+                    "WHERE body_tsv @@ to_tsquery('es_unaccent', 'neuronales')"
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     plan = "\n".join(plan_lines)
 
     assert "chunks_body_tsv_gin" in plan, plan
@@ -92,13 +100,17 @@ async def test_partial_btree_chosen_for_invitado_recientes(session):
     await session.execute(text("SET LOCAL enable_seqscan = off"))
     where = invitado_where("d")
     plan_lines = (
-        await session.execute(
-            text(
-                f"EXPLAIN SELECT d.id FROM documents d WHERE {where} "
-                "ORDER BY d.fecha DESC LIMIT 10"
+        (
+            await session.execute(
+                text(
+                    f"EXPLAIN SELECT d.id FROM documents d WHERE {where} "
+                    "ORDER BY d.fecha DESC LIMIT 10"
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     plan = "\n".join(plan_lines)
 
     assert "documents_publico_recientes" in plan, plan
@@ -111,15 +123,19 @@ async def test_document_versions_one_candidate_partial_unique_index(session):
     the schema is the database-boundary enforcement; the chokepoint cooperates.
     """
     row = (
-        await session.execute(
-            text(
-                "SELECT pg_get_expr(indpred, indrelid) AS pred, indisunique "
-                "FROM pg_index i "
-                "JOIN pg_class c ON c.oid = i.indexrelid "
-                "WHERE c.relname = 'document_versions_one_candidate'"
+        (
+            await session.execute(
+                text(
+                    "SELECT pg_get_expr(indpred, indrelid) AS pred, indisunique "
+                    "FROM pg_index i "
+                    "JOIN pg_class c ON c.oid = i.indexrelid "
+                    "WHERE c.relname = 'document_versions_one_candidate'"
+                )
             )
         )
-    ).mappings().one_or_none()
+        .mappings()
+        .one_or_none()
+    )
 
     assert row is not None, "document_versions_one_candidate index is missing"
     assert row["indisunique"] is True

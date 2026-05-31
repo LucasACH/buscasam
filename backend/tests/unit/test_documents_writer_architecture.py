@@ -6,6 +6,7 @@ replace_main_version + the discarded transition. Schema DDL (migrations) and the
 corpus seed loader (fixtures/seed.py) are bootstrap paths, not request-path
 writers, and are exempt.
 """
+
 from __future__ import annotations
 
 import re

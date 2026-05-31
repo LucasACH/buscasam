@@ -52,7 +52,7 @@ export default function ModeracionPage() {
       ) : entries.length === 0 ? (
         <div className="border-border bg-card rounded-lg border px-6 py-16">
           <div className="mx-auto flex max-w-[340px] flex-col items-center text-center">
-            <div className="border-border bg-neutral-100 text-muted-foreground/70 grid size-12 place-items-center rounded-lg border">
+            <div className="border-border text-muted-foreground/70 grid size-12 place-items-center rounded-lg border bg-neutral-100">
               <ShieldCheck size={22} strokeWidth={1.8} />
             </div>
             <p className="mt-4 text-base font-semibold">
@@ -83,14 +83,14 @@ function Row({ entry }: { entry: QueueEntry }) {
     <li>
       <Link
         href={`/moderacion/${entry.report_id}`}
-        className="hover:bg-neutral-50 flex items-start gap-3.5 px-4 py-3.5 transition-colors"
+        className="flex items-start gap-3.5 px-4 py-3.5 transition-colors hover:bg-neutral-50"
       >
         <span
           className={
             "mt-0.5 grid h-10 min-w-10 shrink-0 place-items-center rounded-lg border px-2 " +
             (high
               ? "bg-status-red-bg text-status-red-fg border-[#fca5a5]"
-              : "bg-neutral-100 text-muted-foreground border-border")
+              : "text-muted-foreground border-border bg-neutral-100")
           }
         >
           <span className="font-mono text-base leading-none font-bold">
@@ -106,9 +106,7 @@ function Row({ entry }: { entry: QueueEntry }) {
             {entry.reasons.join(", ")}
             <span className="text-muted-foreground/50">·</span>
             <span
-              className={
-                high ? "text-status-red-fg font-semibold" : undefined
-              }
+              className={high ? "text-status-red-fg font-semibold" : undefined}
             >
               {entry.report_count}{" "}
               {entry.report_count === 1 ? "reporte" : "reportes"}

@@ -1,4 +1,5 @@
 """Integration tests for core/related.fetch_related (issue #45)."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -172,9 +173,7 @@ async def test_candidates_unreadable_to_requester_are_absent(session):
     owner_id = await make_user(session, name="Owner")
     accepted_id = await make_user(session, name="Accepted")
     stranger_id = await make_user(session, name="Stranger")
-    await make_document_author(
-        session, privado_id, user_id=owner_id, status="owner"
-    )
+    await make_document_author(session, privado_id, user_id=owner_id, status="owner")
     await make_document_author(
         session, privado_id, user_id=accepted_id, status="accepted"
     )
@@ -226,9 +225,9 @@ async def test_source_access_check_runs_before_headline_embedding_load(session):
     assert not any("<=>" in s for s in seen), (
         "cosine cast must not run when source is denied"
     )
-    assert not any(
-        "chunks" in s and "is_headline" in s for s in seen
-    ), "headline chunk must not be loaded when source is denied"
+    assert not any("chunks" in s and "is_headline" in s for s in seen), (
+        "headline chunk must not be loaded when source is denied"
+    )
 
 
 async def test_returns_empty_when_source_has_no_headline_chunk(session):

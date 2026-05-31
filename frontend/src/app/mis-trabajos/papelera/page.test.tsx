@@ -4,7 +4,10 @@ import userEvent from "@testing-library/user-event";
 
 const { useUserMock } = vi.hoisted(() => ({
   useUserMock: vi.fn(() => ({
-    user: { user_id: 1, role: "estudiante" } as { user_id: number; role: string } | null,
+    user: { user_id: 1, role: "estudiante" } as {
+      user_id: number;
+      role: string;
+    } | null,
     isInvitado: false,
     isLoading: false,
     isError: false,
@@ -47,9 +50,7 @@ describe("/mis-trabajos/papelera page", () => {
   afterEach(() => cleanup());
 
   it("lists each deleted doc with a days-remaining label", () => {
-    returns([
-      { id: 5, title: "Tesis borrada", daysRemaining: 2 },
-    ]);
+    returns([{ id: 5, title: "Tesis borrada", daysRemaining: 2 }]);
 
     render(<PapeleraPage />);
 
@@ -58,9 +59,7 @@ describe("/mis-trabajos/papelera page", () => {
   });
 
   it("Restaurar calls restore with the doc id", async () => {
-    returns([
-      { id: 5, title: "Tesis borrada", daysRemaining: 2 },
-    ]);
+    returns([{ id: 5, title: "Tesis borrada", daysRemaining: 2 }]);
 
     render(<PapeleraPage />);
     await userEvent.click(screen.getByRole("button", { name: "Restaurar" }));

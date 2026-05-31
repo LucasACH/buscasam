@@ -30,9 +30,7 @@ def _tei_5xx_transport() -> httpx.MockTransport:
 
 
 def _tei_healthy_transport(vec: np.ndarray) -> httpx.MockTransport:
-    return httpx.MockTransport(
-        lambda req: httpx.Response(200, json=[vec.tolist()])
-    )
+    return httpx.MockTransport(lambda req: httpx.Response(200, json=[vec.tolist()]))
 
 
 def _unit(dim: int) -> np.ndarray:
@@ -141,9 +139,7 @@ async def test_response_includes_visibility_field(client, session):
     assert r.status_code == 200
     rows = r.json()["results"]
     assert {row["doc_id"] for row in rows} == {publico, interno}
-    assert all(
-        row["visibility"] in {"publico", "interno", "privado"} for row in rows
-    )
+    assert all(row["visibility"] in {"publico", "interno", "privado"} for row in rows)
     assert {row["doc_id"]: row["visibility"] for row in rows} == {
         publico: "publico",
         interno: "interno",
@@ -269,9 +265,7 @@ async def test_search_endpoint_repeats_tipo_param_for_multi_select(client, sessi
 
 @pytest.mark.parametrize("bad", ["libro", "TESIS", "", "tesis_invalida"])
 async def test_search_endpoint_rejects_unknown_tipo(client, bad):
-    r = await client.get(
-        "/api/search", params=[("q", "anything"), ("tipo", bad)]
-    )
+    r = await client.get("/api/search", params=[("q", "anything"), ("tipo", bad)])
     assert r.status_code == 422
 
 
@@ -315,9 +309,7 @@ async def test_search_endpoint_desde_hasta_narrow(client, session):
 @pytest.mark.parametrize("field", ["desde", "hasta"])
 @pytest.mark.parametrize("bad", ["999", "10000", "abc", "20.5", "2024a"])
 async def test_search_endpoint_rejects_non_4_digit_year(client, field, bad):
-    r = await client.get(
-        "/api/search", params={"q": "anything", field: bad}
-    )
+    r = await client.get("/api/search", params={"q": "anything", field: bad})
     assert r.status_code == 422
 
 
@@ -403,7 +395,9 @@ async def test_search_endpoint_unfiltered_total_respects_visibility(client, sess
     assert data["unfiltered_total"] >= data["total"]
 
 
-async def test_search_endpoint_hybrid_surfaces_pure_semantic_hit(hybrid_client, session):
+async def test_search_endpoint_hybrid_surfaces_pure_semantic_hit(
+    hybrid_client, session
+):
     """TEI healthy → query with no lexical overlap surfaces a semantically-similar doc."""
     sem_id = await make_document(
         session,
@@ -467,7 +461,9 @@ async def test_search_endpoint_falls_back_to_lexical_on_tei_5xx(client, session)
     assert [row["doc_id"] for row in data["results"]] == [publico_id]
     assert data["total"] == 1
 
-    fallback_records = [rec for rec in records if rec.message == "lexical_fallback_rate"]
+    fallback_records = [
+        rec for rec in records if rec.message == "lexical_fallback_rate"
+    ]
     assert fallback_records, "expected at least one lexical_fallback_rate log line"
     assert any(getattr(rec, "fallback", False) is True for rec in fallback_records)
 
@@ -568,9 +564,7 @@ async def test_search_endpoint_recientes_accepts_pagina_over_20(client, session)
     await make_chunk(session, doc_id, is_headline=True, body_text="Doc cuerpo.")
     await session.commit()
 
-    r = await client.get(
-        "/api/search", params={"orden": "recientes", "pagina": 21}
-    )
+    r = await client.get("/api/search", params={"orden": "recientes", "pagina": 21})
     assert r.status_code == 200
     assert r.json()["results"] == []
 
@@ -580,7 +574,9 @@ async def test_search_endpoint_rejects_unknown_orden(client):
     assert r.status_code == 422
 
 
-async def test_search_endpoint_unfiltered_total_when_paginated_past_end(client, session):
+async def test_search_endpoint_unfiltered_total_when_paginated_past_end(
+    client, session
+):
     """unfiltered_total reports the true count even when pagina is past the result set."""
     publico_paper = await make_document(
         session,

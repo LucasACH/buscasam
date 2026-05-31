@@ -1,4 +1,5 @@
 """Unit tests for `core/embed` — TEI chokepoint (ADR-0002 §3)."""
+
 from __future__ import annotations
 
 import json

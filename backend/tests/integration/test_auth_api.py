@@ -3,6 +3,7 @@
 The MockOIDCIssuer fixture stands in for Google; the test seam is
 `BUSCASAM_OIDC_DISCOVERY_URL` (env), kept out of production code paths.
 """
+
 from __future__ import annotations
 
 import base64
@@ -19,7 +20,6 @@ from sqlalchemy import text
 
 from buscasam.api.app import create_app
 from buscasam.api.deps import get_session
-from buscasam.core import auth
 from buscasam.settings import settings
 from tests.fixtures.oidc_issuer import MockOIDCIssuer
 
@@ -64,7 +64,11 @@ async def _seed_session(
 @pytest_asyncio.fixture
 async def issuer(monkeypatch):
     with MockOIDCIssuer() as iss:
-        monkeypatch.setattr(settings, "oidc_discovery_url", f"{iss.issuer_url}/.well-known/openid-configuration")
+        monkeypatch.setattr(
+            settings,
+            "oidc_discovery_url",
+            f"{iss.issuer_url}/.well-known/openid-configuration",
+        )
         monkeypatch.setattr(settings, "oidc_client_id", CLIENT_ID)
         monkeypatch.setattr(settings, "oidc_client_secret", CLIENT_SECRET)
         monkeypatch.setattr(settings, "base_url", BASE_URL)
@@ -181,13 +185,17 @@ async def test_callback_happy_path(client, issuer, session):
     assert sessions_count == 1
 
     row = (
-        await session.execute(
-            text(
-                "SELECT email, hd, role, name, picture_url "
-                "FROM users WHERE google_sub = 'google-sub-cb'"
+        (
+            await session.execute(
+                text(
+                    "SELECT email, hd, role, name, picture_url "
+                    "FROM users WHERE google_sub = 'google-sub-cb'"
+                )
             )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     assert row == {
         "email": "ada@unsam.edu.ar",
         "hd": "unsam.edu.ar",
@@ -246,9 +254,7 @@ async def test_callback_rejected_claims_no_db_writes(
 
 
 async def _row_counts(session):
-    users = (
-        await session.execute(text("SELECT count(*) FROM users"))
-    ).scalar_one()
+    users = (await session.execute(text("SELECT count(*) FROM users"))).scalar_one()
     sessions_n = (
         await session.execute(text("SELECT count(*) FROM sessions"))
     ).scalar_one()
@@ -364,9 +370,7 @@ async def test_me_200_and_401(client, session):
     r_anon = await client.get("/api/me")
     assert r_anon.status_code == 401
 
-    r_garbage = await client.get(
-        "/api/me", headers={"cookie": "sid=not-a-real-sid"}
-    )
+    r_garbage = await client.get("/api/me", headers={"cookie": "sid=not-a-real-sid"})
     assert r_garbage.status_code == 401
 
     expired_sid = await _seed_session(
@@ -449,9 +453,7 @@ async def test_origin_check_blocks_mismatched_unsafe(client, session):
     )
     assert r_mismatch.status_code == 403
 
-    r_missing = await client.post(
-        "/api/auth/logout", headers={"cookie": cookie_header}
-    )
+    r_missing = await client.post("/api/auth/logout", headers={"cookie": cookie_header})
     assert r_missing.status_code == 403
 
     r_ok = await client.post(

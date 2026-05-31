@@ -9,6 +9,7 @@ keeps its own "who/when to notify" domain query and calls one `notify_*`
 helper, which owns the `(event_key, kind, payload_json) ON CONFLICT DO NOTHING`
 shape so those three cannot drift across producers.
 """
+
 from __future__ import annotations
 
 import json

@@ -9,7 +9,10 @@ import { useUser } from "@/lib/useUser";
 export type NotificationDTO = components["schemas"]["NotificationDTO"];
 
 export const NOTIFICATIONS_QUERY_KEY = ["notifications"] as const;
-export const UNREAD_COUNT_QUERY_KEY = ["notifications", "unread_count"] as const;
+export const UNREAD_COUNT_QUERY_KEY = [
+  "notifications",
+  "unread_count",
+] as const;
 
 async function fetchNotifications() {
   const { data, error } = await api.GET("/api/notifications");

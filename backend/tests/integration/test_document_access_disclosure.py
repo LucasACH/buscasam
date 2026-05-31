@@ -5,6 +5,7 @@ The first access predicate with no visibility tier — a `pending` invitee
 matches on a privado, interno, or publico document alike. Soft-delete and
 moderation-hidden filtering are load-bearing (PRD stories 32-33).
 """
+
 import pytest
 from sqlalchemy import text
 
@@ -49,7 +50,7 @@ async def test_five_cell_matrix(session):
     pending = await make_document(session, visibility="privado")
     accepted = await make_document(session, visibility="privado")
     declined = await make_document(session, visibility="privado")
-    different = await make_document(session, visibility="privado")  # no row for uid
+    await make_document(session, visibility="privado")  # no row for uid
     non_invitee = await make_document(session, visibility="privado")  # other's pending
 
     await make_document_author(session, pending, user_id=uid, status="pending")

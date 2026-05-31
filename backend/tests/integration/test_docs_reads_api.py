@@ -1,4 +1,5 @@
 """Integration tests for read recording + GET /api/docs/popular (issue #109)."""
+
 from __future__ import annotations
 
 import base64
@@ -87,7 +88,9 @@ async def test_same_reader_same_day_does_not_double_count(client, session):
     assert await _reads_count(session, doc_id) == 1
 
 
-async def test_invitado_gets_rid_cookie_and_repeat_does_not_double_count(client, session):
+async def test_invitado_gets_rid_cookie_and_repeat_does_not_double_count(
+    client, session
+):
     doc_id = await make_document(session, visibility="publico")
     await _seed_current_version(session, doc_id)
     await session.commit()
@@ -152,11 +155,16 @@ async def _seed_reads(session, doc_id: int, readers: int) -> None:
 
 
 async def test_popular_returns_ranking_and_public_total(client, session):
-    hot = await make_document(session, visibility="publico", titulo="Hot",
-                              area_path="escuela_ciencia", tipo="tesis",
-                              fecha=date(2024, 3, 1))
+    hot = await make_document(
+        session,
+        visibility="publico",
+        titulo="Hot",
+        area_path="escuela_ciencia",
+        tipo="tesis",
+        fecha=date(2024, 3, 1),
+    )
     warm = await make_document(session, visibility="publico", titulo="Warm")
-    cold = await make_document(session, visibility="publico", titulo="Cold")  # no reads
+    await make_document(session, visibility="publico", titulo="Cold")  # no reads
     interno = await make_document(session, visibility="interno", titulo="Int")
     await _seed_reads(session, hot, 3)
     await _seed_reads(session, warm, 1)

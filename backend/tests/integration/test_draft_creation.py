@@ -1,4 +1,5 @@
 """Integration tests for draft creation and file upload (issue #27)."""
+
 from __future__ import annotations
 
 import base64
@@ -98,19 +99,27 @@ async def test_create_draft_returns_201_with_doc_id(client, session):
     assert isinstance(doc_id, int)
 
     row = (
-        await session.execute(
-            text("SELECT publication_status FROM documents WHERE id = :id"),
-            {"id": doc_id},
+        (
+            await session.execute(
+                text("SELECT publication_status FROM documents WHERE id = :id"),
+                {"id": doc_id},
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
     assert row["publication_status"] == "draft"
 
     author = (
-        await session.execute(
-            text("SELECT status, user_id FROM document_authors WHERE doc_id = :id"),
-            {"id": doc_id},
+        (
+            await session.execute(
+                text("SELECT status, user_id FROM document_authors WHERE doc_id = :id"),
+                {"id": doc_id},
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
     assert author["status"] == "owner"
     assert author["user_id"] == uid
 
@@ -132,14 +141,18 @@ async def test_create_draft_inserts_pending_coauthor_rows(client, session):
     doc_id = r.json()["id"]
 
     rows = (
-        await session.execute(
-            text(
-                "SELECT user_id, status FROM document_authors "
-                "WHERE doc_id = :id ORDER BY status"
-            ),
-            {"id": doc_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT user_id, status FROM document_authors "
+                    "WHERE doc_id = :id ORDER BY status"
+                ),
+                {"id": doc_id},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
 
     statuses = {r["status"]: r["user_id"] for r in rows}
     assert statuses["owner"] == owner_id
@@ -167,14 +180,18 @@ async def test_create_draft_inserts_external_author_rows(client, session):
     doc_id = r.json()["id"]
 
     row = (
-        await session.execute(
-            text(
-                "SELECT display_name, email, user_id FROM document_authors "
-                "WHERE doc_id = :id AND status = 'external'"
-            ),
-            {"id": doc_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT display_name, email, user_id FROM document_authors "
+                    "WHERE doc_id = :id AND status = 'external'"
+                ),
+                {"id": doc_id},
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
     assert row["display_name"] == "Ada Lovelace"
     assert row["email"] == "ada@ext.org"
     assert row["user_id"] is None
@@ -209,11 +226,17 @@ async def test_upload_valid_pdf_returns_202_and_creates_pending_version(
     assert r.status_code == 202
 
     row = (
-        await session.execute(
-            text("SELECT index_status, mime FROM document_versions WHERE doc_id = :id"),
-            {"id": doc_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT index_status, mime FROM document_versions WHERE doc_id = :id"
+                ),
+                {"id": doc_id},
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
     assert row is not None
     assert row["index_status"] == "pending"
     assert row["mime"] == "application/pdf"

@@ -17,12 +17,16 @@ async def test_documents_supports_full_publishable_shape_and_ltree_filter(sessio
     await session.commit()
 
     rows = (
-        await session.execute(
-            text(
-                "SELECT id FROM documents "
-                "WHERE area_path <@ 'escuela_ciencia' ORDER BY id"
+        (
+            await session.execute(
+                text(
+                    "SELECT id FROM documents "
+                    "WHERE area_path <@ 'escuela_ciencia' ORDER BY id"
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     assert rows == [10]

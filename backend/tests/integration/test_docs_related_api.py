@@ -1,4 +1,5 @@
 """Integration tests for GET /api/docs/{id}/related (issue #45)."""
+
 from __future__ import annotations
 
 import base64

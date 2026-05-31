@@ -57,17 +57,19 @@ export function ResultCard({ result }: { result: ResultCardData }) {
   const hasHighlight =
     result.snippet_is_html === true && result.snippet?.includes("<mark>");
   return (
-    <article className="group border-border hover:border-border-strong relative rounded-lg border bg-card px-5 py-[18px] transition-all hover:shadow-[0_2px_8px_-2px_rgba(23,23,23,0.08)]">
+    <article className="group border-border hover:border-border-strong bg-card relative rounded-lg border px-5 py-[18px] transition-all hover:shadow-[0_2px_8px_-2px_rgba(23,23,23,0.08)]">
       <h2 className="text-[17px] leading-[1.3] font-semibold tracking-tight">
         <Link
           href={`/docs/${result.doc_id}`}
-          className="text-foreground transition-colors group-hover:text-primary group-hover:underline underline-offset-2 after:absolute after:inset-0 after:content-['']"
+          className="text-foreground group-hover:text-primary underline-offset-2 transition-colors group-hover:underline after:absolute after:inset-0 after:content-['']"
         >
           {result.titulo}
         </Link>
       </h2>
       {autores && (
-        <div className="text-muted-foreground mt-1.5 text-[13px]">{autores}</div>
+        <div className="text-muted-foreground mt-1.5 text-[13px]">
+          {autores}
+        </div>
       )}
       <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-2 text-[13px]">
         {meta.map((m, i) => (
@@ -103,7 +105,7 @@ export function ResultCard({ result }: { result: ResultCardData }) {
 
 export function ResultCardSkeleton() {
   return (
-    <div className="border-border rounded-lg border bg-card px-5 py-[18px]">
+    <div className="border-border bg-card rounded-lg border px-5 py-[18px]">
       <div className="bg-muted h-4 w-[72%] animate-pulse rounded-sm" />
       <div className="bg-muted mt-3 h-[11px] w-[38%] animate-pulse rounded-sm" />
       <div className="bg-muted mt-2 h-[11px] w-[64%] animate-pulse rounded-sm" />

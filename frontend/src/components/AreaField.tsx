@@ -11,7 +11,7 @@ export function AreaField({ areaPath }: { areaPath: string }) {
   return (
     <div className="space-y-1.5">
       <span className="text-sm font-medium">Área</span>
-      <div className="text-muted-foreground rounded-lg border border-border bg-neutral-50 px-3 py-2.5 text-sm">
+      <div className="text-muted-foreground border-border rounded-lg border bg-neutral-50 px-3 py-2.5 text-sm">
         {label}
       </div>
     </div>

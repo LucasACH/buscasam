@@ -6,7 +6,9 @@ from tests.fixtures.oidc_issuer import MockOIDCIssuer
 async def test_discovery_document_advertises_endpoints():
     with MockOIDCIssuer() as issuer:
         async with httpx.AsyncClient() as http:
-            resp = await http.get(f"{issuer.issuer_url}/.well-known/openid-configuration")
+            resp = await http.get(
+                f"{issuer.issuer_url}/.well-known/openid-configuration"
+            )
             assert resp.status_code == 200
             doc = resp.json()
 
@@ -20,9 +22,9 @@ async def test_discovery_document_advertises_endpoints():
 async def test_jwks_serves_signing_key():
     with MockOIDCIssuer() as issuer:
         async with httpx.AsyncClient() as http:
-            doc = (await http.get(
-                f"{issuer.issuer_url}/.well-known/openid-configuration"
-            )).json()
+            doc = (
+                await http.get(f"{issuer.issuer_url}/.well-known/openid-configuration")
+            ).json()
             jwks = (await http.get(doc["jwks_uri"])).json()
 
     keys = jwks["keys"]

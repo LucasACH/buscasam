@@ -2,13 +2,13 @@
 
 Covers load_candidate, write_indexed_candidate, write_headline, mark_failed.
 """
+
 from __future__ import annotations
 
 import secrets
 from datetime import date
 
 import numpy as np
-import pytest
 from sqlalchemy import text
 
 from buscasam.core import documents
@@ -17,7 +17,9 @@ from buscasam.core.extract import IndexableMetadata
 from tests.factories import make_document, make_user
 
 
-async def _make_candidate_version(session, *, owner_id: int, doc_id: int | None = None) -> int:
+async def _make_candidate_version(
+    session, *, owner_id: int, doc_id: int | None = None
+) -> int:
     if doc_id is None:
         doc_id = await make_document(session, publication_status="draft")
     await session.execute(
@@ -72,21 +74,30 @@ async def test_write_indexed_candidate_inserts_chunks_and_updates_version(sessio
     fp = headline_fingerprint("Título", "Resumen")
 
     await documents.write_indexed_candidate(
-        session, version_id, body=body, headline=headline, embeds=embeds, meta=meta,
+        session,
+        version_id,
+        body=body,
+        headline=headline,
+        embeds=embeds,
+        meta=meta,
         headline_fingerprint=fp,
     )
 
     row = (
-        await session.execute(
-            text(
-                "SELECT index_status, staged_abstract, staged_keywords, "
-                "  staged_fecha, headline_fingerprint, indexed_at, "
-                "  extract_pipeline_version "
-                "FROM document_versions WHERE id = :id"
-            ),
-            {"id": version_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT index_status, staged_abstract, staged_keywords, "
+                    "  staged_fecha, headline_fingerprint, indexed_at, "
+                    "  extract_pipeline_version "
+                    "FROM document_versions WHERE id = :id"
+                ),
+                {"id": version_id},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     assert row["index_status"] == "indexed"
     assert row["staged_abstract"] == "Resumen"
     assert row["staged_keywords"] == ["a", "b"]
@@ -96,21 +107,27 @@ async def test_write_indexed_candidate_inserts_chunks_and_updates_version(sessio
     assert row["extract_pipeline_version"] != "unknown"
 
     chunk_rows = (
-        await session.execute(
-            text(
-                "SELECT chunk_seq, is_headline, is_current, version_id "
-                "FROM chunks WHERE version_id = :vid ORDER BY chunk_seq"
-            ),
-            {"vid": version_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT chunk_seq, is_headline, is_current, version_id "
+                    "FROM chunks WHERE version_id = :vid ORDER BY chunk_seq"
+                ),
+                {"vid": version_id},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     assert len(chunk_rows) == 3
     assert chunk_rows[0]["is_headline"] is True and chunk_rows[0]["chunk_seq"] == 0
     assert all(r["is_current"] is False for r in chunk_rows)
     assert all(r["version_id"] == version_id for r in chunk_rows)
 
 
-async def test_write_indexed_replacement_can_reuse_current_version_chunk_sequences(session):
+async def test_write_indexed_replacement_can_reuse_current_version_chunk_sequences(
+    session,
+):
     uid = await make_user(session)
     doc_id = await make_document(session, publication_status="published")
     await session.execute(
@@ -165,14 +182,18 @@ async def test_write_indexed_replacement_can_reuse_current_version_chunk_sequenc
     )
 
     chunks = (
-        await session.execute(
-            text(
-                "SELECT version_id, body_text, is_current FROM chunks "
-                "WHERE doc_id = :doc AND chunk_seq = 0 ORDER BY version_id"
-            ),
-            {"doc": doc_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT version_id, body_text, is_current FROM chunks "
+                    "WHERE doc_id = :doc AND chunk_seq = 0 ORDER BY version_id"
+                ),
+                {"doc": doc_id},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     assert [(r["version_id"], r["is_current"]) for r in chunks] == [
         (current_id, True),
         (replacement_id, False),
@@ -193,20 +214,28 @@ async def test_write_indexed_candidate_writes_immutable_generated_snapshot(sessi
     )
     headline = Chunk(body_text="h", is_headline=True, chunk_seq=0)
     await documents.write_indexed_candidate(
-        session, version_id, body=[], headline=headline,
-        embeds=[np.full(1024, 0.1, dtype=np.float16)], meta=meta,
+        session,
+        version_id,
+        body=[],
+        headline=headline,
+        embeds=[np.full(1024, 0.1, dtype=np.float16)],
+        meta=meta,
         headline_fingerprint=headline_fingerprint("t", "resumen del extractor"),
     )
 
     row = (
-        await session.execute(
-            text(
-                "SELECT generated_abstract, generated_keywords, generated_fecha "
-                "FROM document_versions WHERE id = :id"
-            ),
-            {"id": version_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT generated_abstract, generated_keywords, generated_fecha "
+                    "FROM document_versions WHERE id = :id"
+                ),
+                {"id": version_id},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     assert row["generated_abstract"] == "resumen del extractor"
     assert row["generated_keywords"] == ["extractor", "yake"]
     assert row["generated_fecha"] == date(2022, 7, 1)
@@ -223,30 +252,42 @@ async def test_write_indexed_candidate_generated_snapshot_ignores_author_edits(s
             "UPDATE document_versions SET staged_abstract = :a, "
             "  staged_keywords = :k, staged_fecha = :f WHERE id = :vid"
         ),
-        {"a": "resumen del autor", "k": ["autor"], "f": date(2021, 5, 1), "vid": version_id},
+        {
+            "a": "resumen del autor",
+            "k": ["autor"],
+            "f": date(2021, 5, 1),
+            "vid": version_id,
+        },
     )
 
     meta = IndexableMetadata(
         abstract="resumen del extractor", keywords=["extractor"], fecha=date(2099, 1, 1)
     )
     await documents.write_indexed_candidate(
-        session, version_id, body=[],
+        session,
+        version_id,
+        body=[],
         headline=Chunk(body_text="h", is_headline=True, chunk_seq=0),
-        embeds=[np.full(1024, 0.1, dtype=np.float16)], meta=meta,
+        embeds=[np.full(1024, 0.1, dtype=np.float16)],
+        meta=meta,
         headline_fingerprint=headline_fingerprint("t", "resumen del extractor"),
     )
 
     row = (
-        await session.execute(
-            text(
-                "SELECT staged_abstract, generated_abstract, "
-                "  staged_keywords, generated_keywords, "
-                "  staged_fecha, generated_fecha "
-                "FROM document_versions WHERE id = :id"
-            ),
-            {"id": version_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT staged_abstract, generated_abstract, "
+                    "  staged_keywords, generated_keywords, "
+                    "  staged_fecha, generated_fecha "
+                    "FROM document_versions WHERE id = :id"
+                ),
+                {"id": version_id},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     assert row["staged_abstract"] == "resumen del autor"
     assert row["generated_abstract"] == "resumen del extractor"
     assert row["staged_keywords"] == ["autor"]
@@ -255,7 +296,9 @@ async def test_write_indexed_candidate_generated_snapshot_ignores_author_edits(s
     assert row["generated_fecha"] == date(2099, 1, 1)
 
 
-async def test_write_indexed_candidate_preserves_staged_fields_edited_during_processing(session):
+async def test_write_indexed_candidate_preserves_staged_fields_edited_during_processing(
+    session,
+):
     """R007: an author who edits staged_* via save-on-blur while the candidate is
     still processing must keep those edits. Extraction fills only still-empty
     columns, so write_indexed_candidate never overwrites an author edit."""
@@ -268,7 +311,12 @@ async def test_write_indexed_candidate_preserves_staged_fields_edited_during_pro
             "UPDATE document_versions SET staged_abstract = :a, "
             "  staged_keywords = :k, staged_fecha = :f WHERE id = :vid"
         ),
-        {"a": "resumen del autor", "k": ["autor"], "f": date(2021, 5, 1), "vid": version_id},
+        {
+            "a": "resumen del autor",
+            "k": ["autor"],
+            "f": date(2021, 5, 1),
+            "vid": version_id,
+        },
     )
 
     meta = IndexableMetadata(
@@ -276,20 +324,28 @@ async def test_write_indexed_candidate_preserves_staged_fields_edited_during_pro
     )
     headline = Chunk(body_text="h", is_headline=True, chunk_seq=0)
     await documents.write_indexed_candidate(
-        session, version_id, body=[], headline=headline,
-        embeds=[np.full(1024, 0.1, dtype=np.float16)], meta=meta,
+        session,
+        version_id,
+        body=[],
+        headline=headline,
+        embeds=[np.full(1024, 0.1, dtype=np.float16)],
+        meta=meta,
         headline_fingerprint=headline_fingerprint("t", "resumen del extractor"),
     )
 
     row = (
-        await session.execute(
-            text(
-                "SELECT index_status, staged_abstract, staged_keywords, staged_fecha "
-                "FROM document_versions WHERE id = :id"
-            ),
-            {"id": version_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT index_status, staged_abstract, staged_keywords, staged_fecha "
+                    "FROM document_versions WHERE id = :id"
+                ),
+                {"id": version_id},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     assert row["index_status"] == "indexed"
     assert row["staged_abstract"] == "resumen del autor"
     assert row["staged_keywords"] == ["autor"]
@@ -303,25 +359,33 @@ async def test_mark_failed_sets_failed_status_and_inserts_notification(session):
     await documents.mark_failed(session, version_id, error="corrupted: PDFSyntaxError")
 
     row = (
-        await session.execute(
-            text(
-                "SELECT index_status, index_error FROM document_versions WHERE id = :id"
-            ),
-            {"id": version_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT index_status, index_error FROM document_versions WHERE id = :id"
+                ),
+                {"id": version_id},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     assert row["index_status"] == "failed"
     assert row["index_error"] == "corrupted: PDFSyntaxError"
 
     notif = (
-        await session.execute(
-            text(
-                "SELECT user_id, event_key, kind FROM notifications "
-                "WHERE event_key = :ek"
-            ),
-            {"ek": f"processing_failed:{version_id}"},
+        (
+            await session.execute(
+                text(
+                    "SELECT user_id, event_key, kind FROM notifications "
+                    "WHERE event_key = :ek"
+                ),
+                {"ek": f"processing_failed:{version_id}"},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     assert notif["user_id"] == uid
     assert notif["kind"] == "processing_failed"
 
@@ -336,10 +400,7 @@ async def test_mark_failed_is_idempotent_on_retry(session):
 
     count = (
         await session.execute(
-            text(
-                "SELECT COUNT(*) FROM notifications "
-                "WHERE event_key = :ek"
-            ),
+            text("SELECT COUNT(*) FROM notifications WHERE event_key = :ek"),
             {"ek": f"processing_failed:{version_id}"},
         )
     ).scalar_one()
@@ -356,7 +417,12 @@ async def test_write_headline_replaces_only_the_headline_chunk(session):
     meta = IndexableMetadata(abstract="r", keywords=[], fecha=None)
     fp = headline_fingerprint("t", "r")
     await documents.write_indexed_candidate(
-        session, version_id, body=body, headline=headline, embeds=embeds, meta=meta,
+        session,
+        version_id,
+        body=body,
+        headline=headline,
+        embeds=embeds,
+        meta=meta,
         headline_fingerprint=fp,
     )
 
@@ -376,29 +442,41 @@ async def test_write_headline_replaces_only_the_headline_chunk(session):
     new_headline = Chunk(body_text="Replaced headline", is_headline=True, chunk_seq=0)
     new_fp = headline_fingerprint(titulo, "r2")
     await documents.write_headline(
-        session, version_id, new_headline, np.full(1024, 0.2, dtype=np.float16), new_fp,
+        session,
+        version_id,
+        new_headline,
+        np.full(1024, 0.2, dtype=np.float16),
+        new_fp,
     )
 
     headlines = (
-        await session.execute(
-            text(
-                "SELECT body_text FROM chunks "
-                "WHERE version_id = :vid AND is_headline ORDER BY id"
-            ),
-            {"vid": version_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT body_text FROM chunks "
+                    "WHERE version_id = :vid AND is_headline ORDER BY id"
+                ),
+                {"vid": version_id},
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert headlines == ["Replaced headline"]
 
     bodies = (
-        await session.execute(
-            text(
-                "SELECT body_text FROM chunks "
-                "WHERE version_id = :vid AND NOT is_headline ORDER BY chunk_seq"
-            ),
-            {"vid": version_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT body_text FROM chunks "
+                    "WHERE version_id = :vid AND NOT is_headline ORDER BY chunk_seq"
+                ),
+                {"vid": version_id},
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert bodies == ["body"]
 
     fp_row = (
@@ -430,7 +508,12 @@ async def test_write_headline_skips_when_fingerprint_no_longer_matches(session):
     ).scalar_one()
     initial_fp = headline_fingerprint(titulo, "initial")
     await documents.write_indexed_candidate(
-        session, version_id, body=body, headline=headline, embeds=embeds, meta=meta,
+        session,
+        version_id,
+        body=body,
+        headline=headline,
+        embeds=embeds,
+        meta=meta,
         headline_fingerprint=initial_fp,
     )
 
@@ -443,19 +526,26 @@ async def test_write_headline_skips_when_fingerprint_no_longer_matches(session):
     stale_headline = Chunk(body_text="STALE headline", is_headline=True, chunk_seq=0)
     stale_fp = headline_fingerprint(titulo, "initial")
     await documents.write_headline(
-        session, version_id, stale_headline,
-        np.full(1024, 0.2, dtype=np.float16), stale_fp,
+        session,
+        version_id,
+        stale_headline,
+        np.full(1024, 0.2, dtype=np.float16),
+        stale_fp,
     )
 
     headlines = (
-        await session.execute(
-            text(
-                "SELECT body_text FROM chunks "
-                "WHERE version_id = :vid AND is_headline"
-            ),
-            {"vid": version_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT body_text FROM chunks "
+                    "WHERE version_id = :vid AND is_headline"
+                ),
+                {"vid": version_id},
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert headlines == ["Original headline"]
     fp_row = (
         await session.execute(

@@ -7,6 +7,7 @@ database, runs migrations through 0013 to seed prior state, then verifies the
 downgrade. Also verifies the backfill stamps first_published_at on pre-existing
 is_current=true rows.
 """
+
 from __future__ import annotations
 
 import os
@@ -134,13 +135,17 @@ def test_0014_upgrade_then_downgrade_then_upgrade(isolated_db):
     eng = create_engine(url)
     try:
         with eng.connect() as c:
-            row = c.execute(
-                text(
-                    "SELECT first_published_at, uploaded_at "
-                    "FROM document_versions WHERE id = :id"
-                ),
-                {"id": version_id},
-            ).mappings().one()
+            row = (
+                c.execute(
+                    text(
+                        "SELECT first_published_at, uploaded_at "
+                        "FROM document_versions WHERE id = :id"
+                    ),
+                    {"id": version_id},
+                )
+                .mappings()
+                .one()
+            )
             assert row["first_published_at"] is not None
             assert row["first_published_at"] == row["uploaded_at"]
     finally:

@@ -7,6 +7,7 @@ the `moderation_hidden_at IS NULL` baked into `core/document_access` predicates;
 this slice cross-checks the boundary once and asserts hide ⟂ soft-delete — it
 does not re-implement or re-test the exclusion per surface.
 """
+
 from __future__ import annotations
 
 from sqlalchemy import text
@@ -181,16 +182,22 @@ async def test_author_can_soft_delete_a_hidden_document(session):
     ).scalar_one()
 
     await hide(session, _docente_ctx(docente), report_id, "spam")
-    await soft_delete(session, UserCtx(user_id=owner, is_unsam=True, role="estudiante"), doc_id)
+    await soft_delete(
+        session, UserCtx(user_id=owner, is_unsam=True, role="estudiante"), doc_id
+    )
 
     row = (
-        await session.execute(
-            text(
-                "SELECT moderation_hidden_at, soft_deleted_at "
-                "FROM documents WHERE id = :d"
-            ),
-            {"d": doc_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT moderation_hidden_at, soft_deleted_at "
+                    "FROM documents WHERE id = :d"
+                ),
+                {"d": doc_id},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     assert row["moderation_hidden_at"] is not None
     assert row["soft_deleted_at"] is not None

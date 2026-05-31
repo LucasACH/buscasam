@@ -4,6 +4,7 @@ Also the sole writer of `documents`/`chunks` row SQL — `insert_document` and
 `insert_chunk` are reused by `tests/factories.py` so schema changes touch one
 place.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -67,8 +68,7 @@ async def insert_chunk(
     version_id = (
         await conn.execute(
             text(
-                "SELECT id FROM document_versions "
-                "WHERE doc_id = :doc_id AND is_current"
+                "SELECT id FROM document_versions WHERE doc_id = :doc_id AND is_current"
             ),
             {"doc_id": chunk.doc_id},
         )

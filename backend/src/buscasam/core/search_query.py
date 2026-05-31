@@ -5,6 +5,7 @@ retrieval on top — `embedding=None` keeps the lexical-only pipeline byte-for-
 byte unchanged. Predicate stays inside this module per the search-mvp module
 map.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -30,7 +31,9 @@ HNSW_EF_SEARCH = 40
 # Chunks per doc are bounded but >1; over-fetch the semantic CTE so the
 # MAX-per-doc dedup still surfaces ~RELEVANCE_CAP distinct docs before fusion.
 SEMANTIC_CHUNK_OVERFETCH = 5
-TS_HEADLINE_OPTS = "StartSel=<mark>, StopSel=</mark>, MaxFragments=1, MaxWords=20, MinWords=5"
+TS_HEADLINE_OPTS = (
+    "StartSel=<mark>, StopSel=</mark>, MaxFragments=1, MaxWords=20, MinWords=5"
+)
 
 
 @dataclass(frozen=True)
@@ -68,10 +71,16 @@ def _filter_clauses(filters: Filters) -> str:
     return "\n              ".join(
         clause
         for clause in (
-            "AND d.area_path <@ CAST(:area AS ltree)" if filters.area_path is not None else None,
+            "AND d.area_path <@ CAST(:area AS ltree)"
+            if filters.area_path is not None
+            else None,
             "AND d.tipo = ANY(:tipos)" if filters.tipos else None,
-            "AND EXTRACT(year FROM d.fecha) >= :desde" if filters.desde is not None else None,
-            "AND EXTRACT(year FROM d.fecha) <= :hasta" if filters.hasta is not None else None,
+            "AND EXTRACT(year FROM d.fecha) >= :desde"
+            if filters.desde is not None
+            else None,
+            "AND EXTRACT(year FROM d.fecha) <= :hasta"
+            if filters.hasta is not None
+            else None,
         )
         if clause is not None
     )
@@ -454,9 +463,7 @@ async def _run_lexical(
     )
 
 
-def _hybrid_candidates_ctes(
-    *, lex_ctes: str, where: str, filter_clauses: str
-) -> str:
+def _hybrid_candidates_ctes(*, lex_ctes: str, where: str, filter_clauses: str) -> str:
     """CTEs layering `sem`/fusion onto `lex_ctes`, exposing `capped (doc_id,
     body_text, lex_score, sem_sim, rrf)`. Embed as `WITH {ctes} SELECT ...`."""
     return f"""{lex_ctes},

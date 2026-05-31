@@ -4,6 +4,7 @@ matching notifications.read_at mark; a non-pending miss raises
 InvitationNotPending. The readable-lifecycle guard collapses transitions on
 hidden/soft-deleted docs.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -47,8 +48,7 @@ async def _status(session, doc_id, user_id) -> str:
     return (
         await session.execute(
             text(
-                "SELECT status FROM document_authors "
-                "WHERE doc_id = :d AND user_id = :u"
+                "SELECT status FROM document_authors WHERE doc_id = :d AND user_id = :u"
             ),
             {"d": doc_id, "u": user_id},
         )

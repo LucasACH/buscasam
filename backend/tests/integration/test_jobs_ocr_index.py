@@ -3,6 +3,7 @@
 PRD §"Testing Decisions": one ocr_slow-marked integration test covers the
 OCR worker invocation end-to-end.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -40,9 +41,13 @@ def _persist_blob(blob_root: Path, payload: bytes) -> tuple[str, bytes]:
 def _tei_mock() -> httpx.AsyncClient:
     def handler(req: httpx.Request) -> httpx.Response:
         import json
+
         n = len(json.loads(req.read())["inputs"])
         return httpx.Response(200, json=[[0.1] * 1024] * n)
-    return httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://tei")
+
+    return httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="http://tei"
+    )
 
 
 def _has_tesseract_spa_eng() -> bool:
@@ -54,6 +59,7 @@ def _has_tesseract_spa_eng() -> bool:
     if shutil.which("tesseract") is None:
         return False
     import subprocess
+
     try:
         out = subprocess.run(
             ["tesseract", "--list-langs"], capture_output=True, text=True, timeout=5
@@ -64,7 +70,9 @@ def _has_tesseract_spa_eng() -> bool:
     return "spa" in langs and "eng" in langs
 
 
-async def test_ocr_index_document_runs_ocrmypdf_and_indexes(session, blob_root, worker_sm):
+async def test_ocr_index_document_runs_ocrmypdf_and_indexes(
+    session, blob_root, worker_sm
+):
     """Scanned-image PDF triggers OCRRequired, ocr_index_document OCRs it, indexes."""
     if not _has_tesseract_spa_eng():
         pytest.skip(

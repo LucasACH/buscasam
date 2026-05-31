@@ -142,7 +142,9 @@ function NuevoForm() {
       });
       if (error || !data) {
         const detail = (error as { detail?: string } | undefined)?.detail;
-        setSubmitError(detail ?? "No se pudo crear el borrador. Revisá los datos.");
+        setSubmitError(
+          detail ?? "No se pudo crear el borrador. Revisá los datos.",
+        );
         return;
       }
       const { id } = data;
@@ -180,13 +182,15 @@ function NuevoForm() {
     <main className="mx-auto w-full max-w-3xl px-6 py-8">
       <Link
         href="/mis-trabajos"
-        className="-ml-1 mb-4 inline-flex items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground"
+        className="text-muted-foreground hover:text-foreground mb-4 -ml-1 inline-flex items-center gap-1 text-[13px]"
       >
         <ChevronLeft className="size-4" />
         Mis trabajos
       </Link>
 
-      <h1 className="text-[28px] font-semibold tracking-tight">Nuevo trabajo</h1>
+      <h1 className="text-[28px] font-semibold tracking-tight">
+        Nuevo trabajo
+      </h1>
 
       <form className="mt-7 space-y-6" onSubmit={handleSubmit(onSubmit)}>
         <div className="space-y-1.5">
@@ -195,7 +199,7 @@ function NuevoForm() {
           </label>
           <input id="titulo" className={inputClass} {...register("titulo")} />
           {errors.titulo && (
-            <p className="flex items-center gap-1.5 text-[13px] text-destructive">
+            <p className="text-destructive flex items-center gap-1.5 text-[13px]">
               <AlertTriangle className="size-3.5" />
               {errors.titulo.message}
             </p>
@@ -210,7 +214,7 @@ function NuevoForm() {
             name="area_path"
             control={control}
             render={({ field }) => (
-              <div className="overflow-hidden rounded-lg border border-border bg-card">
+              <div className="border-border bg-card overflow-hidden rounded-lg border">
                 <AreasCascader
                   value={field.value || null}
                   onChange={(area) => field.onChange(area ?? "")}
@@ -219,7 +223,7 @@ function NuevoForm() {
             )}
           />
           {errors.area_path && (
-            <p className="flex items-center gap-1.5 text-[13px] text-destructive">
+            <p className="text-destructive flex items-center gap-1.5 text-[13px]">
               <AlertTriangle className="size-3.5" />
               {errors.area_path.message}
             </p>
@@ -242,7 +246,7 @@ function NuevoForm() {
                 </option>
               ))}
             </select>
-            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <ChevronDown className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2" />
           </div>
         </div>
 
@@ -252,7 +256,7 @@ function NuevoForm() {
             {VISIBILITIES.map((v) => (
               <label
                 key={v.value}
-                className="flex cursor-pointer items-start gap-3 rounded-lg border border-border-strong bg-card px-3.5 py-3 text-sm hover:border-neutral-400 has-[:checked]:border-primary has-[:checked]:bg-primary-tint transition"
+                className="border-border-strong bg-card has-[:checked]:border-primary has-[:checked]:bg-primary-tint flex cursor-pointer items-start gap-3 rounded-lg border px-3.5 py-3 text-sm transition hover:border-neutral-400"
               >
                 <input
                   type="radio"
@@ -262,7 +266,7 @@ function NuevoForm() {
                 />
                 <span>
                   <span className="block font-semibold">{v.label}</span>
-                  <span className="mt-0.5 block text-[13px] text-muted-foreground">
+                  <span className="text-muted-foreground mt-0.5 block text-[13px]">
                     {v.help}
                   </span>
                 </span>
@@ -289,7 +293,7 @@ function NuevoForm() {
                     })}
                   />
                   {errors.external_authors?.[i]?.name && (
-                    <p className="flex items-center gap-1.5 text-[13px] text-destructive">
+                    <p className="text-destructive flex items-center gap-1.5 text-[13px]">
                       <AlertTriangle className="size-3.5" />
                       {errors.external_authors[i]?.name?.message}
                     </p>
@@ -308,7 +312,7 @@ function NuevoForm() {
                     })}
                   />
                   {errors.external_authors?.[i]?.surname && (
-                    <p className="flex items-center gap-1.5 text-[13px] text-destructive">
+                    <p className="text-destructive flex items-center gap-1.5 text-[13px]">
                       <AlertTriangle className="size-3.5" />
                       {errors.external_authors[i]?.surname?.message}
                     </p>
@@ -322,7 +326,7 @@ function NuevoForm() {
                     {...register(`external_authors.${i}.email`)}
                   />
                   {errors.external_authors?.[i]?.email && (
-                    <p className="flex items-center gap-1.5 text-[13px] text-destructive">
+                    <p className="text-destructive flex items-center gap-1.5 text-[13px]">
                       <AlertTriangle className="size-3.5" />
                       {errors.external_authors[i]?.email?.message}
                     </p>
@@ -331,7 +335,7 @@ function NuevoForm() {
                 <button
                   type="button"
                   onClick={() => externalAuthors.remove(i)}
-                  className="grid size-10 flex-none place-items-center rounded-lg text-muted-foreground hover:bg-neutral-100 hover:text-destructive transition"
+                  className="text-muted-foreground hover:text-destructive grid size-10 flex-none place-items-center rounded-lg transition hover:bg-neutral-100"
                   aria-label="Quitar coautor externo"
                 >
                   <X className="size-4" />
@@ -366,15 +370,15 @@ function NuevoForm() {
           </label>
           <label
             htmlFor="main_file"
-            className="flex cursor-pointer flex-col items-center rounded-lg border-[1.5px] border-dashed border-border-strong bg-neutral-50 px-6 py-8 text-center hover:border-neutral-400 hover:bg-neutral-100 transition"
+            className="border-border-strong flex cursor-pointer flex-col items-center rounded-lg border-[1.5px] border-dashed bg-neutral-50 px-6 py-8 text-center transition hover:border-neutral-400 hover:bg-neutral-100"
           >
-            <span className="grid size-11 place-items-center rounded-lg border border-border bg-card text-primary">
+            <span className="border-border bg-card text-primary grid size-11 place-items-center rounded-lg border">
               <Upload className="size-5" />
             </span>
             <span className="mt-3 text-sm font-medium">
               {file ? file.name : "Arrastrá tu archivo o hacé clic para elegir"}
             </span>
-            <span className="mt-1 text-[11px] text-muted-foreground">
+            <span className="text-muted-foreground mt-1 text-[11px]">
               PDF, DOCX u ODT · hasta 50 MB
             </span>
             <input
@@ -390,7 +394,7 @@ function NuevoForm() {
         {submitError && (
           <div
             role="alert"
-            className="flex items-start gap-2.5 rounded-lg border border-destructive/30 bg-destructive/5 px-3.5 py-3 text-sm text-destructive"
+            className="border-destructive/30 bg-destructive/5 text-destructive flex items-start gap-2.5 rounded-lg border px-3.5 py-3 text-sm"
           >
             <AlertTriangle className="mt-0.5 size-4 flex-none" />
             <span>{submitError}</span>

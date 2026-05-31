@@ -68,20 +68,20 @@ export function CoauthorPicker({
     <label className="flex flex-col gap-1.5">
       <span className="text-sm font-medium">{label}</span>
       <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
         <input
           aria-label="Coautores"
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="h-10 w-full rounded-lg border border-border-strong bg-card pl-9 pr-3 text-sm outline-none hover:border-neutral-400 focus:border-primary focus:ring-[3px] focus:ring-primary-tint transition"
+          className="border-border-strong bg-card focus:border-primary focus:ring-primary-tint h-10 w-full rounded-lg border pr-3 pl-9 text-sm transition outline-none hover:border-neutral-400 focus:ring-[3px]"
           placeholder="Buscá por nombre…"
         />
 
         {hits && hits.length > 0 && (
           <ul
             role="listbox"
-            className="absolute left-0 right-0 top-[calc(100%+4px)] z-30 max-h-56 overflow-y-auto rounded-lg border border-border bg-card p-1 shadow-md"
+            className="border-border bg-card absolute top-[calc(100%+4px)] right-0 left-0 z-30 max-h-56 overflow-y-auto rounded-lg border p-1 shadow-md"
           >
             {hits.map((hit) => (
               <li
@@ -89,17 +89,17 @@ export function CoauthorPicker({
                 role="option"
                 aria-selected={value.includes(hit.user_id)}
                 aria-label={hit.name}
-                className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 hover:bg-neutral-100 transition"
+                className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 transition hover:bg-neutral-100"
                 onClick={() => pick(hit)}
               >
-                <span className="flex size-7 flex-none items-center justify-center rounded-full bg-primary-tint text-[11px] font-medium text-primary">
+                <span className="bg-primary-tint text-primary flex size-7 flex-none items-center justify-center rounded-full text-[11px] font-medium">
                   {initials(hit.name)}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium text-foreground">
+                  <span className="text-foreground block truncate text-sm font-medium">
                     {hit.name}
                   </span>
-                  <span className="block truncate text-[11px] text-muted-foreground">
+                  <span className="text-muted-foreground block truncate text-[11px]">
                     {hit.email_local}
                   </span>
                 </span>
@@ -114,7 +114,7 @@ export function CoauthorPicker({
           {chips.map((s) => (
             <span
               key={s.user_id}
-              className="inline-flex items-center gap-1 rounded-full bg-primary-tint border border-primary-tint-2 px-2.5 py-0.5 text-xs font-medium text-primary"
+              className="bg-primary-tint border-primary-tint-2 text-primary inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium"
             >
               {s.name}
               <button
@@ -143,5 +143,10 @@ function initials(name: string): string {
 }
 
 function placeholder(id: number): UserHit {
-  return { user_id: id, name: `Usuario #${id}`, email_local: "", picture_url: null };
+  return {
+    user_id: id,
+    name: `Usuario #${id}`,
+    email_local: "",
+    picture_url: null,
+  };
 }

@@ -5,6 +5,7 @@ The five-cell matrix lives in test_document_access_disclosure.py; this pins
 the composition — the disclosure payload, the guest short-circuit, and the
 None-on-miss contract.
 """
+
 from sqlalchemy import text
 
 from buscasam.core import documents
@@ -58,9 +59,7 @@ async def test_returns_none_for_guest_without_raising(session):
     doc_id = await make_document(session, visibility="privado")
     await _seed_current_version(session, doc_id)
     invitee_id = await make_user(session)
-    await make_document_author(
-        session, doc_id, user_id=invitee_id, status="pending"
-    )
+    await make_document_author(session, doc_id, user_id=invitee_id, status="pending")
     await session.commit()
 
     assert await documents.get_pending_invitation(session, doc_id, GUEST) is None
@@ -73,9 +72,7 @@ async def test_returns_none_when_predicate_does_not_match(session):
     doc_id = await make_document(session, visibility="privado")
     await _seed_current_version(session, doc_id)
     accepted_id = await make_user(session)
-    await make_document_author(
-        session, doc_id, user_id=accepted_id, status="accepted"
-    )
+    await make_document_author(session, doc_id, user_id=accepted_id, status="accepted")
     await session.commit()
 
     assert (

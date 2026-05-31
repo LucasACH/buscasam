@@ -1,5 +1,7 @@
 import type { MetadataRoute } from "next";
 
+export const dynamic = "force-dynamic";
+
 // ADR-0004 §3. Crawlers may index public pages; authenticated/management
 // surfaces are disallowed. The sitemap lists only `publico` documents.
 function publicBase(): string {

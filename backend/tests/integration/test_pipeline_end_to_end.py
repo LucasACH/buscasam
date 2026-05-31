@@ -5,12 +5,11 @@ enqueued index_document task → asserts indexed + chunks + staged metadata.
 The worker pickup is invoked synchronously via _run_index_document because
 unit tests do not run the procrastinate worker loop.
 """
+
 from __future__ import annotations
 
 import base64
-import hashlib
 import secrets
-from io import BytesIO
 
 import httpx
 import pytest
@@ -50,9 +49,13 @@ def _real_pdf() -> bytes:
 def _tei_mock() -> httpx.AsyncClient:
     def handler(req: httpx.Request) -> httpx.Response:
         import json
+
         n = len(json.loads(req.read())["inputs"])
         return httpx.Response(200, json=[[0.1] * 1024] * n)
-    return httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://tei")
+
+    return httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="http://tei"
+    )
 
 
 @pytest.fixture
@@ -72,7 +75,9 @@ async def client(session, monkeypatch, blob_root):
 
     app = create_app()
     app.dependency_overrides[get_session] = _session_override
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         yield c
 
 
@@ -86,12 +91,16 @@ async def _seed_sid(session, user_id: int) -> str:
     return base64.urlsafe_b64encode(sid).rstrip(b"=").decode()
 
 
-async def test_pipeline_pending_to_indexed_for_text_layer_pdf(client, session, blob_root, worker_sm):
+async def test_pipeline_pending_to_indexed_for_text_layer_pdf(
+    client, session, blob_root, worker_sm
+):
     uid = await make_user(session)
     sid = await _seed_sid(session, uid)
     cookies = {auth.SID_COOKIE: sid}
 
-    r = await client.post("/api/documents", json=_DRAFT, headers={"origin": _ORIGIN}, cookies=cookies)
+    r = await client.post(
+        "/api/documents", json=_DRAFT, headers={"origin": _ORIGIN}, cookies=cookies
+    )
     assert r.status_code == 201
     doc_id = r.json()["id"]
 
@@ -105,25 +114,33 @@ async def test_pipeline_pending_to_indexed_for_text_layer_pdf(client, session, b
 
     # Snapshot the pending row + the deferred procrastinate job.
     row = (
-        await session.execute(
-            text(
-                "SELECT id, index_status FROM document_versions WHERE doc_id = :id"
-            ),
-            {"id": doc_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT id, index_status FROM document_versions WHERE doc_id = :id"
+                ),
+                {"id": doc_id},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     version_id = row["id"]
     assert row["index_status"] == "pending"
 
     queued = (
-        await session.execute(
-            text(
-                "SELECT task_name FROM procrastinate_jobs "
-                "WHERE args->>'version_id' = :vid AND status = 'todo'"
-            ),
-            {"vid": str(version_id)},
+        (
+            await session.execute(
+                text(
+                    "SELECT task_name FROM procrastinate_jobs "
+                    "WHERE args->>'version_id' = :vid AND status = 'todo'"
+                ),
+                {"vid": str(version_id)},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     assert queued["task_name"].endswith("index_document")
 
     # Simulate the worker picking up that job.
@@ -132,28 +149,36 @@ async def test_pipeline_pending_to_indexed_for_text_layer_pdf(client, session, b
     await tei.aclose()
 
     row = (
-        await session.execute(
-            text(
-                "SELECT index_status, staged_abstract, staged_keywords, staged_fecha, "
-                "       headline_fingerprint, indexed_at "
-                "FROM document_versions WHERE id = :id"
-            ),
-            {"id": version_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT index_status, staged_abstract, staged_keywords, staged_fecha, "
+                    "       headline_fingerprint, indexed_at "
+                    "FROM document_versions WHERE id = :id"
+                ),
+                {"id": version_id},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     assert row["index_status"] == "indexed"
     assert row["headline_fingerprint"] is not None
     assert row["indexed_at"] is not None
 
     chunks = (
-        await session.execute(
-            text(
-                "SELECT chunk_seq, is_headline, is_current, version_id "
-                "FROM chunks WHERE version_id = :vid"
-            ),
-            {"vid": version_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT chunk_seq, is_headline, is_current, version_id "
+                    "FROM chunks WHERE version_id = :vid"
+                ),
+                {"vid": version_id},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     assert len(chunks) >= 2
     assert all(c["version_id"] == version_id for c in chunks)
     assert all(c["is_current"] is False for c in chunks)

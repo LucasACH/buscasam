@@ -1,5 +1,6 @@
 """Reader-facing detail, pending-invitation disclosure, and access-gated file
 lookups for downloads (module map §document-detail)."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -85,37 +86,41 @@ async def get_detail(
     # :mgmt_user_id bind never collides with readable_where's :user_id/:is_unsam.
     mgmt_where, mgmt_params = manageable_where("dm", user_ctx)
     row = (
-        await session.execute(
-            text(
-                "SELECT d.id, d.titulo, d.area_path::text AS area_path, d.tipo, "
-                "       d.fecha, d.visibility, d.abstract, "
-                "       COALESCE(d.keywords, ARRAY[]::text[]) AS keywords, "
-                "       dv.original_filename AS main_filename, "
-                "       dv.bytes AS main_bytes, "
-                "       dv.mime AS main_mime, "
-                "       EXISTS (SELECT 1 FROM documents dm "
-                f"               WHERE dm.id = d.id AND ({mgmt_where})) AS manageable, "
-                "       (SELECT COALESCE(json_agg(json_build_object("
-                "                   'display_name', da2.display_name, "
-                "                   'user_id', da2.user_id) ORDER BY da2.id), '[]'::json) "
-                "        FROM document_authors da2 WHERE da2.doc_id = d.id) AS autores, "
-                "       (SELECT COALESCE(json_agg(json_build_object("
-                "                   'id', att.id, "
-                "                   'original_filename', att.original_filename, "
-                "                   'bytes', att.bytes, "
-                "                   'mime', att.mime) ORDER BY att.id), '[]'::json) "
-                "        FROM document_attachments att WHERE att.doc_id = d.id) AS adjuntos, "
-                "       (SELECT COALESCE(o.email, ou.email) "
-                "        FROM document_authors o LEFT JOIN users ou ON ou.id = o.user_id "
-                "        WHERE o.doc_id = d.id AND o.status = 'owner' LIMIT 1) AS owner_email "
-                "FROM documents d "
-                "JOIN document_versions dv "
-                "  ON dv.doc_id = d.id AND dv.is_current "
-                f"WHERE d.id = :doc_id AND ({where})"
-            ),
-            {"doc_id": doc_id, **params, **mgmt_params},
+        (
+            await session.execute(
+                text(
+                    "SELECT d.id, d.titulo, d.area_path::text AS area_path, d.tipo, "
+                    "       d.fecha, d.visibility, d.abstract, "
+                    "       COALESCE(d.keywords, ARRAY[]::text[]) AS keywords, "
+                    "       dv.original_filename AS main_filename, "
+                    "       dv.bytes AS main_bytes, "
+                    "       dv.mime AS main_mime, "
+                    "       EXISTS (SELECT 1 FROM documents dm "
+                    f"               WHERE dm.id = d.id AND ({mgmt_where})) AS manageable, "
+                    "       (SELECT COALESCE(json_agg(json_build_object("
+                    "                   'display_name', da2.display_name, "
+                    "                   'user_id', da2.user_id) ORDER BY da2.id), '[]'::json) "
+                    "        FROM document_authors da2 WHERE da2.doc_id = d.id) AS autores, "
+                    "       (SELECT COALESCE(json_agg(json_build_object("
+                    "                   'id', att.id, "
+                    "                   'original_filename', att.original_filename, "
+                    "                   'bytes', att.bytes, "
+                    "                   'mime', att.mime) ORDER BY att.id), '[]'::json) "
+                    "        FROM document_attachments att WHERE att.doc_id = d.id) AS adjuntos, "
+                    "       (SELECT COALESCE(o.email, ou.email) "
+                    "        FROM document_authors o LEFT JOIN users ou ON ou.id = o.user_id "
+                    "        WHERE o.doc_id = d.id AND o.status = 'owner' LIMIT 1) AS owner_email "
+                    "FROM documents d "
+                    "JOIN document_versions dv "
+                    "  ON dv.doc_id = d.id AND dv.is_current "
+                    f"WHERE d.id = :doc_id AND ({where})"
+                ),
+                {"doc_id": doc_id, **params, **mgmt_params},
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
     if row is None:
         return None
 
@@ -186,17 +191,21 @@ async def get_pending_invitation(
         return None
     where, params = pending_invitation_disclosure_where("d", user_ctx)
     row = (
-        await session.execute(
-            text(
-                "SELECT d.titulo, "
-                "       (SELECT a.display_name FROM document_authors a "
-                "         WHERE a.doc_id = d.id AND a.status = 'owner' LIMIT 1) "
-                "         AS inviter "
-                f"FROM documents d WHERE d.id = :doc_id AND ({where})"
-            ),
-            {"doc_id": doc_id, **params},
+        (
+            await session.execute(
+                text(
+                    "SELECT d.titulo, "
+                    "       (SELECT a.display_name FROM document_authors a "
+                    "         WHERE a.doc_id = d.id AND a.status = 'owner' LIMIT 1) "
+                    "         AS inviter "
+                    f"FROM documents d WHERE d.id = :doc_id AND ({where})"
+                ),
+                {"doc_id": doc_id, **params},
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
     if row is None:
         return None
     return InvitationDisclosure(

@@ -77,16 +77,14 @@ export function SearchFilters({
 
   function toggleTipo(t: Tipo) {
     onChange({
-      tipos: tipos.includes(t)
-        ? tipos.filter((x) => x !== t)
-        : [...tipos, t],
+      tipos: tipos.includes(t) ? tipos.filter((x) => x !== t) : [...tipos, t],
     });
   }
 
   return (
     <div className="flex flex-wrap items-center gap-2">
       {/* Orden */}
-      <div className="border-border bg-neutral-100 inline-flex gap-0.5 rounded-lg border p-[3px]">
+      <div className="border-border inline-flex gap-0.5 rounded-lg border bg-neutral-100 p-[3px]">
         {(["relevancia", "recientes"] as const).map((o) => (
           <button
             key={o}
@@ -157,7 +155,7 @@ export function SearchFilters({
                 role="menuitemcheckbox"
                 aria-checked={checked}
                 onClick={() => toggleTipo(t)}
-                className="hover:bg-neutral-100 flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm"
+                className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm hover:bg-neutral-100"
               >
                 <span
                   className={cn(

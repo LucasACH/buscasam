@@ -19,7 +19,11 @@ const USER = {
 };
 
 function json(body: unknown, status = 200) {
-  return { status, contentType: "application/json", body: JSON.stringify(body) };
+  return {
+    status,
+    contentType: "application/json",
+    body: JSON.stringify(body),
+  };
 }
 
 test("owner deletes from editar → routed away, gone from Mis trabajos, detalle 404s", async ({
@@ -45,7 +49,12 @@ test("owner deletes from editar → routed away, gone from Mis trabajos, detalle
         is_owner: true,
         attachments: [],
         coauthors: [
-          { user_id: 9, display_name: "Owner", email_local: "owner", status: "owner" },
+          {
+            user_id: 9,
+            display_name: "Owner",
+            email_local: "owner",
+            status: "owner",
+          },
         ],
         versions: [
           {

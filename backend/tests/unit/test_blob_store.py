@@ -1,12 +1,11 @@
 """Unit tests for core/blob_store per ADR-0006 §3/§4."""
+
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import os
 import time
 from datetime import timedelta
-from pathlib import Path
 
 import pytest
 
@@ -88,9 +87,7 @@ async def test_iter_orphan_candidates_skips_tmp_staging_dir(blob_root):
 
     seen = [
         sha
-        async for sha in blob_store.iter_orphan_candidates(
-            min_age=timedelta(hours=24)
-        )
+        async for sha in blob_store.iter_orphan_candidates(min_age=timedelta(hours=24))
     ]
 
     assert seen == [put.sha256]

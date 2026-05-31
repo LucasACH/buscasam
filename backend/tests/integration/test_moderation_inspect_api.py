@@ -7,6 +7,7 @@ specific report — even privado/interno/hidden — without standing access to
 private documents. Every miss (unknown report, author-soft-deleted doc, no
 current version) maps to a uniform 404; non-Docente → 403.
 """
+
 from __future__ import annotations
 
 import base64
@@ -100,12 +101,17 @@ async def test_document_returns_metadata_for_privado_reported_doc(client, sessio
         area_path="escuela_ciencia.matematica",
     )
     await session.execute(
-        text("UPDATE documents SET keywords = ARRAY['algebra', 'topologia'] WHERE id = :d"),
+        text(
+            "UPDATE documents SET keywords = ARRAY['algebra', 'topologia'] WHERE id = :d"
+        ),
         {"d": doc_id},
     )
     author_user_id = await make_user(session)
     await make_document_author(
-        session, doc_id, user_id=author_user_id, status="owner",
+        session,
+        doc_id,
+        user_id=author_user_id,
+        status="owner",
         display_name="Ana",
     )
     reporter = await make_user(session)

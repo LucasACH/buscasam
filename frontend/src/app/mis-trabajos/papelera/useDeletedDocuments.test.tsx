@@ -71,7 +71,12 @@ describe("useDeletedDocuments", () => {
 
   it("restore POSTs to the restore endpoint and refetches the deleted list", async () => {
     returns([
-      { id: 5, title: "x", publication_status: "draft", purge_at: "2026-06-01T00:00:00Z" },
+      {
+        id: 5,
+        title: "x",
+        publication_status: "draft",
+        purge_at: "2026-06-01T00:00:00Z",
+      },
     ]);
     apiPost.mockResolvedValue({ error: undefined });
     const { result } = renderHook(() => useDeletedDocuments(), {
@@ -94,7 +99,10 @@ describe("useDeletedDocuments", () => {
 
   it("restore surfaces failure as restore_failed", async () => {
     returns([]);
-    apiPost.mockResolvedValue({ error: { detail: "x" }, response: { status: 404 } });
+    apiPost.mockResolvedValue({
+      error: { detail: "x" },
+      response: { status: 404 },
+    });
     const { result } = renderHook(() => useDeletedDocuments(), {
       wrapper: wrapper(),
     });

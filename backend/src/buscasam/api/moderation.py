@@ -9,6 +9,7 @@ history). Maps every domain miss to a uniform 404 so hidden/private/deleted
 existence is never disclosed; role failures surface as 403 via
 `require_docente`. Opens no transactions and writes no tables directly.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -112,35 +113,47 @@ async def inspect_document(
     # soft-deleted. Every miss is a uniform 404.
     where, params = moderation_inspection_where("d", report_id)
     row = (
-        await session.execute(
-            text(
-                "SELECT d.id, d.titulo, d.tipo, d.area_path::text AS area_path, "
-                "       d.abstract, COALESCE(d.keywords, ARRAY[]::text[]) AS keywords "
-                f"FROM documents d WHERE {where}"
-            ),
-            params,
+        (
+            await session.execute(
+                text(
+                    "SELECT d.id, d.titulo, d.tipo, d.area_path::text AS area_path, "
+                    "       d.abstract, COALESCE(d.keywords, ARRAY[]::text[]) AS keywords "
+                    f"FROM documents d WHERE {where}"
+                ),
+                params,
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
     if row is None:
         raise _not_found()
     author_rows = (
-        await session.execute(
-            text(
-                "SELECT display_name, user_id FROM document_authors "
-                "WHERE doc_id = :d ORDER BY id"
-            ),
-            {"d": row["id"]},
+        (
+            await session.execute(
+                text(
+                    "SELECT display_name, user_id FROM document_authors "
+                    "WHERE doc_id = :d ORDER BY id"
+                ),
+                {"d": row["id"]},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     reasons = (
-        await session.execute(
-            text(
-                "SELECT DISTINCT reason FROM document_reports "
-                "WHERE doc_id = :d AND status = 'open' ORDER BY reason"
-            ),
-            {"d": row["id"]},
+        (
+            await session.execute(
+                text(
+                    "SELECT DISTINCT reason FROM document_reports "
+                    "WHERE doc_id = :d AND status = 'open' ORDER BY reason"
+                ),
+                {"d": row["id"]},
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return InspectMetadataDTO(
         titulo=row["titulo"],
         abstract=row["abstract"] or "",

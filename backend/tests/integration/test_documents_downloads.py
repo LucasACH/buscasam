@@ -3,6 +3,7 @@
 Pins the access matrix at the lookup boundary so the router tests can stay
 focused on transport (headers, X-Accel projection, 404 envelope).
 """
+
 from __future__ import annotations
 
 import pytest
@@ -38,7 +39,13 @@ async def _seed_current_version(
             " index_status, is_current, first_published_at) "
             "VALUES (:d, 1, decode(:sha, 'hex'), :name, :b, :m, 'indexed', true, now())"
         ),
-        {"d": doc_id, "sha": sha_hex, "name": original_filename, "b": bytes_, "m": mime},
+        {
+            "d": doc_id,
+            "sha": sha_hex,
+            "name": original_filename,
+            "b": bytes_,
+            "m": mime,
+        },
     )
 
 
@@ -135,7 +142,10 @@ async def test_main_file_interno_granted_for_unsam(session):
     await _seed_current_version(session, doc_id)
     uid = await make_user(session, role="estudiante")
 
-    assert await documents.get_readable_main_file(session, doc_id, _student(uid)) is not None
+    assert (
+        await documents.get_readable_main_file(session, doc_id, _student(uid))
+        is not None
+    )
 
 
 async def test_main_file_privado_granted_for_accepted_coautor(session):
@@ -146,7 +156,10 @@ async def test_main_file_privado_granted_for_accepted_coautor(session):
         session, doc_id, user_id=uid, status="accepted", display_name="Co"
     )
 
-    assert await documents.get_readable_main_file(session, doc_id, _docente(uid)) is not None
+    assert (
+        await documents.get_readable_main_file(session, doc_id, _docente(uid))
+        is not None
+    )
 
 
 async def test_main_file_privado_pending_coautor_returns_none(session):
@@ -157,7 +170,9 @@ async def test_main_file_privado_pending_coautor_returns_none(session):
         session, doc_id, user_id=uid, status="pending", display_name="P"
     )
 
-    assert await documents.get_readable_main_file(session, doc_id, _student(uid)) is None
+    assert (
+        await documents.get_readable_main_file(session, doc_id, _student(uid)) is None
+    )
 
 
 async def test_main_file_missing_doc_returns_none(session):
@@ -182,14 +197,18 @@ async def test_attachment_denied_on_privado_for_invitado_returns_none(session):
     doc_id = await make_document(session, visibility="privado")
     att_id = await _seed_attachment(session, doc_id)
 
-    assert await documents.get_readable_attachment(session, doc_id, att_id, GUEST) is None
+    assert (
+        await documents.get_readable_attachment(session, doc_id, att_id, GUEST) is None
+    )
 
 
 async def test_attachment_unknown_att_id_returns_none(session):
     doc_id = await make_document(session, visibility="publico")
     await _seed_attachment(session, doc_id)
 
-    assert await documents.get_readable_attachment(session, doc_id, 999_999, GUEST) is None
+    assert (
+        await documents.get_readable_attachment(session, doc_id, 999_999, GUEST) is None
+    )
 
 
 # --- get_manageable_version_file ---
@@ -197,12 +216,20 @@ async def test_attachment_unknown_att_id_returns_none(session):
 
 async def _seed_two_versions(session: AsyncSession, doc_id: int) -> None:
     await _seed_version(
-        session, doc_id, version_no=1, original_filename="tesis_v1.pdf",
-        sha_hex="11" * 32, is_current=False,
+        session,
+        doc_id,
+        version_no=1,
+        original_filename="tesis_v1.pdf",
+        sha_hex="11" * 32,
+        is_current=False,
     )
     await _seed_version(
-        session, doc_id, version_no=2, original_filename="tesis_v2.pdf",
-        sha_hex="22" * 32, is_current=True,
+        session,
+        doc_id,
+        version_no=2,
+        original_filename="tesis_v2.pdf",
+        sha_hex="22" * 32,
+        is_current=True,
     )
 
 
@@ -262,7 +289,9 @@ async def test_version_out_of_range_returns_none(session, bad_n):
     await _seed_two_versions(session, doc_id)
 
     assert (
-        await documents.get_manageable_version_file(session, doc_id, bad_n, _docente(owner))
+        await documents.get_manageable_version_file(
+            session, doc_id, bad_n, _docente(owner)
+        )
         is None
     )
 
@@ -277,12 +306,21 @@ async def test_version_never_published_returns_none_for_manager(session, index_s
     await make_document_author(session, doc_id, user_id=owner, status="owner")
     # version_no=1 is the published current; the candidate is version_no=2.
     await _seed_version(
-        session, doc_id, version_no=1, original_filename="published.pdf",
-        sha_hex="11" * 32, is_current=True,
+        session,
+        doc_id,
+        version_no=1,
+        original_filename="published.pdf",
+        sha_hex="11" * 32,
+        is_current=True,
     )
     await _seed_version(
-        session, doc_id, version_no=2, original_filename="candidate.pdf",
-        sha_hex="33" * 32, index_status=index_status, first_published=False,
+        session,
+        doc_id,
+        version_no=2,
+        original_filename="candidate.pdf",
+        sha_hex="33" * 32,
+        index_status=index_status,
+        first_published=False,
     )
 
     # The candidate is filtered out before row_number() runs, so n=2 resolves
