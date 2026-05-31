@@ -21,6 +21,13 @@ The Google OIDC `hd` (hosted domain) field. The only trustworthy signal that an 
 **Visibilidad**:
 A per-document setting controlling who sees it. Three values: `público` (everyone including **Invitados**), `interno` (any signed-in UNSAM user - **Estudiante** or **Docente**), `privado` (owner and accepted co-authors only). Enforced by the access chokepoint (ADR-0010).
 
+**Lectura** (read):
+A successful open of a document's detail page (`GET /api/docs/{id}` returning real detail). Deduped to at most one per reader, per document, per day. Counts every viewer including **Invitados**. Distinct from a download, which is not a **lectura**.
+_Avoid_: view, hit, impression (use *lectura*).
+
+**Más leídos** (most-read):
+The público-only ranking of documents by **lectura** count over a rolling window (default 7 days), shown on the search landing. A single shared ranking for all viewers — never per-viewer or personalized. A display surface only: **más leídos** never influences search ranking (SPEC §Ranking keeps RRF with no popularity boost).
+
 ## Relationships
 
 - An **Estudiante** and a **Docente** are both authenticated users; they differ only in moderation rights.
