@@ -13,13 +13,13 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field, model_serializer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from buscasam.api._blob import download_response
 from buscasam.api.deps import get_session
-from buscasam.core import auth
+from buscasam.core import auth, discovery, search
 from buscasam.core.documents import (
     DetailRow,
     get_detail,
@@ -128,6 +128,55 @@ def _not_found() -> HTTPException:
     return HTTPException(status_code=404, detail="not_found")
 
 
+class PopularResultDTO(BaseModel):
+    doc_id: int
+    titulo: str
+    area_path: str
+    tipo: str
+    fecha: str | None  # ISO date; None when documents.fecha is NULL.
+    reads: int
+
+
+class PopularResponse(BaseModel):
+    results: list[PopularResultDTO]
+    public_total: int
+
+
+_WINDOW_DAYS = {"week": 7}
+_POPULAR_LIMIT_DEFAULT = 3
+_POPULAR_LIMIT_MAX = 20
+
+
+@router.get("/popular", response_model=PopularResponse)
+async def get_popular(
+    window: Literal["week"] = "week",
+    limit: int = _POPULAR_LIMIT_DEFAULT,
+    session: AsyncSession = Depends(get_session),
+) -> PopularResponse:
+    # Declared before `/{doc_id}` so the literal path is not captured as a doc id.
+    # One round-trip feeds both landing datums: the más leídos ranking and the
+    # público catalog size (module map §api/docs).
+    capped = min(max(limit, 1), _POPULAR_LIMIT_MAX)
+    rows = await discovery.most_read(
+        session, window_days=_WINDOW_DAYS[window], limit=capped
+    )
+    public_total = await search.count_public_documents(session)
+    return PopularResponse(
+        results=[
+            PopularResultDTO(
+                doc_id=r.doc_id,
+                titulo=r.titulo,
+                area_path=r.area_path,
+                tipo=r.tipo,
+                fecha=r.fecha.isoformat() if r.fecha is not None else None,
+                reads=r.reads,
+            )
+            for r in rows
+        ],
+        public_total=public_total,
+    )
+
+
 def _detail_fields(detail: DetailRow) -> dict:
     return dict(
         doc_id=detail.doc_id,
@@ -181,6 +230,8 @@ def _detail_fields(detail: DetailRow) -> dict:
 @router.get("/{doc_id}", response_model=DocDetailResponse)
 async def get_doc_detail(
     doc_id: int,
+    request: Request,
+    response: Response,
     user_ctx: auth.UserCtx = Depends(auth.current_user),
     session: AsyncSession = Depends(get_session),
 ) -> DetailDTO | MinimalInviteDTO | DetailWithInvitationDTO:
@@ -199,6 +250,13 @@ async def get_doc_detail(
         else None
     )
     if detail is not None:
+        # A real detail was returned → record one lectura (never for the
+        # MinimalInviteDTO / download / 404 paths). Shares the request
+        # transaction; rolls back with the handler on failure (module map
+        # §api/docs).
+        await discovery.record_read(
+            session, doc_id, auth.reader_key(user_ctx, request, response)
+        )
         fields = _detail_fields(detail)
         if invite is not None:
             return DetailWithInvitationDTO(

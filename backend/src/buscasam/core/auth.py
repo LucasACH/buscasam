@@ -42,6 +42,11 @@ SID_COOKIE = "sid"
 # the sliding-idle cap (30 days) is the smaller of the two.
 SID_COOKIE_MAX_AGE = 30 * 24 * 3600
 
+# Opaque anon-reader id for lectura dedup (module map §core/auth). Mirrors the
+# sid cookie max-age.
+RID_COOKIE = "rid"
+RID_COOKIE_MAX_AGE = 30 * 24 * 3600
+
 SESSION_SLIDING_IDLE = timedelta(days=30)
 SESSION_REFRESH_INTERVAL = timedelta(hours=24)
 
@@ -279,6 +284,33 @@ def _reject_to_login() -> RedirectResponse:
     resp = RedirectResponse(NOT_UNSAM_REDIRECT, status_code=302)
     resp.delete_cookie(STATE_COOKIE, path="/")
     return resp
+
+
+def _set_rid_cookie(resp: Response, anon_id: str) -> None:
+    resp.set_cookie(
+        RID_COOKIE,
+        anon_id,
+        max_age=RID_COOKIE_MAX_AGE,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        path="/",
+    )
+
+
+def reader_key(user_ctx: UserCtx, request: Request, response: Response) -> str:
+    """Resolve the lectura dedup identity (module map §core/auth).
+
+    Authenticated → `u:{user_id}` (no cookie). Invitado → the `rid` cookie,
+    minting an opaque random one onto `response` when absent → `a:{anon_id}`.
+    """
+    if user_ctx.user_id is not None:
+        return f"u:{user_ctx.user_id}"
+    anon_id = request.cookies.get(RID_COOKIE)
+    if anon_id is None:
+        anon_id = secrets.token_urlsafe(16)
+        _set_rid_cookie(response, anon_id)
+    return f"a:{anon_id}"
 
 
 def _set_sid_cookie(resp: Response, sid: bytes) -> None:
