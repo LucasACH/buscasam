@@ -34,6 +34,31 @@ services:
       timeout: 3s
       retries: 60
 
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: buscasam-backend
+    container_name: buscasam-worker
+    profiles: ["worker"]
+    command: ["procrastinate", "--app=buscasam.core.jobs.app", "worker"]
+    env_file: .env
+    environment:
+      # localhost in .env resolves to the container itself; rewrite to the
+      # compose network (db, tei) and the host (ollama runs outside this file).
+      BUSCASAM_DATABASE_URL: postgresql+psycopg://buscasam:buscasam@db:5432/buscasam
+      BUSCASAM_TEI_URL: http://tei:80
+      BUSCASAM_METADATA_LLM_URL: http://host.docker.internal:11434
+      BUSCASAM_BLOB_ROOT: /app/var/blobs
+    volumes:
+      # Shared with the host-run backend so both see the same content-addressed store.
+      - ./var/blobs:/app/var/blobs
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+
   tunnel:
     image: cloudflare/cloudflared:latest
     container_name: buscasam-tunnel
