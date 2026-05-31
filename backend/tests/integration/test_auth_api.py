@@ -216,7 +216,12 @@ async def test_callback_happy_path(client, issuer, session):
         },
     ],
 )
-async def test_callback_rejected_claims_no_db_writes(client, issuer, session, claims):
+async def test_callback_rejected_claims_no_db_writes(
+    client, issuer, session, claims, monkeypatch
+):
+    # Outside prod, a verified non-UNSAM email logs in as estudiante (508cf8c);
+    # the rejection contract this test asserts only holds in prod.
+    monkeypatch.setattr(settings, "env", "prod")
     users_before = (
         await session.execute(text("SELECT count(*) FROM users"))
     ).scalar_one()
