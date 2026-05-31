@@ -37,6 +37,7 @@ type DetailFields = {
   palabras_clave: string[];
   archivo_principal: MainFile;
   adjuntos: Attachment[];
+  owner_email: string | null;
   // Omitted from the API JSON for non-managers (no-leak contract).
   versions?: DetailVersion[];
   manageable: boolean;
