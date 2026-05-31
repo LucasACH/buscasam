@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     env: Literal["dev", "test", "prod"] = "dev"
 
     database_url: str = "postgresql+psycopg://buscasam:buscasam@localhost:5432/buscasam"
+    db_pool_size: int = 20
+    db_max_overflow: int = 10
+    db_pool_recycle: int = 1800
     tei_url: str = "http://localhost:8080"
     # ADR-0002 §5: single source for the HF model + vendored tokenizer revision.
     embedding_model_revision: str = Field(default_factory=_vendored_tokenizer_revision)
