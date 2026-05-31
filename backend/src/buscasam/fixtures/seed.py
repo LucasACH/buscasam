@@ -96,13 +96,21 @@ async def insert_chunk(
 async def seed(conn: AsyncConnection) -> None:
     embedding_table = fixture_embeddings.load()
 
+    # Reconcile the UNSAM áreas subtree: drop the managed escuela roots first so
+    # renamed/merged paths from a previous seed don't linger, then re-insert.
+    area_rows = unsam_areas.load()
+    roots = [r["area_path"] for r in area_rows if "." not in r["area_path"]]
+    await conn.execute(
+        text("DELETE FROM areas WHERE area_path <@ ANY(CAST(:roots AS ltree[]))"),
+        {"roots": roots},
+    )
     await conn.execute(
         text(
             "INSERT INTO areas (area_path, display_name) "
             "VALUES (:area_path, :display_name) "
             "ON CONFLICT (area_path) DO NOTHING"
         ),
-        unsam_areas.load(),
+        area_rows,
     )
 
     for doc in DOCUMENTS:
