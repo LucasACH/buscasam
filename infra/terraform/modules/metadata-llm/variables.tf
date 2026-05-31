@@ -1,21 +1,13 @@
-variable "project_id" {
-  type        = string
-  description = "GCP project that hosts the metadata-LLM VM."
-}
-
-variable "region" {
-  type    = string
-  default = "us-central1"
-}
-
 variable "zone" {
-  type    = string
-  default = "us-central1-a"
+  type = string
 }
 
 variable "network" {
-  type    = string
-  default = "default"
+  type = string
+}
+
+variable "subnetwork" {
+  type = string
 }
 
 variable "model" {

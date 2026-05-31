@@ -1,0 +1,19 @@
+# Copy to terraform.tfvars and fill in. Secret values go in secrets.auto.tfvars
+# (gitignored) once the secrets module lands.
+
+project_id = "YOUR_GCP_PROJECT"
+region     = "us-central1"
+zone       = "us-central1-a"
+
+server_name = "buscasam.org"
+github_repo = "LucasACH/buscasam"
+
+# Release ref to deploy on first boot (must exist in Artifact Registry + GCS).
+app_version = "v0.1.0"
+
+# Pinned HF embedding revision (ADR-0002). Pre-stage the model before deploy.
+embedding_model_revision = ""
+
+# Cost: leave the GPU VM off until you backfill metadata (scale-to-zero).
+metadata_llm_running = false
+
