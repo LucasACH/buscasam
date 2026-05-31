@@ -1,8 +1,9 @@
-import { FileText } from "lucide-react";
+import { FileText, Mail } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { CoauthorInvitationBanner } from "@/components/CoauthorInvitationBanner";
+import { CopyEmailButton } from "@/components/CopyEmailButton";
 import { ReportDialog } from "@/components/ReportDialog";
 import { StatusBadge } from "@/components/StatusBadge";
 import { VersionsPanel } from "@/components/VersionsPanel";
@@ -169,7 +170,7 @@ function DetailView({
           <RelatedRail docId={docId} />
         </header>
 
-        <aside className="flex flex-col gap-4 lg:sticky lg:top-[84px]">
+        <aside className="flex flex-col gap-4 lg:sticky lg:top-[84px] lg:max-h-[calc(100dvh-108px)] lg:overflow-y-auto">
           {detail.manageable && (
             <Button asChild className="w-full">
               <Link href={`/mis-trabajos/${docId}/editar`}>
@@ -245,6 +246,30 @@ function DetailView({
             versions={detail.versions}
             canManage={detail.manageable}
           />
+
+          {detail.owner_email && (
+            <section className="border-border bg-card overflow-hidden rounded-lg border">
+              <div className="border-border flex items-center justify-between gap-3 border-b px-5 py-3.5">
+                <h2 className="text-sm font-semibold whitespace-nowrap">
+                  Contacto
+                </h2>
+              </div>
+              <div className="p-3">
+                <div className="flex items-center gap-3 rounded-md border border-border bg-card p-3">
+                  <div className="bg-primary-tint text-primary grid size-9 flex-none place-items-center rounded-md">
+                    <Mail size={18} />
+                  </div>
+                  <a
+                    href={`mailto:${detail.owner_email}`}
+                    className="min-w-0 flex-1 truncate text-sm font-medium hover:underline"
+                  >
+                    {detail.owner_email}
+                  </a>
+                  <CopyEmailButton email={detail.owner_email} />
+                </div>
+              </div>
+            </section>
+          )}
 
           {!detail.manageable && <ReportDialog docId={docId} />}
         </aside>

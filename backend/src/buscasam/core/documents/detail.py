@@ -59,6 +59,7 @@ class DetailRow:
     palabras_clave: list[str]
     archivo_principal: MainFile
     adjuntos: list[Attachment]
+    owner_email: str | None
     versions: list[DetailVersion] | None
     manageable: bool
 
@@ -103,7 +104,10 @@ async def get_detail(
                 "                   'original_filename', att.original_filename, "
                 "                   'bytes', att.bytes, "
                 "                   'mime', att.mime) ORDER BY att.id), '[]'::json) "
-                "        FROM document_attachments att WHERE att.doc_id = d.id) AS adjuntos "
+                "        FROM document_attachments att WHERE att.doc_id = d.id) AS adjuntos, "
+                "       (SELECT COALESCE(o.email, ou.email) "
+                "        FROM document_authors o LEFT JOIN users ou ON ou.id = o.user_id "
+                "        WHERE o.doc_id = d.id AND o.status = 'owner' LIMIT 1) AS owner_email "
                 "FROM documents d "
                 "JOIN document_versions dv "
                 "  ON dv.doc_id = d.id AND dv.is_current "
@@ -155,6 +159,7 @@ async def get_detail(
             )
             for a in row["adjuntos"]
         ],
+        owner_email=row["owner_email"],
         versions=versions,
         manageable=manageable,
     )

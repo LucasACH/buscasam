@@ -86,6 +86,7 @@ class _DetailFields(BaseModel):
     palabras_clave: list[str]
     archivo_principal: MainFileDTO
     adjuntos: list[AttachmentDTO]
+    owner_email: str | None
     versions: list[DetailVersionDTO] | None = None
     manageable: bool
 
@@ -155,6 +156,7 @@ def _detail_fields(detail: DetailRow) -> dict:
             )
             for a in detail.adjuntos
         ],
+        owner_email=detail.owner_email,
         versions=(
             [
                 DetailVersionDTO(

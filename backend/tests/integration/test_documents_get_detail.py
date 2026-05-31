@@ -69,7 +69,7 @@ async def test_get_detail_returns_publico_reader_dto_for_invitado(session):
         area_path="escuela_ciencia.carrera_informatica",
         tipo="tesis",
     )
-    owner_id = await make_user(session, name="Ada Lovelace")
+    owner_id = await make_user(session, name="Ada Lovelace", email="ada@unsam.edu.ar")
     await make_document_author(
         session, doc_id, user_id=owner_id, status="owner", display_name="Ada Lovelace"
     )
@@ -102,6 +102,8 @@ async def test_get_detail_returns_publico_reader_dto_for_invitado(session):
     assert [a.display_name for a in detail.autores] == ["Ada Lovelace", "Grace Hopper"]
     assert detail.autores[0].user_id == owner_id
     assert detail.autores[1].user_id is None
+    # Owner email exposed for the public Contacto section.
+    assert detail.owner_email == "ada@unsam.edu.ar"
     # archivo_principal reflects the published current version row.
     assert detail.archivo_principal.original_filename == "tesis.pdf"
     assert detail.archivo_principal.size_bytes == 2048
