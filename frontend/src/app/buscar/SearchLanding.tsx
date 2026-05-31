@@ -1,14 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { ArrowUp } from "lucide-react";
 
+import { useAreaLabel } from "@/lib/useAreas";
 import { useUser } from "@/lib/useUser";
 
 import { TIPO_LABEL } from "./ResultCard";
 import type { FilterPatch } from "./SearchFilters";
 import type { Tipo } from "./useSearch";
-import { useMostRead } from "./useMostRead";
+import { useMostRead, type PopularResult } from "./useMostRead";
 
 const QUICK_TIPOS: Tipo[] = [
   "tesis",
@@ -37,13 +39,54 @@ function HomeMark() {
   );
 }
 
+function MostReadRowSkeleton() {
+  return (
+    <div className="border-border flex w-full items-center gap-3.5 border-b py-2.5 last:border-b-0">
+      <span className="w-5 flex-none" />
+      <span className="min-w-0 flex-1">
+        <span className="bg-muted block h-[15px] w-[62%] animate-pulse rounded-sm" />
+        <span className="bg-muted mt-1.5 block h-[11px] w-[40%] animate-pulse rounded-sm" />
+      </span>
+      <span className="bg-muted h-[11px] w-14 flex-none animate-pulse rounded-sm" />
+    </div>
+  );
+}
+
+function MostReadRow({ doc, rank }: { doc: PopularResult; rank: number }) {
+  const year = doc.fecha ? doc.fecha.slice(0, 4) : null;
+  const tipo = TIPO_LABEL[doc.tipo] ?? doc.tipo;
+  const area = useAreaLabel(doc.area_path, true);
+  const meta = [area, tipo, year].filter(Boolean) as string[];
+  return (
+    <Link
+      href={`/docs/${doc.doc_id}`}
+      className="group border-border flex w-full items-center gap-3.5 border-b py-2.5 last:border-b-0"
+    >
+      <span className="text-muted-foreground/50 w-5 flex-none text-right text-[13px] tabular-nums">
+        {rank}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="group-hover:text-primary block truncate text-[14.5px] font-medium tracking-[-0.01em]">
+          {doc.titulo}
+        </span>
+        <span className="text-muted-foreground mt-0.5 block truncate text-[12.5px]">
+          {meta.join(" · ")}
+        </span>
+      </span>
+      <span className="text-muted-foreground/70 flex-none text-[12.5px] whitespace-nowrap tabular-nums">
+        {doc.reads} lecturas
+      </span>
+    </Link>
+  );
+}
+
 export function SearchLanding({
   onApply,
 }: {
   onApply: (patch: FilterPatch & { q?: string }) => void;
 }) {
   const { user, isInvitado } = useUser();
-  const { publicTotal } = useMostRead();
+  const { publicTotal, results, isLoading } = useMostRead();
   const [q, setQ] = useState("");
 
   const first = user?.name ? user.name.split(" ")[0] : null;
@@ -130,6 +173,27 @@ export function SearchLanding({
             Ver más recientes
           </button>
         </div>
+
+        {(isLoading || results.length > 0) && (
+          <section className="mt-12 w-full">
+            <h2 className="text-muted-foreground mb-2 text-[13px] font-medium tracking-[-0.01em]">
+              Más leídos esta semana
+            </h2>
+            {isLoading ? (
+              <div className="flex flex-col">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <MostReadRowSkeleton key={i} />
+                ))}
+              </div>
+            ) : (
+              <ol className="flex flex-col">
+                {results.map((doc, i) => (
+                  <MostReadRow key={doc.doc_id} doc={doc} rank={i + 1} />
+                ))}
+              </ol>
+            )}
+          </section>
+        )}
       </div>
     </main>
   );
