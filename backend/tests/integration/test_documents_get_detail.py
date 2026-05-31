@@ -96,6 +96,8 @@ async def test_get_detail_returns_publico_reader_dto_for_invitado(session):
     assert detail.visibility == "publico"
     assert detail.palabras_clave == ["busqueda", "hibrida"]
     assert detail.manageable is False
+    # No-leak contract: a non-manager reader never sees the versions history.
+    assert detail.versions is None
     # Author order = document_authors row order; external rows carry no user_id.
     assert [a.display_name for a in detail.autores] == ["Ada Lovelace", "Grace Hopper"]
     assert detail.autores[0].user_id == owner_id
@@ -265,4 +267,71 @@ async def test_get_detail_versions_excludes_never_published_candidate(session):
     assert detail is not None and detail.versions is not None
     assert [(v.n, v.original_filename) for v in detail.versions] == [
         (1, "published.pdf"),
+    ]
+
+
+async def test_get_detail_manageable_branch_populates_versions_for_accepted_coauthor(
+    session,
+):
+    """Accepted coautor is a manager too (ADR-0010 §8): manageable is True and
+    the versions history is populated, same as the owner branch."""
+    doc_id = await make_document(session, visibility="privado")
+    owner_id = await make_user(session, name="Owner")
+    coauthor_id = await make_user(session, name="Coautor")
+    await make_document_author(session, doc_id, user_id=owner_id, status="owner")
+    await make_document_author(
+        session, doc_id, user_id=coauthor_id, status="accepted", display_name="Coautor"
+    )
+    await session.execute(
+        text(
+            "INSERT INTO document_versions "
+            "(doc_id, version_no, sha256, original_filename, bytes, mime, "
+            " index_status, is_current, first_published_at) VALUES "
+            "(:d, 1, decode('11', 'hex'), 'v1.pdf', 100, 'application/pdf', "
+            " 'indexed', true, now())"
+        ),
+        {"d": doc_id},
+    )
+    await session.commit()
+
+    detail = await documents.get_detail(session, doc_id, _student(coauthor_id))
+
+    assert detail is not None
+    assert detail.manageable is True
+    assert detail.versions is not None
+    assert [(v.n, v.original_filename) for v in detail.versions] == [(1, "v1.pdf")]
+
+
+async def test_get_detail_orders_multiple_authors_and_attachments(session):
+    """The aggregated autores/adjuntos preserve document_authors /
+    document_attachments id order regardless of how json_agg batches them."""
+    doc_id = await make_document(session, visibility="publico")
+    owner_id = await make_user(session, name="Author A")
+    await make_document_author(
+        session, doc_id, user_id=owner_id, status="owner", display_name="Author A"
+    )
+    await make_document_author(
+        session, doc_id, user_id=None, status="external", display_name="Author B"
+    )
+    await make_document_author(
+        session, doc_id, user_id=None, status="external", display_name="Author C"
+    )
+    await _seed_current_version(session, doc_id)
+    await _seed_attachment(session, doc_id, original_filename="a.csv", sha_hex="a1" * 32)
+    await _seed_attachment(session, doc_id, original_filename="b.pdf", sha_hex="a2" * 32)
+    await _seed_attachment(session, doc_id, original_filename="c.txt", sha_hex="a3" * 32)
+    await session.commit()
+
+    detail = await documents.get_detail(session, doc_id, GUEST)
+
+    assert detail is not None
+    assert [a.display_name for a in detail.autores] == [
+        "Author A",
+        "Author B",
+        "Author C",
+    ]
+    assert [att.original_filename for att in detail.adjuntos] == [
+        "a.csv",
+        "b.pdf",
+        "c.txt",
     ]
