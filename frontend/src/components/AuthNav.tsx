@@ -46,7 +46,7 @@ function NavLink({
     >
       {children}
       {active && (
-        <span className="bg-primary absolute -bottom-[14px] left-0 right-0 h-0.5 rounded-full" />
+        <span className="bg-primary absolute right-0 -bottom-[14px] left-0 h-0.5 rounded-full" />
       )}
     </Link>
   );
@@ -61,12 +61,12 @@ export function AuthNav() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-5" aria-hidden>
-        <span className="h-4 w-20 animate-pulse rounded bg-neutral-200" />
+      <div className="flex items-center gap-3 sm:gap-5" aria-hidden>
+        <span className="hidden h-4 w-20 animate-pulse rounded bg-neutral-200 sm:block" />
         <span className="size-5 animate-pulse rounded-full bg-neutral-200" />
         <span className="flex items-center gap-2 py-1 pr-1.5 pl-1">
           <span className="size-8 animate-pulse rounded-full bg-neutral-200" />
-          <span className="flex flex-col gap-1">
+          <span className="hidden flex-col gap-1 sm:flex">
             <span className="h-3.5 w-28 animate-pulse rounded bg-neutral-200" />
             <span className="h-2.5 w-16 animate-pulse rounded bg-neutral-200" />
           </span>
@@ -80,10 +80,12 @@ export function AuthNav() {
       <nav className="flex items-center gap-2">
         <Link
           href={`/login?next=${encodeURIComponent(pathname)}`}
-          className="bg-primary text-primary-foreground hover:bg-primary-hover inline-flex h-[38px] items-center gap-2 rounded-lg px-4 text-sm font-medium tracking-tight transition-colors"
+          className="bg-primary text-primary-foreground hover:bg-primary-hover inline-flex h-[38px] shrink-0 items-center gap-2 rounded-lg px-4 text-sm font-medium tracking-tight whitespace-nowrap transition-colors"
         >
           <GoogleIcon size={17} variant="mono" />
-          Iniciar sesión con UNSAM
+          <span>
+            Iniciar sesión <span className="hidden sm:inline">con UNSAM</span>
+          </span>
         </Link>
       </nav>
     );
@@ -103,11 +105,17 @@ export function AuthNav() {
   return (
     <nav className="flex items-center gap-3 sm:gap-5">
       <div className="hidden items-center gap-5 sm:flex">
-        <NavLink href="/mis-trabajos" active={pathname.startsWith("/mis-trabajos")}>
+        <NavLink
+          href="/mis-trabajos"
+          active={pathname.startsWith("/mis-trabajos")}
+        >
           Mis trabajos
         </NavLink>
         {user.role === "docente" && (
-          <NavLink href="/moderacion" active={pathname.startsWith("/moderacion")}>
+          <NavLink
+            href="/moderacion"
+            active={pathname.startsWith("/moderacion")}
+          >
             Moderación
           </NavLink>
         )}
@@ -122,7 +130,7 @@ export function AuthNav() {
             {user.picture_url ? (
               <Image
                 src={user.picture_url}
-                alt=""
+                alt={user.name}
                 width={32}
                 height={32}
                 className="size-8 rounded-full"
@@ -130,7 +138,8 @@ export function AuthNav() {
               />
             ) : (
               <span
-                aria-hidden
+                role="img"
+                aria-label={user.name}
                 className="bg-primary-tint text-primary-hover inline-flex size-8 items-center justify-center rounded-full text-[13px] font-semibold"
               >
                 {user.name.slice(0, 1).toUpperCase()}
@@ -158,7 +167,7 @@ export function AuthNav() {
             <Link
               href="/mis-trabajos"
               onClick={() => setMenuOpen(false)}
-              className="text-foreground hover:bg-neutral-100 block rounded-md px-2.5 py-2 text-sm transition-colors"
+              className="text-foreground block rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-neutral-100"
             >
               Mis trabajos
             </Link>
@@ -166,7 +175,7 @@ export function AuthNav() {
               <Link
                 href="/moderacion"
                 onClick={() => setMenuOpen(false)}
-                className="text-foreground hover:bg-neutral-100 block rounded-md px-2.5 py-2 text-sm transition-colors"
+                className="text-foreground block rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-neutral-100"
               >
                 Moderación
               </Link>
@@ -176,7 +185,7 @@ export function AuthNav() {
             <button
               type="button"
               onClick={onLogout}
-              className="text-foreground hover:bg-neutral-100 flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition-colors"
+              className="text-foreground flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition-colors hover:bg-neutral-100"
             >
               <LogOut className="size-4" />
               Cerrar sesión
