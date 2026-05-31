@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     # ADR-0002 §5: single source for the HF model + vendored tokenizer revision.
     embedding_model_revision: str = Field(default_factory=_vendored_tokenizer_revision)
     min_semantic_similarity: float = 0.78
+    # Trigram word_similarity floor for the fuzzy fallback (typo tolerance) that
+    # runs only when exact retrieval returns 0 rows. Lower => more permissive.
+    fuzzy_word_similarity_threshold: float = 0.3
     embed_query_timeout_s: float = 0.5
     # ADR-0007 §12: per-row provenance stamp for the extraction pipeline.
     extract_pipeline_version: str = "extract-v2"

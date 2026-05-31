@@ -9,6 +9,12 @@ def test_min_semantic_similarity_calibrated_to_committed_value():
     assert s.min_semantic_similarity == 0.78
 
 
+def test_fuzzy_word_similarity_threshold_default():
+    s = Settings()
+    assert 0.0 < s.fuzzy_word_similarity_threshold < 1.0
+    assert s.fuzzy_word_similarity_threshold == 0.3
+
+
 def test_tei_url_default():
     s = Settings()
     assert s.tei_url == "http://localhost:8080"

@@ -159,6 +159,19 @@ function BuscarPageInner() {
             <span className="text-destructive">
               No se pudo completar la búsqueda. Reintentá en unos segundos.
             </span>
+          ) : data?.fuzzy_fallback ? (
+            <>
+              Sin coincidencias exactas. Mostrando{" "}
+              <span className="text-foreground font-semibold">{total}</span>{" "}
+              resultado{total === 1 ? "" : "s"} aproximado
+              {total === 1 ? "" : "s"}
+              {q && (
+                <>
+                  {" "}
+                  para «<span className="text-foreground">{q}</span>»
+                </>
+              )}
+            </>
           ) : (
             <>
               <span className="text-foreground font-semibold">{total}</span>{" "}

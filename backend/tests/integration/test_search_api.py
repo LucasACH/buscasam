@@ -472,6 +472,31 @@ async def test_search_endpoint_falls_back_to_lexical_on_tei_5xx(client, session)
     assert any(getattr(rec, "fallback", False) is True for rec in fallback_records)
 
 
+async def test_search_endpoint_fuzzy_fallback_on_typo(client, session):
+    """No lexical match for a typo → trigram fallback surfaces the doc + flag."""
+    doc_id = await make_document(
+        session,
+        titulo="Multa",
+        abstract="Descargo ante un acta de comprobación.",
+    )
+    await make_chunk(
+        session,
+        doc_id,
+        is_headline=True,
+        body_text="Francisco presenta un descargo ante un acta de comprobación.",
+    )
+    await session.commit()
+
+    exact = await client.get("/api/search", params={"q": "descargo"})
+    assert exact.json()["fuzzy_fallback"] is False
+
+    r = await client.get("/api/search", params={"q": "descrago"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["fuzzy_fallback"] is True
+    assert [row["doc_id"] for row in data["results"]] == [doc_id]
+
+
 async def test_search_endpoint_recientes_orders_by_fecha_desc(client, session):
     """orden=recientes returns matching docs sorted fecha desc with exact total."""
     old_id = await make_document(

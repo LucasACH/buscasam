@@ -1232,6 +1232,11 @@ export interface components {
              * @default false
              */
             lexical_fallback: boolean;
+            /**
+             * Fuzzy Fallback
+             * @default false
+             */
+            fuzzy_fallback: boolean;
         };
         /** SitemapEntryDTO */
         SitemapEntryDTO: {

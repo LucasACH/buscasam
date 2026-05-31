@@ -49,6 +49,7 @@ class SearchResponse(BaseModel):
     saturated: bool
     unfiltered_total: int | None = None
     lexical_fallback: bool = False
+    fuzzy_fallback: bool = False
 
 
 @router.get("/search", response_model=SearchResponse)
@@ -90,6 +91,7 @@ async def search_endpoint(
         ),
         user_ctx=user_ctx,
         min_semantic_similarity=settings.min_semantic_similarity,
+        fuzzy_word_similarity_threshold=settings.fuzzy_word_similarity_threshold,
     )
     return SearchResponse(
         results=[ResultDTO(**asdict(r)) for r in result.rows],
@@ -97,4 +99,5 @@ async def search_endpoint(
         saturated=result.saturated,
         unfiltered_total=result.unfiltered_total,
         lexical_fallback=result.lexical_fallback,
+        fuzzy_fallback=result.fuzzy_fallback,
     )
