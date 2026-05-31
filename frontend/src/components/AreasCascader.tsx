@@ -1,20 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Check, ChevronLeft, ChevronRight, MapPin, X } from "lucide-react";
 
-import { api } from "@/api/client";
-import type { components } from "@/api/schema";
 import { cn } from "@/lib/utils";
-
-type Area = components["schemas"]["AreaDTO"];
-
-async function fetchAreas(): Promise<Area[]> {
-  const { data, error } = await api.GET("/api/areas");
-  if (error) throw error;
-  return data ?? [];
-}
+import { useAreas } from "@/lib/useAreas";
 
 function levelOf(area_path: string): number {
   return area_path.split(".").length;
@@ -34,7 +24,7 @@ export type AreasCascaderProps = {
 // Drill-down Escuela › Carrera › Materia cascader. Only leaves (the deepest
 // level under a branch) are selectable; branch rows drill into their children.
 export function AreasCascader({ onChange, value }: AreasCascaderProps) {
-  const { data } = useQuery({ queryKey: ["areas"], queryFn: fetchAreas });
+  const { data } = useAreas();
   const rows = data ?? [];
   const byPath = new Map(rows.map((a) => [a.area_path, a.display_name]));
 

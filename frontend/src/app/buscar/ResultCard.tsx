@@ -1,5 +1,10 @@
 import Link from "next/link";
 
+import { TIPO_LABEL, VISIBILITY_LABEL } from "@/lib/labels";
+
+// Re-exported so existing search consumers keep importing it from here.
+export { TIPO_LABEL };
+
 type AuthorDisplay = {
   display_name: string;
   user_id: number | null;
@@ -16,22 +21,6 @@ export type ResultCardData = {
   snippet_is_html?: boolean;
   visibility?: string;
   autores?: AuthorDisplay[];
-};
-
-const VISIBILITY_LABEL: Record<string, string> = {
-  interno: "Interno",
-  privado: "Privado",
-};
-
-export const TIPO_LABEL: Record<string, string> = {
-  tesis: "Tesis",
-  paper: "Paper",
-  trabajo_practico: "Trabajo práctico",
-  proyecto_investigacion: "Proyecto de investigación",
-  monografia: "Monografía",
-  ponencia_poster: "Ponencia / Póster",
-  apunte_resumen: "Apunte / Resumen",
-  informe_catedra: "Informe de cátedra",
 };
 
 function truncate(text: string | null | undefined, max: number): string {
