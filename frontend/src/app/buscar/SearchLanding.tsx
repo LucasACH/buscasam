@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowUp } from "lucide-react";
 
@@ -89,6 +89,25 @@ export function SearchLanding({
   const { publicTotal, results, isLoading } = useMostRead();
   const { isLoading: areasLoading } = useAreas();
   const [q, setQ] = useState("");
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [dodge, setDodge] = useState({ x: 0, y: 0 });
+  const empty = q.trim() === "";
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    const btn = btnRef.current;
+    if (!btn || !empty) return;
+    const r = btn.getBoundingClientRect();
+    const dx = e.clientX - (r.left + r.width / 2);
+    const dy = e.clientY - (r.top + r.height / 2);
+    const dist = Math.hypot(dx, dy);
+    const R = 90;
+    if (dist < R) {
+      const k = ((R - dist) / (dist || 1)) * 0.9;
+      setDodge({ x: -dx * k, y: -dy * k });
+    } else if (dodge.x || dodge.y) {
+      setDodge({ x: 0, y: 0 });
+    }
+  };
 
   const showSkeleton = isLoading || areasLoading;
 
@@ -120,7 +139,11 @@ export function SearchLanding({
             submit();
           }}
         >
-          <div className="border-border-strong bg-card focus-within:border-primary focus-within:ring-primary-tint flex min-h-[118px] w-full flex-col justify-between rounded-[18px] border py-4 pr-4 pb-3 pl-[18px] shadow-[0_1px_2px_rgba(23,23,23,0.04),0_12px_32px_-16px_rgba(23,23,23,0.18)] transition focus-within:ring-4">
+          <div
+            onPointerMove={onPointerMove}
+            onPointerLeave={() => setDodge({ x: 0, y: 0 })}
+            className="border-border-strong bg-card focus-within:border-primary focus-within:ring-primary-tint flex min-h-[118px] w-full flex-col justify-between rounded-[18px] border py-4 pr-4 pb-3 pl-[18px] shadow-[0_1px_2px_rgba(23,23,23,0.04),0_12px_32px_-16px_rgba(23,23,23,0.18)] transition focus-within:ring-4"
+          >
             <textarea
               autoFocus
               rows={1}
@@ -144,9 +167,15 @@ export function SearchLanding({
                 <span>para buscar</span>
               </span>
               <button
+                ref={btnRef}
                 type="submit"
                 aria-label="Buscar"
-                className="bg-primary hover:bg-primary-hover grid size-10 flex-none place-items-center rounded-[11px] text-white shadow-[0_3px_8px_-2px_rgba(29,78,216,0.45)] transition hover:-translate-y-px active:scale-95"
+                style={{
+                  transform: empty
+                    ? `translate(${dodge.x}px, ${dodge.y}px)`
+                    : undefined,
+                }}
+                className="bg-primary hover:bg-primary-hover grid size-10 flex-none place-items-center rounded-[11px] text-white shadow-[0_3px_8px_-2px_rgba(29,78,216,0.45)] transition-[transform,background-color] duration-150 ease-out hover:-translate-y-px active:scale-95"
               >
                 <ArrowUp className="size-[19px]" />
               </button>
