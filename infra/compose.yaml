@@ -154,7 +154,7 @@ services:
   migrate:
     build:
       context: ../backend
-    command: ["bash", "-c", "alembic upgrade head && procrastinate schema --apply"]
+    command: ["bash", "-c", "alembic upgrade head && procrastinate --app=buscasam.core.jobs.app schema --apply"]
     environment: *backend_env
     depends_on:
       db:
