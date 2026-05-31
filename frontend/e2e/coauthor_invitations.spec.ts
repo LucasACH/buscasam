@@ -9,9 +9,9 @@ import { expect, test } from "@playwright/test";
 // isolates the new invitee-side UI: CoauthorInviteItem buttons +
 // useCoauthorInvitation invalidation.
 //
-// unread_count is kept at 0 so opening the bell does not trigger the bell's
-// (pre-existing, out-of-slice) mark-all-read-on-open, keeping the test focused
-// on the accept mutation rather than the bulk-mark path.
+// Opening the bell no longer auto-marks notifications read (that would hide the
+// unread-gated invite actions before the user can act); reads happen only via
+// the explicit "Marcar como leída" / bulk controls.
 
 const INVITEE = {
   user_id: 11,

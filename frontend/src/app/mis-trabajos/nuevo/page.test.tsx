@@ -64,17 +64,17 @@ async function fillRequiredFields() {
   const user = userEvent.setup();
   await user.type(screen.getByLabelText(/título/i), "Mi tesis sobre BD");
 
-  // Cascade through Escuela → Carrera → Materia.
-  const escuela = await screen.findByRole("combobox", { name: /escuela/i });
-  await waitFor(() => expect(escuela).toHaveTextContent(/Ciencia/));
-  await user.selectOptions(escuela, "escuela_ciencia");
-  await user.selectOptions(
-    await screen.findByRole("combobox", { name: /carrera/i }),
-    "escuela_ciencia.carrera_informatica",
+  // Drill through Escuela → Carrera → Materia.
+  await user.click(
+    await screen.findByRole("button", {
+      name: /Escuela de Ciencia y Tecnología/,
+    }),
   );
-  await user.selectOptions(
-    await screen.findByRole("combobox", { name: /materia/i }),
-    "escuela_ciencia.carrera_informatica.materia_bd",
+  await user.click(
+    await screen.findByRole("button", { name: /Ing\. Informática/ }),
+  );
+  await user.click(
+    await screen.findByRole("button", { name: /Bases de Datos/ }),
   );
 
   await user.selectOptions(screen.getByLabelText(/tipo/i), "tesis");

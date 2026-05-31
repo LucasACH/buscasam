@@ -8,9 +8,11 @@ export function RelatedRail({ docId }: { docId: number }) {
   const { related } = useRelated(docId);
   if (!related || related.length === 0) return null;
   return (
-    <section className="mt-10">
-      <h2 className="text-sm font-medium">Trabajos relacionados</h2>
-      <div className="mt-3 flex flex-col gap-3">
+    <section className="mt-8 border-t border-border pt-6">
+      <h2 className="text-[19px] font-semibold tracking-tight">
+        Trabajos relacionados
+      </h2>
+      <div className="mt-4 flex flex-col gap-3">
         {related.map((r) => (
           <ResultCard
             key={r.doc_id}

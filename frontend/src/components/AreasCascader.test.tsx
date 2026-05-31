@@ -29,121 +29,104 @@ describe("AreasCascader", () => {
     cleanup();
   });
 
-  it("fetches /api/areas and renders Escuela options", async () => {
+  it("fetches /api/areas and lists the escuelas", async () => {
     wrap(<AreasCascader onChange={() => {}} />);
 
-    await waitFor(() => {
-      const escuela = screen.getByRole("combobox", { name: /escuela/i });
-      expect(escuela).toHaveTextContent(/Escuela de Ciencia y Tecnología/);
-    });
-    const escuela = screen.getByRole("combobox", { name: /escuela/i });
-    expect(escuela).toHaveTextContent(/Escuela de Humanidades/);
+    expect(
+      await screen.findByRole("button", {
+        name: /Escuela de Ciencia y Tecnología/,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Elegí una Escuela")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Escuela de Humanidades/ }),
+    ).toBeInTheDocument();
   });
 
-  it("reveals Carrera options scoped to the selected Escuela", async () => {
-    const user = userEvent.setup();
-
-    wrap(<AreasCascader onChange={() => {}} />);
-
-    await waitFor(() =>
-      expect(
-        screen.getByRole("combobox", { name: /escuela/i }),
-      ).toHaveTextContent(/Ciencia/),
-    );
-
-    expect(screen.queryByRole("combobox", { name: /carrera/i })).toBeNull();
-
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: /escuela/i }),
-      "escuela_ciencia",
-    );
-
-    const carrera = await screen.findByRole("combobox", { name: /carrera/i });
-    expect(carrera).toHaveTextContent(/Ing\. Informática/);
-  });
-
-  it("reveals Materia options scoped to the selected Carrera", async () => {
-    const user = userEvent.setup();
-
-    wrap(<AreasCascader onChange={() => {}} />);
-
-    await waitFor(() =>
-      expect(
-        screen.getByRole("combobox", { name: /escuela/i }),
-      ).toHaveTextContent(/Ciencia/),
-    );
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: /escuela/i }),
-      "escuela_ciencia",
-    );
-    await user.selectOptions(
-      await screen.findByRole("combobox", { name: /carrera/i }),
-      "escuela_ciencia.carrera_informatica",
-    );
-
-    const materia = await screen.findByRole("combobox", { name: /materia/i });
-    expect(materia).toHaveTextContent(/Bases de Datos/);
-  });
-
-  it("requireLeaf: emits onChange only once Materia is selected and shows error on partial", async () => {
+  it("drills Escuela → Carrera → Materia and emits the leaf path", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-
-    wrap(<AreasCascader requireLeaf onChange={onChange} />);
-
-    await waitFor(() =>
-      expect(
-        screen.getByRole("combobox", { name: /escuela/i }),
-      ).toHaveTextContent(/Ciencia/),
-    );
-
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: /escuela/i }),
-      "escuela_ciencia",
-    );
-
-    // Partial selection: no leaf yet → inline error and no leaf-path emission.
-    expect(await screen.findByText(/Elegí una Materia/)).toBeInTheDocument();
-    expect(onChange).not.toHaveBeenCalledWith(expect.stringContaining("materia_"));
-
-    await user.selectOptions(
-      await screen.findByRole("combobox", { name: /carrera/i }),
-      "escuela_ciencia.carrera_informatica",
-    );
-    expect(screen.getByText(/Elegí una Materia/)).toBeInTheDocument();
-    expect(onChange).not.toHaveBeenCalledWith(expect.stringContaining("materia_"));
-
-    await user.selectOptions(
-      await screen.findByRole("combobox", { name: /materia/i }),
-      "escuela_ciencia.carrera_informatica.materia_bd",
-    );
-
-    await waitFor(() => {
-      expect(onChange).toHaveBeenCalledWith(
-        "escuela_ciencia.carrera_informatica.materia_bd",
-      );
-    });
-    expect(screen.queryByText(/Elegí una Materia/)).toBeNull();
-  });
-
-  it("requireLeaf=false: emits the deepest selected path and never shows the leaf error", async () => {
-    const user = userEvent.setup();
-    const onChange = vi.fn();
-
     wrap(<AreasCascader onChange={onChange} />);
 
-    await waitFor(() =>
-      expect(
-        screen.getByRole("combobox", { name: /escuela/i }),
-      ).toHaveTextContent(/Ciencia/),
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Escuela de Ciencia y Tecnología/,
+      }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /Ing\. Informática/ }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /Bases de Datos/ }),
     );
 
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: /escuela/i }),
-      "escuela_ciencia",
+    expect(onChange).toHaveBeenCalledWith(
+      "escuela_ciencia.carrera_informatica.materia_bd",
+    );
+  });
+
+  it("does not emit until a leaf is selected", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    wrap(<AreasCascader onChange={onChange} />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Escuela de Ciencia y Tecnología/,
+      }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /Ing\. Informática/ }),
+    );
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("selects an escuela that is itself a leaf", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    wrap(<AreasCascader onChange={onChange} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: /Escuela de Humanidades/ }),
+    );
+    expect(onChange).toHaveBeenCalledWith("escuela_humanidades");
+  });
+
+  it("back button returns to the parent level", async () => {
+    const user = userEvent.setup();
+    wrap(<AreasCascader onChange={() => {}} />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Escuela de Ciencia y Tecnología/,
+      }),
+    );
+    expect(await screen.findByRole("button", { name: /Ing\. Informática/ }))
+      .toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Volver/ }));
+    expect(
+      await screen.findByRole("button", {
+        name: /Escuela de Ciencia y Tecnología/,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens at the parent of the selected value and clears via Quitar área", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    wrap(
+      <AreasCascader
+        value="escuela_ciencia.carrera_informatica.materia_bd"
+        onChange={onChange}
+      />,
     );
 
-    await waitFor(() => expect(onChange).toHaveBeenCalledWith("escuela_ciencia"));
-    expect(screen.queryByText(/Elegí una Materia/)).toBeNull();
+    // Opens drilled into the carrera, showing the selected materia.
+    expect(await screen.findByRole("button", { name: /Bases de Datos/ }))
+      .toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Quitar área/ }));
+    expect(onChange).toHaveBeenCalledWith(null);
   });
 });

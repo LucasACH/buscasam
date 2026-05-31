@@ -1,8 +1,10 @@
 "use client";
 
+import { UserPlus } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { Button } from "@/components/ui/button";
 import {
   useCoauthorInvitation,
   type InvitationMutationError,
@@ -45,38 +47,86 @@ export function CoauthorInvitationBanner({
     setFailed(true);
   }
 
+  if (variant === "minimal") {
+    return (
+      <section className="border-primary-tint-2 bg-card w-full max-w-md rounded-[14px] border p-7 text-center shadow-[0_8px_30px_-8px_rgba(23,23,23,0.18)]">
+        <div className="bg-primary-tint text-primary mx-auto grid size-12 place-items-center rounded-lg">
+          <UserPlus size={22} />
+        </div>
+        <div className="text-muted-foreground mt-4 text-[11px] font-semibold tracking-[0.06em] uppercase">
+          Invitación a coautoría
+        </div>
+        <p className="mt-2 text-[15px] leading-relaxed">
+          <span className="font-semibold">{inviter}</span> te invitó como
+          coautor en <span className="font-semibold">«{titulo}»</span>. ¿Aceptar
+          o rechazar?
+        </p>
+        <p className="text-muted-foreground mx-auto mt-2 max-w-[340px] text-sm leading-relaxed">
+          Si aceptás, vas a poder ver y editar este trabajo privado.
+        </p>
+        <div className="mt-5 flex items-center justify-center gap-2">
+          <Button
+            type="button"
+            disabled={busy}
+            onClick={() => run(accept)}
+            className="min-w-[118px]"
+          >
+            Aceptar
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={busy}
+            onClick={() => run(decline)}
+          >
+            Rechazar
+          </Button>
+        </div>
+        {failed && (
+          <p role="alert" className="text-destructive mt-3 text-xs">
+            No se pudo completar la acción. Reintentá.
+          </p>
+        )}
+      </section>
+    );
+  }
+
   return (
-    <section
-      className={
-        variant === "minimal"
-          ? "border-border mx-auto max-w-md rounded-lg border p-5"
-          : "border-border bg-muted/40 mb-6 rounded-lg border p-4"
-      }
-    >
-      <p className="text-sm leading-relaxed">
-        <span className="font-medium">{inviter}</span> te invitó como coautor en{" "}
-        <span className="font-medium">«{titulo}»</span>. ¿Aceptar o rechazar?
-      </p>
-      <div className="mt-3 flex items-center gap-3">
-        <button
+    <section className="border-primary-tint-2 bg-primary-tint mb-6 flex flex-wrap items-center gap-4 rounded-lg border px-[18px] py-3.5">
+      <span className="border-primary-tint-2 bg-card text-primary grid size-9 flex-none place-items-center rounded-md border">
+        <UserPlus size={18} />
+      </span>
+      <div className="min-w-[220px] flex-1">
+        <p className="text-neutral-700 text-sm leading-relaxed">
+          <span className="text-foreground font-semibold">{inviter}</span> te
+          invitó como coautor en{" "}
+          <span className="text-foreground font-semibold">«{titulo}»</span>.
+        </p>
+        <p className="text-primary-hover mt-0.5 text-[11px] font-medium">
+          ¿Aceptar o rechazar?
+        </p>
+      </div>
+      <div className="flex items-center gap-2">
+        <Button
           type="button"
+          size="sm"
           disabled={busy}
           onClick={() => run(accept)}
-          className="bg-primary text-primary-foreground rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-50"
         >
           Aceptar
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          size="sm"
+          variant="ghost"
           disabled={busy}
           onClick={() => run(decline)}
-          className="text-muted-foreground text-sm underline-offset-4 hover:underline disabled:opacity-50"
         >
           Rechazar
-        </button>
+        </Button>
       </div>
       {failed && (
-        <p role="alert" className="text-destructive mt-2 text-xs">
+        <p role="alert" className="text-destructive w-full text-xs">
           No se pudo completar la acción. Reintentá.
         </p>
       )}

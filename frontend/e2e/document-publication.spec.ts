@@ -111,13 +111,9 @@ test("publish happy path: upload → edit → publish → visible to invitado in
   // 1. Upload from /nuevo.
   await page.goto("/mis-trabajos/nuevo");
   await page.getByLabel(/Título/i).fill(TITLE);
-  await page.getByRole("combobox", { name: /Escuela/i }).selectOption("escuela_ciencia");
-  await page
-    .getByRole("combobox", { name: /Carrera/i })
-    .selectOption("escuela_ciencia.carrera_informatica");
-  await page
-    .getByRole("combobox", { name: /Materia/i })
-    .selectOption("escuela_ciencia.carrera_informatica.materia_bd");
+  await page.getByRole("button", { name: /Escuela de Ciencia y Tecnología/ }).click();
+  await page.getByRole("button", { name: /Ing\. Informática/ }).click();
+  await page.getByRole("button", { name: /Bases de Datos/ }).click();
   await page.getByLabel(/Tipo/i).selectOption("tesis");
   await page.getByLabel(/Público/i).check();
   await page.getByLabel(/Archivo principal/i).setInputFiles({
@@ -141,9 +137,10 @@ test("publish happy path: upload → edit → publish → visible to invitado in
   await abstract.fill("Resumen editado por la autora");
   await abstract.blur();
 
-  // 4. Publish → redirected to /mis-trabajos, doc now under Publicados.
+  // 4. Publish → progress overlay holds ~2s + confetti ~1.6s before redirecting
+  //    to /mis-trabajos, doc now under Publicados.
   await publishBtn.click();
-  await expect(page).toHaveURL(/\/mis-trabajos$/);
+  await expect(page).toHaveURL(/\/mis-trabajos$/, { timeout: 10_000 });
   await expect(page.getByRole("link", { name: new RegExp(TITLE) })).toBeVisible();
 
   // 5. An invitado in a second context finds the published doc in /buscar.

@@ -11,6 +11,23 @@ export type NotificationDTO = components["schemas"]["NotificationDTO"];
 export const NOTIFICATIONS_QUERY_KEY = ["notifications"] as const;
 export const UNREAD_COUNT_QUERY_KEY = ["notifications", "unread_count"] as const;
 
+async function fetchNotifications() {
+  const { data, error } = await api.GET("/api/notifications");
+  if (error) throw error;
+  return data!.items;
+}
+
+// Keep the list query warm from the always-mounted bell so opening the
+// popover hits cache instead of triggering the first fetch.
+export function usePrefetchNotifications() {
+  const { isInvitado } = useUser();
+  useQuery({
+    queryKey: NOTIFICATIONS_QUERY_KEY,
+    enabled: !isInvitado,
+    queryFn: fetchNotifications,
+  });
+}
+
 export function useUnreadCount() {
   const { isInvitado } = useUser();
   const query = useQuery({
@@ -36,11 +53,7 @@ export function useNotifications() {
   const query = useQuery({
     queryKey: NOTIFICATIONS_QUERY_KEY,
     enabled: !isInvitado,
-    queryFn: async () => {
-      const { data, error } = await api.GET("/api/notifications");
-      if (error) throw error;
-      return data!.items;
-    },
+    queryFn: fetchNotifications,
   });
 
   const markRead = useMutation({

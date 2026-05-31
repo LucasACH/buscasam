@@ -1,14 +1,27 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
+import confetti from "canvas-confetti";
+
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  Loader2,
+  RotateCcw,
+  Trash2,
+} from "lucide-react";
 
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
+import { type BadgeTone } from "@/components/StatusBadge";
 import {
   AlertDialog,
   AlertDialogTrigger,
@@ -24,6 +37,7 @@ import { AreaField } from "@/components/AreaField";
 import { AttachmentsPanel } from "@/components/AttachmentsPanel";
 import { CandidatePanel } from "@/components/CandidatePanel";
 import { CoauthorsPanel } from "@/components/CoauthorsPanel";
+import { DatePicker } from "@/components/DatePicker";
 import { ProcessingSteps } from "@/components/ProcessingSteps";
 import { VersionsPanel } from "@/components/VersionsPanel";
 import { useUser } from "@/lib/useUser";
@@ -39,6 +53,23 @@ const VISIBILITIES = [
   { value: "privado", label: "Privado" },
 ] as const;
 
+const INPUT_CLASS =
+  "h-10 w-full rounded-lg border border-border-strong bg-card px-3 text-sm outline-none transition hover:border-neutral-400 focus:border-primary focus:ring-[3px] focus:ring-primary-tint";
+
+const STATUS_TONE: Record<string, BadgeTone> = {
+  "Listo para publicar": "green",
+  "Procesando…": "amber",
+  "Falló el procesamiento": "red",
+};
+
+const PILL_TONE: Record<BadgeTone, string> = {
+  neutral: "bg-status-neutral-bg text-status-neutral-fg",
+  amber: "bg-status-amber-bg text-status-amber-fg",
+  green: "bg-status-green-bg text-status-green-fg",
+  red: "bg-status-red-bg text-status-red-fg",
+  blue: "bg-status-blue-bg text-status-blue-fg",
+};
+
 const formSchema = z.object({
   titulo: z.string().min(1, "El título es obligatorio"),
   abstract: z.string(),
@@ -47,6 +78,17 @@ const formSchema = z.object({
 });
 
 type FormValues = z.infer<typeof formSchema>;
+
+type PublishPhase = "idle" | "publishing" | "done";
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+function fireConfetti() {
+  const opts = { spread: 70, startVelocity: 45, ticks: 220, zIndex: 60 };
+  confetti({ ...opts, particleCount: 90, origin: { x: 0.5, y: 0.62 } });
+  confetti({ ...opts, particleCount: 55, angle: 60, origin: { x: 0, y: 0.72 } });
+  confetti({ ...opts, particleCount: 55, angle: 120, origin: { x: 1, y: 0.72 } });
+}
 
 export default function EditarPage() {
   const { user, isInvitado, isLoading: userLoading } = useUser();
@@ -71,13 +113,15 @@ export default function EditarPage() {
         {state.lifecycle.initialPhase === "indexing" ? (
           <div
             data-testid="indexing-block"
-            className="flex flex-col items-center gap-4 py-24 text-center"
+            className="mx-auto flex max-w-md flex-col items-center gap-5 py-16 text-center"
           >
-            <ProcessingSteps
-              stage={state.lifecycle.stage}
-              queued={state.lifecycle.queued}
-            />
-            <p className="text-muted-foreground max-w-md text-sm">
+            <div className="w-full rounded-lg border border-border bg-card p-7 text-left">
+              <ProcessingSteps
+                stage={state.lifecycle.stage}
+                queued={state.lifecycle.queued}
+              />
+            </div>
+            <p className="text-muted-foreground text-sm leading-relaxed">
               Estamos procesando tu archivo. Esto puede tardar unos minutos.
               Podés cerrar esta página y volver más tarde: el trabajo sigue
               procesándose.
@@ -86,9 +130,12 @@ export default function EditarPage() {
         ) : (
           <div
             data-testid="failed-block"
-            className="flex flex-col items-center gap-4 py-24 text-center"
+            className="mx-auto flex max-w-md flex-col items-center gap-4 rounded-lg border border-border bg-card px-6 py-12 text-center"
           >
-            <p className="text-destructive max-w-md text-sm">
+            <div className="grid size-11 place-items-center rounded-lg border border-border bg-status-red-bg text-status-red-fg">
+              <AlertTriangle className="size-5" strokeWidth={1.9} />
+            </div>
+            <p className="text-destructive text-sm leading-relaxed">
               {state.lifecycle.gateMessage ?? "Falló el procesamiento"}
             </p>
             {state.isOwner && <DeleteTrabajo softDelete={actions.softDelete} />}
@@ -124,7 +171,7 @@ function EditarForm({
   actions: DraftWorkspaceActions;
 }) {
   const router = useRouter();
-  const [publishing, setPublishing] = useState(false);
+  const [publishPhase, setPublishPhase] = useState<PublishPhase>("idle");
   const { register, getValues, setValue, watch, formState } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     mode: "onBlur",
@@ -204,20 +251,25 @@ function EditarForm({
   }
 
   async function onPublish() {
-    setPublishing(true);
+    setPublishPhase("publishing");
     try {
-      const result = await actions.publish();
+      // Hold the progress widget for at least 2s so the publish feels deliberate
+      // rather than a flash before the redirect.
+      const [result] = await Promise.all([actions.publish(), sleep(2000)]);
       if (result === "published") {
+        setPublishPhase("done");
+        fireConfetti();
+        await sleep(1600);
         router.push("/mis-trabajos");
         return;
       }
+      setPublishPhase("idle");
       if (result === "publish_failed") {
         toast.error("No se pudo publicar");
       }
     } catch {
+      setPublishPhase("idle");
       toast.error("No se pudo publicar");
-    } finally {
-      setPublishing(false);
     }
   }
 
@@ -246,24 +298,14 @@ function EditarForm({
     (watched.fecha ?? "") !== state.generated_fecha;
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Editar trabajo
-        </h1>
-        <span
-          data-testid="status-pill"
-          className="bg-muted rounded-full px-3 py-1 text-sm"
-        >
-          {lifecycle.statusLabel}
-        </span>
-      </div>
+    <main className="mx-auto w-full max-w-3xl px-6 py-8">
+      <PageHeader statusLabel={lifecycle.statusLabel} />
 
-      <form className="mt-8 space-y-4">
+      <form className="space-y-6">
         <Field label="Título" htmlFor="titulo">
           <input
             id="titulo"
-            className="w-full rounded-md border px-3 py-2 text-sm"
+            className={INPUT_CLASS}
             {...register("titulo", { onBlur: () => patchField("titulo") })}
           />
         </Field>
@@ -282,7 +324,7 @@ function EditarForm({
         >
           <textarea
             id="abstract"
-            className="w-full rounded-md border px-3 py-2 text-sm"
+            className="min-h-24 w-full rounded-lg border border-border-strong bg-card px-3 py-[11px] text-sm leading-relaxed outline-none transition focus:border-primary focus:ring-[3px] focus:ring-primary-tint"
             rows={5}
             {...register("abstract", {
               onBlur: () => patchField("abstract"),
@@ -303,7 +345,7 @@ function EditarForm({
         >
           <input
             id="keywords"
-            className="w-full rounded-md border px-3 py-2 text-sm"
+            className={INPUT_CLASS}
             placeholder="separadas por comas"
             {...register("keywords", {
               onBlur: () => patchField("keywords"),
@@ -322,29 +364,36 @@ function EditarForm({
             )
           }
         >
-          <input
-            id="fecha"
-            type="date"
-            className="w-full rounded-md border px-3 py-2 text-sm"
-            {...register("fecha", { onBlur: () => patchField("fecha") })}
-          />
+          <div className="max-w-[260px]">
+            <DatePicker
+              id="fecha"
+              value={watched.fecha ?? ""}
+              onChange={(v) => {
+                setValue("fecha", v, { shouldDirty: true });
+                patchField("fecha");
+              }}
+            />
+          </div>
         </Field>
         {/* Visibility is owner-only (ADR-0010 §8); accepted coautores edit
             metadata but cannot change who can read the trabajo. */}
         {state.isOwner && (
           <Field label="Visibilidad" htmlFor="visibility">
-            <select
-              id="visibility"
-              className="w-full rounded-md border px-3 py-2 text-sm"
-              defaultValue={state.visibility}
-              onChange={(e) => patchVisibility(e.target.value)}
-            >
-              {VISIBILITIES.map((v) => (
-                <option key={v.value} value={v.value}>
-                  {v.label}
-                </option>
-              ))}
-            </select>
+            <div className="relative max-w-[240px]">
+              <select
+                id="visibility"
+                className={`${INPUT_CLASS} appearance-none pr-9`}
+                defaultValue={state.visibility}
+                onChange={(e) => patchVisibility(e.target.value)}
+              >
+                {VISIBILITIES.map((v) => (
+                  <option key={v.value} value={v.value}>
+                    {v.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            </div>
           </Field>
         )}
       </form>
@@ -381,20 +430,21 @@ function EditarForm({
           candidate Publicar — keeping this here too would show two Publicar
           buttons and let a click re-publish the current version. */}
       {state.versions.length === 0 && (
-        <div className="mt-8">
+        <div className="mt-8 flex flex-wrap items-center gap-3.5">
           <Button
-            disabled={!lifecycle.canPublish || publishing}
+            disabled={!lifecycle.canPublish || publishPhase !== "idle"}
             onClick={onPublish}
           >
             Publicar
           </Button>
-          {lifecycle.gateMessage && (
-            <p
-              data-testid="gate-reason"
-              className="text-muted-foreground mt-2 text-sm"
-            >
+          {lifecycle.gateMessage ? (
+            <p data-testid="gate-reason" className="text-muted-foreground text-sm">
               {lifecycle.gateMessage}
             </p>
+          ) : (
+            <span className="text-muted-foreground text-sm">
+              Al publicar, el trabajo será visible según la visibilidad elegida.
+            </span>
           )}
         </div>
       )}
@@ -402,11 +452,74 @@ function EditarForm({
       {/* Eliminar is owner-only and lives only here (not on Mis trabajos rows),
           keeping the delete mutation single-copy (module map §Frontend Papelera). */}
       {state.isOwner && (
-        <div className="mt-8 border-t pt-8">
+        <div className="mt-8 border-t border-border pt-8">
           <DeleteTrabajo softDelete={actions.softDelete} />
         </div>
       )}
+
+      {publishPhase !== "idle" && <PublishOverlay phase={publishPhase} />}
     </main>
+  );
+}
+
+function PublishOverlay({ phase }: { phase: Exclude<PublishPhase, "idle"> }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm [animation:overlay-in_.2s_ease-out]">
+      <div className="flex w-[300px] flex-col items-center gap-5 rounded-2xl border border-border bg-card px-8 py-10 text-center shadow-xl">
+        <div className="grid size-16 place-items-center">
+          {phase === "publishing" ? (
+            <Loader2 className="size-14 animate-spin text-primary" strokeWidth={1.5} />
+          ) : (
+            <div className="grid size-16 place-items-center rounded-full bg-status-green-bg text-status-green-fg [animation:publish-pop_.45s_cubic-bezier(.18,.89,.32,1.28)]">
+              <CheckCircle2 className="size-9" strokeWidth={2} />
+            </div>
+          )}
+        </div>
+        <div className="space-y-1">
+          <p className="text-base font-semibold">
+            {phase === "publishing" ? "Publicando tu trabajo…" : "¡Publicado!"}
+          </p>
+          <p className="text-muted-foreground text-sm">
+            {phase === "publishing"
+              ? "Estamos haciendo visible tu trabajo."
+              : "Te llevamos a Mis trabajos."}
+          </p>
+        </div>
+      </div>
+      <style>{`@keyframes overlay-in{from{opacity:0}to{opacity:1}}@keyframes publish-pop{0%{transform:scale(.4);opacity:0}60%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}`}</style>
+    </div>
+  );
+}
+
+function StatusPill({ label }: { label: string }) {
+  const tone = STATUS_TONE[label] ?? "neutral";
+  return (
+    <span
+      data-testid="status-pill"
+      className={`inline-flex h-[26px] items-center gap-1 rounded-full px-3 text-[13px] font-medium whitespace-nowrap ${PILL_TONE[tone]}`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function PageHeader({ statusLabel }: { statusLabel: string }) {
+  return (
+    <div className="mb-7">
+      <Link
+        href="/mis-trabajos"
+        className="-ml-1 mb-4 inline-flex items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground"
+      >
+        <ChevronLeft className="size-4" />
+        Mis trabajos
+      </Link>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <h1 className="text-[28px] font-semibold tracking-tight">
+          Editar trabajo
+        </h1>
+        <StatusPill label={statusLabel} />
+      </div>
+    </div>
   );
 }
 
@@ -418,18 +531,8 @@ function BlockedShell({
   children: React.ReactNode;
 }) {
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Editar trabajo
-        </h1>
-        <span
-          data-testid="status-pill"
-          className="bg-muted rounded-full px-3 py-1 text-sm"
-        >
-          {statusLabel}
-        </span>
-      </div>
+    <main className="mx-auto w-full max-w-3xl px-6 py-8">
+      <PageHeader statusLabel={statusLabel} />
       {children}
     </main>
   );
@@ -462,7 +565,12 @@ function DeleteTrabajo({
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button variant="destructive" disabled={deleting}>
+        <Button
+          variant="outline"
+          disabled={deleting}
+          className="border-destructive text-destructive hover:bg-destructive/5 hover:text-destructive"
+        >
+          <Trash2 className="size-3.5" strokeWidth={1.9} />
           Eliminar
         </Button>
       </AlertDialogTrigger>
@@ -479,6 +587,7 @@ function DeleteTrabajo({
           <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
           <AlertDialogAction
             disabled={deleting}
+            className="border-transparent bg-destructive text-white hover:bg-[#b91c1c]"
             onClick={(e) => {
               e.preventDefault();
               onDelete();
@@ -532,8 +641,9 @@ function Restaurar({
       type="button"
       data-testid={testId}
       onClick={onClick}
-      className="text-primary text-xs hover:underline"
+      className="text-primary hover:text-primary-hover inline-flex items-center gap-1 text-xs hover:underline"
     >
+      <RotateCcw className="size-3" strokeWidth={2} />
       Restaurar
     </button>
   );
