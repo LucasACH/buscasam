@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowUp } from "lucide-react";
 
-import { useAreaLabel } from "@/lib/useAreas";
+import { useAreaLabel, useAreas } from "@/lib/useAreas";
 import { useUser } from "@/lib/useUser";
 
 import { TIPO_LABEL } from "./ResultCard";
@@ -87,7 +87,10 @@ export function SearchLanding({
 }) {
   const { user, isInvitado } = useUser();
   const { publicTotal, results, isLoading } = useMostRead();
+  const { isLoading: areasLoading } = useAreas();
   const [q, setQ] = useState("");
+
+  const showSkeleton = isLoading || areasLoading;
 
   const first = user?.name ? user.name.split(" ")[0] : null;
   const title = first && !isInvitado ? `${greetWord()}, ${first}` : greetWord();
@@ -174,12 +177,12 @@ export function SearchLanding({
           </button>
         </div>
 
-        {(isLoading || results.length > 0) && (
+        {(showSkeleton || results.length > 0) && (
           <section className="mt-12 w-full">
             <h2 className="text-muted-foreground mb-2 text-[13px] font-medium tracking-[-0.01em]">
               Más leídos esta semana
             </h2>
-            {isLoading ? (
+            {showSkeleton ? (
               <div className="flex flex-col">
                 {Array.from({ length: 3 }).map((_, i) => (
                   <MostReadRowSkeleton key={i} />
