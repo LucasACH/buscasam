@@ -1,4 +1,5 @@
 """Atomic staged → current publish flip (module map §document-publication)."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -23,21 +24,25 @@ async def publish(session: AsyncSession, user_ctx: UserCtx, doc_id: int) -> None
     # staged_abstract into documents.abstract — yielding a published row with
     # mismatched títuto/abstract and a stale headline_fingerprint.
     row = (
-        await session.execute(
-            text(
-                "SELECT v.id AS version_id, v.index_status, v.staged_abstract, "
-                "       v.staged_keywords, v.staged_fecha, v.headline_fingerprint, "
-                "       d.titulo, "
-                "       (SELECT a.user_id FROM document_authors a "
-                "         WHERE a.doc_id = d.id AND a.status = 'owner' LIMIT 1) "
-                "         AS owner_user_id "
-                "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
-                "WHERE v.doc_id = :doc_id ORDER BY v.version_no DESC LIMIT 1 "
-                "FOR UPDATE OF v, d"
-            ),
-            {"doc_id": doc_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT v.id AS version_id, v.index_status, v.staged_abstract, "
+                    "       v.staged_keywords, v.staged_fecha, v.headline_fingerprint, "
+                    "       d.titulo, "
+                    "       (SELECT a.user_id FROM document_authors a "
+                    "         WHERE a.doc_id = d.id AND a.status = 'owner' LIMIT 1) "
+                    "         AS owner_user_id "
+                    "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
+                    "WHERE v.doc_id = :doc_id ORDER BY v.version_no DESC LIMIT 1 "
+                    "FOR UPDATE OF v, d"
+                ),
+                {"doc_id": doc_id},
+            )
         )
-    ).mappings().one_or_none()
+        .mappings()
+        .one_or_none()
+    )
     if row is None or row["owner_user_id"] != user_ctx.user_id:
         raise DocumentNotFound
 
@@ -53,7 +58,9 @@ async def publish(session: AsyncSession, user_ctx: UserCtx, doc_id: int) -> None
     # ADR-0006 §6: flip the previously-current version + its chunks off, the
     # candidate on. First publish has no prior current version (no-op flip).
     await session.execute(
-        text("UPDATE chunks SET is_current = false WHERE doc_id = :doc_id AND is_current"),
+        text(
+            "UPDATE chunks SET is_current = false WHERE doc_id = :doc_id AND is_current"
+        ),
         {"doc_id": doc_id},
     )
     await session.execute(

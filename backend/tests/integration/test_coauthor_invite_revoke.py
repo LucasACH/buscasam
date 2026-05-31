@@ -3,6 +3,7 @@
 insert on invite (transactional fan-out enqueue on a published doc), atomic
 DELETE of the document_authors row and matching notifications row on revoke.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -38,8 +39,7 @@ async def _status(session, doc_id, user_id) -> str | None:
     return (
         await session.execute(
             text(
-                "SELECT status FROM document_authors "
-                "WHERE doc_id = :d AND user_id = :u"
+                "SELECT status FROM document_authors WHERE doc_id = :d AND user_id = :u"
             ),
             {"d": doc_id, "u": user_id},
         )
@@ -56,8 +56,7 @@ async def test_invite_on_draft_inserts_pending_row_no_fan_out(session):
     enqueued = (
         await session.execute(
             text(
-                "SELECT count(*) FROM procrastinate_jobs "
-                "WHERE args->>'doc_id' = :did"
+                "SELECT count(*) FROM procrastinate_jobs WHERE args->>'doc_id' = :did"
             ),
             {"did": str(doc_id)},
         )
@@ -65,10 +64,10 @@ async def test_invite_on_draft_inserts_pending_row_no_fan_out(session):
     assert enqueued == 0
 
 
-@pytest.mark.parametrize("existing_status", ["pending", "accepted", "declined", "owner"])
-async def test_invite_with_existing_row_raises_already_listed(
-    session, existing_status
-):
+@pytest.mark.parametrize(
+    "existing_status", ["pending", "accepted", "declined", "owner"]
+)
+async def test_invite_with_existing_row_raises_already_listed(session, existing_status):
     """Re-invite blocked regardless of status — covers the PRD story 10 rule
     that a declined user cannot be re-invited."""
     doc_id, owner = await _seed_doc(session)
@@ -156,12 +155,12 @@ async def test_revoke_then_reinvite_round_trip_produces_fresh_notification(sessi
 
     await documents.invite_coauthor(session, _ctx(owner), doc_id, invitee)
     from buscasam.core import jobs
+
     await jobs._run_fan_out_coauthor_invites(session, doc_id)
     first_id = (
         await session.execute(
             text(
-                "SELECT id FROM notifications "
-                "WHERE user_id = :uid AND event_key = :ek"
+                "SELECT id FROM notifications WHERE user_id = :uid AND event_key = :ek"
             ),
             {"uid": invitee, "ek": coauthor_invite_event_key(doc_id, invitee)},
         )
@@ -174,8 +173,7 @@ async def test_revoke_then_reinvite_round_trip_produces_fresh_notification(sessi
     second_id = (
         await session.execute(
             text(
-                "SELECT id FROM notifications "
-                "WHERE user_id = :uid AND event_key = :ek"
+                "SELECT id FROM notifications WHERE user_id = :uid AND event_key = :ek"
             ),
             {"uid": invitee, "ek": coauthor_invite_event_key(doc_id, invitee)},
         )
@@ -206,13 +204,17 @@ async def test_invite_on_published_enqueues_fan_out_in_same_txn(session):
 
     assert await _status(session, doc_id, invitee) == "pending"
     row = (
-        await session.execute(
-            text(
-                "SELECT task_name FROM procrastinate_jobs "
-                "WHERE args->>'doc_id' = :did"
-            ),
-            {"did": str(doc_id)},
+        (
+            await session.execute(
+                text(
+                    "SELECT task_name FROM procrastinate_jobs "
+                    "WHERE args->>'doc_id' = :did"
+                ),
+                {"did": str(doc_id)},
+            )
         )
-    ).mappings().one_or_none()
+        .mappings()
+        .one_or_none()
+    )
     assert row is not None
     assert row["task_name"].endswith("fan_out_coauthor_invites")

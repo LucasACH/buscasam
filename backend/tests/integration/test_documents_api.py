@@ -1,4 +1,5 @@
 """Integration tests for api/documents (GET /api/me/documents)."""
+
 from __future__ import annotations
 
 import base64
@@ -26,9 +27,7 @@ async def _seed_candidate(
     staged_abstract: str = "resumen",
 ) -> tuple[int, int]:
     """Returns (doc_id, version_id) for a draft owned by owner_id."""
-    doc_id = await make_document(
-        session, publication_status="draft", titulo=titulo
-    )
+    doc_id = await make_document(session, publication_status="draft", titulo=titulo)
     await make_document_author(session, doc_id, user_id=owner_id, status="owner")
     fp = headline_fingerprint(titulo, staged_abstract)
     version_id = (
@@ -70,10 +69,7 @@ async def client(session, monkeypatch):
 async def _seed_session(session, user_id: int) -> bytes:
     sid = secrets.token_bytes(32)
     await session.execute(
-        text(
-            "INSERT INTO sessions (sid, user_id) "
-            "VALUES (:sid, :uid)"
-        ),
+        text("INSERT INTO sessions (sid, user_id) VALUES (:sid, :uid)"),
         {"sid": sid, "uid": user_id},
     )
     return sid
@@ -131,8 +127,12 @@ async def test_get_draft_returns_generated_snapshot(client, session):
             "UPDATE document_versions SET generated_abstract = :a, "
             "  generated_keywords = :k, generated_fecha = :f WHERE id = :vid"
         ),
-        {"a": "resumen del extractor", "k": ["extractor"], "f": "2022-07-01",
-         "vid": version_id},
+        {
+            "a": "resumen del extractor",
+            "k": ["extractor"],
+            "f": "2022-07-01",
+            "vid": version_id,
+        },
     )
     await session.commit()
 
@@ -205,14 +205,18 @@ async def test_patch_draft_persists_document_fields(client, session):
 
     assert r.status_code == 204
     row = (
-        await session.execute(
-            text(
-                "SELECT visibility, area_path::text AS area_path, tipo "
-                "FROM documents WHERE id = :id"
-            ),
-            {"id": doc_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT visibility, area_path::text AS area_path, tipo "
+                    "FROM documents WHERE id = :id"
+                ),
+                {"id": doc_id},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     assert row["visibility"] == "interno"
     assert row["area_path"] == "escuela.fisica"
     assert row["tipo"] == "paper"
@@ -224,9 +228,7 @@ async def test_patch_draft_visibility_by_coauthor_returns_403(client, session):
     owner = await make_user(session)
     coauthor = await make_user(session)
     doc_id, _ = await _seed_candidate(session, owner_id=owner)
-    await make_document_author(
-        session, doc_id, user_id=coauthor, status="accepted"
-    )
+    await make_document_author(session, doc_id, user_id=coauthor, status="accepted")
     coauthor_sid = await _seed_session(session, coauthor)
     await session.commit()
 
@@ -345,9 +347,7 @@ async def test_get_draft_reports_is_owner(client, session):
     owner = await make_user(session)
     coauthor = await make_user(session)
     doc_id, _ = await _seed_candidate(session, owner_id=owner)
-    await make_document_author(
-        session, doc_id, user_id=coauthor, status="accepted"
-    )
+    await make_document_author(session, doc_id, user_id=coauthor, status="accepted")
     owner_sid = await _seed_session(session, owner)
     coauthor_sid = await _seed_session(session, coauthor)
     await session.commit()
@@ -511,7 +511,9 @@ async def test_post_attachment_over_20mb_returns_413(client, session, blob_root)
     assert [p for p in blob_root.rglob("*") if p.is_file()] == []
 
 
-async def test_post_attachment_disallowed_extension_returns_415(client, session, blob_root):
+async def test_post_attachment_disallowed_extension_returns_415(
+    client, session, blob_root
+):
     uid = await make_user(session)
     sid = await _seed_session(session, uid)
     doc_id, _ = await _seed_candidate(session, owner_id=uid)
@@ -588,7 +590,9 @@ async def test_delete_attachment_removes_row_keeps_blob(client, session, blob_ro
     att_id = post.json()["id"]
     sha = (
         await session.execute(
-            text("SELECT encode(sha256, 'hex') FROM document_attachments WHERE id = :i"),
+            text(
+                "SELECT encode(sha256, 'hex') FROM document_attachments WHERE id = :i"
+            ),
             {"i": att_id},
         )
     ).scalar_one()

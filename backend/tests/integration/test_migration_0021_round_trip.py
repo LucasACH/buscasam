@@ -1,8 +1,4 @@
-"""Tracer 5: 0008 upgrade/downgrade is reversible.
-
-Runs against an isolated database so the session-scoped `engine` fixture
-(which stays at `head`) is never disturbed.
-"""
+"""0021 upgrade/downgrade is reversible for the chunks trigram index."""
 
 from __future__ import annotations
 
@@ -53,35 +49,47 @@ def isolated_db():
         admin.dispose()
 
 
-def _tables_present(url: str) -> set[str]:
+def _regclass_exists(url: str, name: str) -> bool:
     eng = create_engine(url)
     try:
-        with eng.connect() as c:
-            rows = (
-                c.execute(
-                    text(
-                        "SELECT table_name FROM information_schema.tables "
-                        "WHERE table_schema = 'public' "
-                        "AND table_name IN ('users', 'sessions', 'notifications')"
-                    )
-                )
-                .scalars()
-                .all()
+        with eng.connect() as conn:
+            return (
+                conn.execute(
+                    text("SELECT to_regclass('public.' || :n)"), {"n": name}
+                ).scalar()
+                is not None
             )
-        return set(rows)
     finally:
         eng.dispose()
 
 
-def test_0008_upgrade_then_downgrade_then_upgrade(isolated_db):
+def _extension_exists(url: str, name: str) -> bool:
+    eng = create_engine(url)
+    try:
+        with eng.connect() as conn:
+            return (
+                conn.execute(
+                    text("SELECT 1 FROM pg_extension WHERE extname = :n"), {"n": name}
+                ).scalar()
+                is not None
+            )
+    finally:
+        eng.dispose()
+
+
+def test_0021_upgrade_then_downgrade_then_upgrade(isolated_db):
     url = isolated_db
     cfg = _alembic_cfg(url)
 
-    command.upgrade(cfg, "0008")
-    assert _tables_present(url) == {"users", "sessions", "notifications"}
+    command.upgrade(cfg, "0020")
+    assert _regclass_exists(url, "chunks_body_text_trgm") is False
 
-    command.downgrade(cfg, "0007")
-    assert _tables_present(url) == set()
+    command.upgrade(cfg, "0021")
+    assert _extension_exists(url, "pg_trgm") is True
+    assert _regclass_exists(url, "chunks_body_text_trgm") is True
 
-    command.upgrade(cfg, "0008")
-    assert _tables_present(url) == {"users", "sessions", "notifications"}
+    command.downgrade(cfg, "0020")
+    assert _regclass_exists(url, "chunks_body_text_trgm") is False
+
+    command.upgrade(cfg, "0021")
+    assert _regclass_exists(url, "chunks_body_text_trgm") is True

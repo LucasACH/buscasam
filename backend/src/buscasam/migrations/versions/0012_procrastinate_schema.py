@@ -5,6 +5,7 @@ Revises: 0011
 Create Date: 2026-05-27
 
 """
+
 from alembic import op
 from procrastinate.schema import SchemaManager
 

@@ -5,6 +5,7 @@ The deliberate inverse of the four exclusion predicates (module map
 manageable owner|accepted set) AND soft_deleted_at IS NOT NULL. Drives restore
 and list_deleted_documents.
 """
+
 from sqlalchemy import text
 
 from buscasam.core.auth import UserCtx

@@ -4,6 +4,7 @@ The helper is the caller-facing cleanup for content-addressed blobs: it must
 delete only when no `document_versions` or `document_attachments` row points
 at the sha, so a dedup hit cannot orphan another row's blob.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -35,9 +36,7 @@ async def test_discard_removes_blob_when_no_row_references_it(session, blob_root
     assert await blob_store.exists(put.sha256) is False
 
 
-async def test_discard_keeps_blob_when_a_version_row_references_it(
-    session, blob_root
-):
+async def test_discard_keeps_blob_when_a_version_row_references_it(session, blob_root):
     payload = b"shared bytes"
     put = await blob_store.put_stream(_stream(payload), max_bytes=1024)
 

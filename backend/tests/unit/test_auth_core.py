@@ -1,4 +1,5 @@
 """Unit tests for `core/auth` per ADR-0005 §3 and module map §`core/auth`."""
+
 from __future__ import annotations
 
 import base64
@@ -9,6 +10,7 @@ import pytest
 import pytest_asyncio
 from fastapi import Response
 from sqlalchemy import text
+from starlette.requests import Request
 
 from buscasam.core import auth
 
@@ -88,9 +90,7 @@ def test_non_prod_treats_non_unsam_as_estudiante(claims, monkeypatch):
 
 def test_non_prod_still_rejects_unverified_email(monkeypatch):
     monkeypatch.setattr(auth.settings, "env", "dev")
-    assert (
-        auth.role_from_claims({"email_verified": False, "sub": "x"}) is None
-    )
+    assert auth.role_from_claims({"email_verified": False, "sub": "x"}) is None
 
 
 def test_claim_acceptance_matrix_accepts_estudiante():
@@ -146,13 +146,17 @@ async def test_jit_user_upsert(session):
     assert count == 1
 
     row = (
-        await session.execute(
-            text(
-                "SELECT email, hd, role, name, picture_url "
-                "FROM users WHERE google_sub = 'sub-jit'"
+        (
+            await session.execute(
+                text(
+                    "SELECT email, hd, role, name, picture_url "
+                    "FROM users WHERE google_sub = 'sub-jit'"
+                )
             )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     assert row == {
         "email": "ada+new@unsam.edu.ar",
         "hd": "estudiantes.unsam.edu.ar",
@@ -226,12 +230,8 @@ async def test_refresh_threshold(session, user_id, monkeypatch):
         },
     )
 
-    _, recent_reissue = await auth.load_session(
-        session, sid_cookie=_sid_cookie(recent)
-    )
-    _, stale_reissue = await auth.load_session(
-        session, sid_cookie=_sid_cookie(stale)
-    )
+    _, recent_reissue = await auth.load_session(session, sid_cookie=_sid_cookie(recent))
+    _, stale_reissue = await auth.load_session(session, sid_cookie=_sid_cookie(stale))
 
     assert recent_reissue is None
     assert stale_reissue == stale
@@ -295,9 +295,7 @@ def test_require_docente_returns_docente():
     assert auth.require_docente(uc) is uc
 
 
-def _request(cookies: dict[str, str] | None = None) -> "Request":
-    from starlette.requests import Request
-
+def _request(cookies: dict[str, str] | None = None) -> Request:
     header = "; ".join(f"{k}={v}" for k, v in (cookies or {}).items())
     headers = [(b"cookie", header.encode())] if header else []
     return Request({"type": "http", "headers": headers})

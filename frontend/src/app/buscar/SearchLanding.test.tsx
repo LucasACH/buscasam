@@ -125,9 +125,7 @@ describe("SearchLanding más leídos", () => {
   it("renders ranked rows with label, tipo, year and read count", () => {
     withResults();
     render(<SearchLanding onApply={vi.fn()} />);
-    const row = screen
-      .getByText("Redes neuronales profundas")
-      .closest("a")!;
+    const row = screen.getByText("Redes neuronales profundas").closest("a")!;
     expect(row).toHaveTextContent("1");
     expect(row).toHaveTextContent("Escuela de Ciencia y Tecnología");
     expect(row).toHaveTextContent("Tesis");

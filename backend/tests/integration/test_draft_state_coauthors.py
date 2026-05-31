@@ -1,6 +1,7 @@
 """Integration tests for the get_draft_state coauthors[] extension (issue #52,
 module map §core/documents). The DTO carries is_owner + coauthors with the
 owner row first and registered rows in insertion order."""
+
 from __future__ import annotations
 
 from sqlalchemy import text
@@ -34,6 +35,7 @@ async def _seed_draft_with_version(session, owner_id: int) -> int:
 
 def _fp_for(title: str) -> str:
     from buscasam.core.chunk import headline_fingerprint
+
     return headline_fingerprint(title, "")
 
 

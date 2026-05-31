@@ -1,12 +1,14 @@
 """Soft-delete, restore, and the Papelera projection
 (module map §deletion-restoration-purge)."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import text
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from buscasam.core.document_access import restorable_where
@@ -26,9 +28,7 @@ class DeletedDocSummary:
     purge_at: datetime  # soft_deleted_at + 180 días, computed server-side
 
 
-async def soft_delete(
-    session: AsyncSession, user_ctx: UserCtx, doc_id: int
-) -> None:
+async def soft_delete(session: AsyncSession, user_ctx: UserCtx, doc_id: int) -> None:
     """Owner-only logical deletion (module map §core/documents, issue #65).
 
     Owner-only via the `publish` inline-owner-SELECT precedent: a missing row or
@@ -67,9 +67,7 @@ async def soft_delete(
     )
 
 
-async def restore(
-    session: AsyncSession, user_ctx: UserCtx, doc_id: int
-) -> None:
+async def restore(session: AsyncSession, user_ctx: UserCtx, doc_id: int) -> None:
     """Owner-only undo of a soft-delete (module map §core/documents, issue #66).
 
     Clears soft_deleted_at on the caller's OWN soft-deleted document. The UPDATE
@@ -83,12 +81,15 @@ async def restore(
     the timestamp returns the document to exactly its prior state (stories 8-11).
     """
     where, params = restorable_where("d", user_ctx)
-    result = await session.execute(
-        text(
-            f"UPDATE documents AS d SET soft_deleted_at = NULL "
-            f"WHERE d.id = :doc_id AND ({where})"
+    result = cast(
+        CursorResult[Any],
+        await session.execute(
+            text(
+                f"UPDATE documents AS d SET soft_deleted_at = NULL "
+                f"WHERE d.id = :doc_id AND ({where})"
+            ),
+            params | {"doc_id": doc_id},
         ),
-        params | {"doc_id": doc_id},
     )
     if result.rowcount == 0:
         raise DocumentNotFound
@@ -105,16 +106,20 @@ async def list_deleted_documents(
     server-side; the client derives the days-remaining label from it."""
     where, params = restorable_where("d", user_ctx)
     rows = (
-        await session.execute(
-            text(
-                f"SELECT d.id, d.titulo, d.publication_status, d.soft_deleted_at, "
-                f"       d.soft_deleted_at + INTERVAL '180 days' AS purge_at "
-                f"FROM documents d WHERE {where} "
-                f"ORDER BY d.soft_deleted_at DESC"
-            ),
-            params,
+        (
+            await session.execute(
+                text(
+                    f"SELECT d.id, d.titulo, d.publication_status, d.soft_deleted_at, "
+                    f"       d.soft_deleted_at + INTERVAL '180 days' AS purge_at "
+                    f"FROM documents d WHERE {where} "
+                    f"ORDER BY d.soft_deleted_at DESC"
+                ),
+                params,
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     return [
         DeletedDocSummary(
             id=r["id"],

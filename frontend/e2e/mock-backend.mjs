@@ -1,4 +1,3 @@
-/* eslint-disable */
 // Mock backend for Playwright E2E. Holds an in-memory route registry that
 // tests populate over a control plane:
 //   PUT    /__mock/route   { path, status, body, contentType, headers }
@@ -34,9 +33,13 @@ const server = createServer(async (req, res) => {
 
   if (req.method === "PUT" && path === "/__mock/route") {
     const raw = await readBody(req);
-    const { path: routePath, status, body, contentType, headers } = JSON.parse(
-      raw,
-    );
+    const {
+      path: routePath,
+      status,
+      body,
+      contentType,
+      headers,
+    } = JSON.parse(raw);
     registry.set(routePath, {
       status: status ?? 200,
       body: typeof body === "string" ? body : JSON.stringify(body ?? null),

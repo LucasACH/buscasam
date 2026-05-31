@@ -1,4 +1,5 @@
 """Integration tests for api/docs (reader endpoints, issue #43)."""
+
 from __future__ import annotations
 
 import base64
@@ -57,7 +58,13 @@ async def _seed_current_version(
             " index_status, is_current, first_published_at) "
             "VALUES (:d, 1, decode(:sha, 'hex'), :name, :b, :m, 'indexed', true, now())"
         ),
-        {"d": doc_id, "sha": sha_hex, "name": original_filename, "b": bytes_, "m": mime},
+        {
+            "d": doc_id,
+            "sha": sha_hex,
+            "name": original_filename,
+            "b": bytes_,
+            "m": mime,
+        },
     )
 
 
@@ -117,7 +124,13 @@ async def _seed_attachment(
                 "(doc_id, sha256, original_filename, bytes, mime) "
                 "VALUES (:d, decode(:sha, 'hex'), :name, :b, :m) RETURNING id"
             ),
-            {"d": doc_id, "sha": sha_hex, "name": original_filename, "b": bytes_, "m": mime},
+            {
+                "d": doc_id,
+                "sha": sha_hex,
+                "name": original_filename,
+                "b": bytes_,
+                "m": mime,
+            },
         )
     ).scalar_one()
 
@@ -217,7 +230,7 @@ async def test_get_doc_detail_pending_coauthor_on_privado_returns_minimal(
         session, visibility="privado", titulo="Tesis secreta", abstract="oculto"
     )
     await _seed_current_version(session, doc_id)
-    att_id = await _seed_attachment(session, doc_id)  # must NOT leak
+    await _seed_attachment(session, doc_id)  # must NOT leak
     owner_id = await make_user(session, name="Ada Lovelace")
     pending_id = await make_user(session)
     await make_document_author(
@@ -282,9 +295,7 @@ async def test_get_doc_detail_accepted_coautor_returns_plain_detail(client, sess
     owner_id = await make_user(session)
     accepted_id = await make_user(session)
     await make_document_author(session, doc_id, user_id=owner_id, status="owner")
-    await make_document_author(
-        session, doc_id, user_id=accepted_id, status="accepted"
-    )
+    await make_document_author(session, doc_id, user_id=accepted_id, status="accepted")
     sid = await _sid_cookie(session, accepted_id)
     await session.commit()
 
@@ -303,9 +314,7 @@ async def test_get_doc_detail_declined_invitee_returns_404(client, session):
     owner_id = await make_user(session)
     declined_id = await make_user(session)
     await make_document_author(session, doc_id, user_id=owner_id, status="owner")
-    await make_document_author(
-        session, doc_id, user_id=declined_id, status="declined"
-    )
+    await make_document_author(session, doc_id, user_id=declined_id, status="declined")
     sid = await _sid_cookie(session, declined_id)
     await session.commit()
 
@@ -344,9 +353,7 @@ async def test_get_doc_detail_pending_on_unavailable_doc_returns_404(
     owner_id = await make_user(session)
     pending_id = await make_user(session)
     await make_document_author(session, doc_id, user_id=owner_id, status="owner")
-    await make_document_author(
-        session, doc_id, user_id=pending_id, status="pending"
-    )
+    await make_document_author(session, doc_id, user_id=pending_id, status="pending")
     sid = await _sid_cookie(session, pending_id)
     await session.commit()
 
@@ -580,9 +587,7 @@ async def test_disclosure_bounded_to_detail_other_endpoints_stay_404(client, ses
     cookies = {"sid": sid}
     related = await client.get(f"/api/docs/{doc_id}/related", cookies=cookies)
     main = await client.get(f"/api/docs/{doc_id}/download", cookies=cookies)
-    att = await client.get(
-        f"/api/docs/{doc_id}/attachments/{att_id}", cookies=cookies
-    )
+    att = await client.get(f"/api/docs/{doc_id}/attachments/{att_id}", cookies=cookies)
     version = await client.get(
         f"/api/docs/{doc_id}/versions/1/download", cookies=cookies
     )
@@ -739,8 +744,7 @@ async def test_version_download_manager_each_n_returns_x_accel(
     assert r1.headers["x-accel-redirect"] == "/_blobs/11/11/" + "11" * 32
     assert r1.headers["content-type"] == "application/pdf"
     assert (
-        r1.headers["content-disposition"]
-        == "attachment; filename*=UTF-8''tesis_v1.pdf"
+        r1.headers["content-disposition"] == "attachment; filename*=UTF-8''tesis_v1.pdf"
     )
     # FastAPI workers must not hold the bytes.
     assert r1.content == b""
@@ -748,8 +752,7 @@ async def test_version_download_manager_each_n_returns_x_accel(
     assert r2.status_code == 200
     assert r2.headers["x-accel-redirect"] == "/_blobs/22/22/" + "22" * 32
     assert (
-        r2.headers["content-disposition"]
-        == "attachment; filename*=UTF-8''tesis_v2.pdf"
+        r2.headers["content-disposition"] == "attachment; filename*=UTF-8''tesis_v2.pdf"
     )
 
 
@@ -765,12 +768,21 @@ async def test_version_download_never_published_candidate_returns_404(
     owner_id = await make_user(session)
     await make_document_author(session, doc_id, user_id=owner_id, status="owner")
     await _seed_version(
-        session, doc_id, version_no=1, original_filename="published.pdf",
-        sha_hex="11" * 32, is_current=True,
+        session,
+        doc_id,
+        version_no=1,
+        original_filename="published.pdf",
+        sha_hex="11" * 32,
+        is_current=True,
     )
     await _seed_version(
-        session, doc_id, version_no=2, original_filename="candidate.pdf",
-        sha_hex="33" * 32, index_status=index_status, first_published=False,
+        session,
+        doc_id,
+        version_no=2,
+        original_filename="candidate.pdf",
+        sha_hex="33" * 32,
+        index_status=index_status,
+        first_published=False,
     )
     sid = await _sid_cookie(session, owner_id)
     await session.commit()

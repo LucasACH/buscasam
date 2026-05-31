@@ -2,6 +2,7 @@
 §api/moderation). Docente-gated triage read: 200 for a Docente, 403 for a
 non-Docente authenticated user, 401 for an anonymous caller.
 """
+
 from __future__ import annotations
 
 import base64

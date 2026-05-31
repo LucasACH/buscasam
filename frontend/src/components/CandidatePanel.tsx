@@ -69,7 +69,7 @@ export function CandidatePanel({
   }
 
   return (
-    <section className="rounded-lg border border-border bg-card">
+    <section className="border-border bg-card rounded-lg border">
       <div className="flex items-center justify-between gap-3 px-[18px] py-4">
         <h2 className="text-[19px] font-semibold tracking-tight">
           Archivo principal
@@ -112,7 +112,7 @@ export function CandidatePanel({
         {candidate?.status === "ready" && (
           <div className="space-y-3.5">
             <StatusPill tone="green">{candidate.statusLabel}</StatusPill>
-            <div className="rounded-lg border border-border bg-neutral-50 p-3.5">
+            <div className="border-border rounded-lg border bg-neutral-50 p-3.5">
               <div className="text-muted-foreground mb-2.5 text-[11px] font-semibold tracking-[0.05em] uppercase">
                 Metadatos detectados
               </div>

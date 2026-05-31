@@ -5,10 +5,10 @@ Checks that no other module under src/buscasam/ uses os.rename or
 pathlib.Path.write_bytes (the two write-path primitives) against the blob root,
 and that the blob root path literal only appears in blob_store.py.
 """
+
 from __future__ import annotations
 
 import ast
-import os
 from pathlib import Path
 
 SRC_ROOT = Path(__file__).resolve().parent.parent.parent / "src" / "buscasam"
@@ -45,18 +45,17 @@ def _ast_names_used(path: Path) -> set[str]:
 
 def test_no_os_rename_outside_blob_store():
     offenders = [
-        p for p in _python_files_except_blob_store()
-        if "rename" in _ast_names_used(p)
+        p for p in _python_files_except_blob_store() if "rename" in _ast_names_used(p)
     ]
-    assert offenders == [], (
-        "os.rename used outside core/blob_store: "
-        + ", ".join(str(p.relative_to(SRC_ROOT)) for p in offenders)
+    assert offenders == [], "os.rename used outside core/blob_store: " + ", ".join(
+        str(p.relative_to(SRC_ROOT)) for p in offenders
     )
 
 
 def test_no_write_bytes_outside_blob_store():
     offenders = [
-        p for p in _python_files_except_blob_store()
+        p
+        for p in _python_files_except_blob_store()
         if "write_bytes" in _ast_names_used(p)
     ]
     assert offenders == [], (
@@ -67,7 +66,8 @@ def test_no_write_bytes_outside_blob_store():
 
 def test_blob_root_literal_only_in_blob_root_owners():
     offenders = [
-        p for p in _python_files_except_blob_root_owners()
+        p
+        for p in _python_files_except_blob_root_owners()
         if BLOB_ROOT_LITERAL in p.read_text()
     ]
     assert offenders == [], (

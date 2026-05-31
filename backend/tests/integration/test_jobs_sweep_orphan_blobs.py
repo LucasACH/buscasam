@@ -6,6 +6,7 @@ Module map §core/jobs + §core/blob_store: the sweep drives
 `document_attachments` row references, skips still-referenced shas, honors the
 24h mtime grace, and is idempotent (ADR-0006 §12).
 """
+
 from __future__ import annotations
 
 import os

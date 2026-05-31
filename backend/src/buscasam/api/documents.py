@@ -1,8 +1,9 @@
 """HTTP surface for document management endpoints."""
+
 from __future__ import annotations
 
 from pathlib import Path
-from typing import AsyncIterator
+from typing import AsyncIterator, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +21,7 @@ from buscasam.api.documents_schemas import (
     InviteCoauthorRequest,
     OwnDocDTO,
     UpdateDraftRequest,
+    Visibility,
 )
 from buscasam.core import auth, blob_store
 from buscasam.core.blob_store import BlobTooLarge
@@ -78,7 +80,9 @@ async def create_draft_endpoint(
             coauthor_user_ids=body.coauthor_user_ids,
         )
     except InvalidCoauthorId as exc:
-        raise HTTPException(status_code=422, detail=f"Unknown coauthor user_id(s): {sorted(exc.ids)}")
+        raise HTTPException(
+            status_code=422, detail=f"Unknown coauthor user_id(s): {sorted(exc.ids)}"
+        )
     return CreateDraftResponse(id=doc_id)
 
 
@@ -221,7 +225,7 @@ async def get_draft(
         index_error=state.index_error,
         publish_gate_reason=state.publish_gate_reason,
         is_owner=state.is_owner,
-        visibility=state.visibility,
+        visibility=cast(Visibility, state.visibility),
         area_path=state.area_path,
         attachments=[
             AttachmentDTO(
@@ -384,8 +388,16 @@ async def restore_document(
 # ADR-0006 §10: attachment extension allowlist (no content sniffing). The
 # component's <input accept=...> mirrors this set.
 _ALLOWED_ATTACHMENT_EXTS = {
-    ".csv", ".json", ".txt", ".py", ".ipynb",
-    ".png", ".jpg", ".jpeg", ".gif", ".zip",
+    ".csv",
+    ".json",
+    ".txt",
+    ".py",
+    ".ipynb",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".zip",
 }
 _MAX_ATTACHMENT_BYTES = 20_000_000
 

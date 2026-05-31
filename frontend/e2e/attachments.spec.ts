@@ -39,7 +39,10 @@ function draftBody(attachments: Attachment[]) {
   };
 }
 
-async function stubCommon(page: import("@playwright/test").Page, attachments: Attachment[]) {
+async function stubCommon(
+  page: import("@playwright/test").Page,
+  attachments: Attachment[],
+) {
   await page.route("**/api/me", (route) => route.fulfill(json(USER)));
   await page.route("**/api/notifications**", (route) =>
     route.fulfill(json({ items: [] })),
@@ -58,20 +61,30 @@ test("author uploads an attachment, sees it listed, and removes it (optimistic)"
     expect(route.request().method()).toBe("POST");
     await route.fulfill(
       json(
-        { id: 1, original_filename: "sample.csv", size_bytes: 64, mime: "text/csv" },
+        {
+          id: 1,
+          original_filename: "sample.csv",
+          size_bytes: 64,
+          mime: "text/csv",
+        },
         201,
       ),
     );
   });
   // Delay the DELETE so the row's disappearance is observably optimistic.
-  await page.route(`**/api/documents/${DOC_ID}/attachments/*`, async (route) => {
-    expect(route.request().method()).toBe("DELETE");
-    await new Promise((r) => setTimeout(r, 400));
-    await route.fulfill({ status: 204, body: "" });
-  });
+  await page.route(
+    `**/api/documents/${DOC_ID}/attachments/*`,
+    async (route) => {
+      expect(route.request().method()).toBe("DELETE");
+      await new Promise((r) => setTimeout(r, 400));
+      await route.fulfill({ status: 204, body: "" });
+    },
+  );
 
   await page.goto(`/mis-trabajos/${DOC_ID}/editar`);
-  await expect(page.getByTestId("status-pill")).toHaveText(/Listo para publicar/);
+  await expect(page.getByTestId("status-pill")).toHaveText(
+    /Listo para publicar/,
+  );
 
   await page.getByLabel(/Agregar adjunto/i).setInputFiles({
     name: "sample.csv",
@@ -98,8 +111,12 @@ test("5-attachment cap disables the add affordance with the spec'd copy", async 
   await stubCommon(page, full);
 
   await page.goto(`/mis-trabajos/${DOC_ID}/editar`);
-  await expect(page.getByTestId("status-pill")).toHaveText(/Listo para publicar/);
+  await expect(page.getByTestId("status-pill")).toHaveText(
+    /Listo para publicar/,
+  );
 
-  await expect(page.getByText("Llegaste al máximo de 5 adjuntos")).toBeVisible();
+  await expect(
+    page.getByText("Llegaste al máximo de 5 adjuntos"),
+  ).toBeVisible();
   await expect(page.getByLabel(/Agregar adjunto/i)).toBeDisabled();
 });

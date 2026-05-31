@@ -1,6 +1,7 @@
 """Integration tests for the Papelera HTTP edge (issue #66):
 POST /api/documents/{id}/restore (204 owner / 404 otherwise) and
 GET /api/me/documents/deleted (200 list[DeletedDocDTO] incl. purge_at)."""
+
 from __future__ import annotations
 
 import base64

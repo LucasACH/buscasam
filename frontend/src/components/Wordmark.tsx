@@ -10,7 +10,7 @@ export function Wordmark({ size = "base", className }: WordmarkProps) {
   return (
     <span
       className={[
-        "relative top-[2px] inline-flex select-none items-center font-semibold tracking-tight text-foreground",
+        "text-foreground relative top-[2px] inline-flex items-center font-semibold tracking-tight select-none",
         size === "lg" ? "gap-3 text-[34px]" : "gap-[9px] text-[21px]",
         "leading-none",
         className ?? "",

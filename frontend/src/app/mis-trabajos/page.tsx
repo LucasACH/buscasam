@@ -39,13 +39,19 @@ export default function MisTrabajosPage() {
   if (isLoading || isInvitado) return null;
   if (!user) return null;
 
-  const borradores = (docs ?? []).filter((d) => d.publication_status === "draft");
-  const publicados = (docs ?? []).filter((d) => d.publication_status === "published");
+  const borradores = (docs ?? []).filter(
+    (d) => d.publication_status === "draft",
+  );
+  const publicados = (docs ?? []).filter(
+    (d) => d.publication_status === "published",
+  );
 
   return (
     <main className="mx-auto w-full max-w-3xl px-6 py-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-[28px] font-semibold tracking-tight">Mis trabajos</h1>
+        <h1 className="text-[28px] font-semibold tracking-tight">
+          Mis trabajos
+        </h1>
         <div className="flex items-center gap-2.5">
           <Button variant="outline" asChild>
             <Link href="/mis-trabajos/papelera">
@@ -81,34 +87,34 @@ function Section({
     <section className="mt-9">
       <h2 className="mb-3 text-lg font-semibold tracking-tight">{title}</h2>
       {pending ? (
-        <div className="overflow-hidden rounded-lg border border-border bg-card">
-          <div className="divide-y divide-border">
+        <div className="border-border bg-card overflow-hidden rounded-lg border">
+          <div className="divide-border divide-y">
             {[0, 1].map((i) => (
               <div key={i} className="flex items-center gap-3.5 px-4 py-3.5">
                 <div className="flex-1">
-                  <div className="h-3.5 w-1/2 animate-pulse rounded-sm bg-muted" />
-                  <div className="mt-2 h-2.5 w-1/4 animate-pulse rounded-sm bg-muted" />
+                  <div className="bg-muted h-3.5 w-1/2 animate-pulse rounded-sm" />
+                  <div className="bg-muted mt-2 h-2.5 w-1/4 animate-pulse rounded-sm" />
                 </div>
-                <div className="h-[22px] w-20 animate-pulse rounded-full bg-muted" />
+                <div className="bg-muted h-[22px] w-20 animate-pulse rounded-full" />
               </div>
             ))}
           </div>
         </div>
       ) : docs.length === 0 ? (
-        <div className="overflow-hidden rounded-lg border border-border bg-card">
+        <div className="border-border bg-card overflow-hidden rounded-lg border">
           <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
-            <div className="grid size-12 place-items-center rounded-lg border border-border bg-neutral-100 text-muted-foreground/70">
+            <div className="border-border text-muted-foreground/70 grid size-12 place-items-center rounded-lg border bg-neutral-100">
               <FileText className="size-5" />
             </div>
             <p className="text-base font-semibold">Todavía no hay nada acá</p>
-            <p className="max-w-[340px] text-sm text-muted-foreground">
+            <p className="text-muted-foreground max-w-[340px] text-sm">
               Aún no subiste ningún trabajo — empezá con Nuevo trabajo
             </p>
           </div>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-border bg-card">
-          <ul className="divide-y divide-border">
+        <div className="border-border bg-card overflow-hidden rounded-lg border">
+          <ul className="divide-border divide-y">
             {docs.map((d) => (
               <li key={d.id}>
                 <DocRow doc={d} />
@@ -141,8 +147,9 @@ function DocRow({ doc }: { doc: OwnDoc }) {
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium">{doc.title}</div>
         {doc.published_at && (
-          <div className="mt-0.5 text-[13px] text-muted-foreground">
-            Publicado el {new Date(doc.published_at).toLocaleDateString("es-AR")}
+          <div className="text-muted-foreground mt-0.5 text-[13px]">
+            Publicado el{" "}
+            {new Date(doc.published_at).toLocaleDateString("es-AR")}
           </div>
         )}
       </div>

@@ -47,7 +47,7 @@ export function VersionsPanel({ docId, versions, canManage }: Props) {
         {ordered.map((v) => (
           <li
             key={v.n}
-            className="hover:bg-neutral-50 flex items-center gap-3 px-5 py-3.5 transition-colors"
+            className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-neutral-50"
           >
             <span className="min-w-0 flex-1 truncate">
               v{v.n} · {v.original_filename} · {formatBytes(v.size_bytes)}

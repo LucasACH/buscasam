@@ -1,6 +1,7 @@
 """Cross-cutting helpers shared across the documents chokepoint submodules:
 the PATCH sentinel, the manageable/owner access gates, and the published
 version-history projection reused by drafts and detail reads."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -44,9 +45,7 @@ async def assert_manageable(
         raise DocumentNotFound
 
 
-async def _assert_owner(
-    session: AsyncSession, user_ctx: UserCtx, doc_id: int
-) -> None:
+async def _assert_owner(session: AsyncSession, user_ctx: UserCtx, doc_id: int) -> None:
     """Owner-only predicate stricter than manageable_where: accepted coautores
     cannot manage coauthors (ADR-0010 §8, module map §core/documents)."""
     is_owner = (
@@ -77,6 +76,7 @@ class _PublishedVersion:
     """One row of the published version-history projection (ADR-0011 §4): a
     version that was at some point the public current. Carries `sha_hex` for the
     download lookup on top of the DetailVersion fields the list projections need."""
+
     n: int
     sha_hex: str
     original_filename: str
@@ -98,18 +98,22 @@ async def _published_version_history(
     DetailVersion) and by get_manageable_version_file (resolved by n). Access
     gating is the caller's responsibility; this projection does not gate."""
     rows = (
-        await session.execute(
-            text(
-                "SELECT row_number() OVER (ORDER BY id) AS n, "
-                "       encode(sha256, 'hex') AS sha, original_filename, mime, "
-                "       bytes, indexed_at, is_current "
-                "FROM document_versions "
-                "WHERE doc_id = :doc_id AND first_published_at IS NOT NULL "
-                "ORDER BY id"
-            ),
-            {"doc_id": doc_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT row_number() OVER (ORDER BY id) AS n, "
+                    "       encode(sha256, 'hex') AS sha, original_filename, mime, "
+                    "       bytes, indexed_at, is_current "
+                    "FROM document_versions "
+                    "WHERE doc_id = :doc_id AND first_published_at IS NOT NULL "
+                    "ORDER BY id"
+                ),
+                {"doc_id": doc_id},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     return [
         _PublishedVersion(
             n=r["n"],

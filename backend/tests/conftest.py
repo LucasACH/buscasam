@@ -63,7 +63,9 @@ async def engine():
     _create_db(name)
 
     cfg = Config(str(BACKEND_ROOT / "alembic.ini"))
-    cfg.set_main_option("script_location", str(BACKEND_ROOT / "src/buscasam/migrations"))
+    cfg.set_main_option(
+        "script_location", str(BACKEND_ROOT / "src/buscasam/migrations")
+    )
     cfg.set_main_option("sqlalchemy.url", url)
     os.environ["BUSCASAM_DATABASE_URL"] = url
     command.upgrade(cfg, "head")

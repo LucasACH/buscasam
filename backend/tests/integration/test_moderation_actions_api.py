@@ -3,6 +3,7 @@
 Reason is an optional free-text note on every action; every domain miss is a
 uniform 404, role failure a 403.
 """
+
 from __future__ import annotations
 
 import base64

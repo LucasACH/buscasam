@@ -39,18 +39,18 @@ export function AreasCascader({ onChange, value }: AreasCascaderProps) {
 
   return (
     <div className="flex flex-col">
-      <div className="flex min-h-[42px] items-center gap-2 border-b border-border px-3 py-2.5">
+      <div className="border-border flex min-h-[42px] items-center gap-2 border-b px-3 py-2.5">
         {nav && (
           <button
             type="button"
             aria-label="Volver"
             onClick={() => setNav(parentOf(nav))}
-            className="grid size-[26px] place-items-center rounded-md text-muted-foreground hover:bg-neutral-100"
+            className="text-muted-foreground grid size-[26px] place-items-center rounded-md hover:bg-neutral-100"
           >
             <ChevronLeft className="size-4" />
           </button>
         )}
-        <div className="flex-1 truncate text-xs text-muted-foreground">
+        <div className="text-muted-foreground flex-1 truncate text-xs">
           {depth === 0 ? (
             <span>Elegí una Escuela</span>
           ) : (
@@ -71,19 +71,19 @@ export function AreasCascader({ onChange, value }: AreasCascaderProps) {
                 leaf ? onChange(a.area_path) : setNav(a.area_path)
               }
               className={cn(
-                "flex w-full items-center gap-2 rounded-md px-2.5 py-2.5 text-left text-sm text-foreground",
+                "text-foreground flex w-full items-center gap-2 rounded-md px-2.5 py-2.5 text-left text-sm",
                 selected ? "bg-primary-tint" : "hover:bg-neutral-100",
               )}
             >
               {leaf && (
-                <MapPin className="size-3.5 flex-none text-muted-foreground" />
+                <MapPin className="text-muted-foreground size-3.5 flex-none" />
               )}
               <span className="flex-1 truncate">{a.display_name}</span>
               {!leaf && (
-                <ChevronRight className="size-[15px] text-muted-foreground" />
+                <ChevronRight className="text-muted-foreground size-[15px]" />
               )}
               {selected && (
-                <Check className="size-[15px] text-primary" strokeWidth={2.5} />
+                <Check className="text-primary size-[15px]" strokeWidth={2.5} />
               )}
             </button>
           );
@@ -91,11 +91,11 @@ export function AreasCascader({ onChange, value }: AreasCascaderProps) {
       </div>
 
       {value && (
-        <div className="border-t border-border p-2">
+        <div className="border-border border-t p-2">
           <button
             type="button"
             onClick={() => onChange(null)}
-            className="flex w-full items-center justify-center gap-1.5 rounded-md px-2.5 py-2 text-sm text-destructive hover:bg-neutral-100"
+            className="text-destructive flex w-full items-center justify-center gap-1.5 rounded-md px-2.5 py-2 text-sm hover:bg-neutral-100"
           >
             <X className="size-3.5" />
             Quitar área

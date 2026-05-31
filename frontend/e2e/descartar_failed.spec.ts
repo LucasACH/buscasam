@@ -15,7 +15,11 @@ const USER = {
 };
 
 function json(body: unknown, status = 200) {
-  return { status, contentType: "application/json", body: JSON.stringify(body) };
+  return {
+    status,
+    contentType: "application/json",
+    body: JSON.stringify(body),
+  };
 }
 
 type Phase = "failed" | "discarded";
@@ -48,7 +52,12 @@ test("descartar a failed candidate returns the panel to the no-candidate state",
       is_owner: true,
       attachments: [],
       coauthors: [
-        { user_id: 7, display_name: "Ada Lovelace", email_local: "ada", status: "owner" },
+        {
+          user_id: 7,
+          display_name: "Ada Lovelace",
+          email_local: "ada",
+          status: "owner",
+        },
       ],
       versions: [
         {
@@ -78,7 +87,9 @@ test("descartar a failed candidate returns the panel to the no-candidate state",
 
   // 1. Land on the editar page; the candidate is in the failed state.
   await page.goto(`/mis-trabajos/${DOC_ID}/editar`);
-  const panel = page.locator("section").filter({ hasText: "Archivo principal" });
+  const panel = page
+    .locator("section")
+    .filter({ hasText: "Archivo principal" });
   await expect(panel.getByTestId("candidate-status-pill")).toHaveText(
     "Falló el procesamiento",
   );

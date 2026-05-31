@@ -3,6 +3,7 @@ module map §core/jobs). Drives the plain async core directly, like the other
 _run_* job cores. The fan-out inserts one coauthor_invite notification per
 pending registered coautor, deduped on the (user_id, event_key) unique index.
 """
+
 from __future__ import annotations
 
 from sqlalchemy import text
@@ -36,14 +37,18 @@ async def test_fan_out_inserts_one_notification_per_pending_invitee(session):
     await jobs._run_fan_out_coauthor_invites(session, doc_id)
 
     rows = (
-        await session.execute(
-            text(
-                "SELECT user_id, event_key, kind, payload_json AS payload "
-                "FROM notifications WHERE user_id = :uid"
-            ),
-            {"uid": invitee},
+        (
+            await session.execute(
+                text(
+                    "SELECT user_id, event_key, kind, payload_json AS payload "
+                    "FROM notifications WHERE user_id = :uid"
+                ),
+                {"uid": invitee},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     assert len(rows) == 1
     row = rows[0]
     assert row["kind"] == "coauthor_invite"

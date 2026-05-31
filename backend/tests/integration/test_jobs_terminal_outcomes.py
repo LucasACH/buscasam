@@ -5,6 +5,7 @@ ADR-0008 §5: recognized parse/OCR failures inside `_run_index_document` /
 `_run_attempt` must all land on `documents.mark_failed` for candidates and
 `documents.mark_headline_refresh_failed` for refresh_headline.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -43,9 +44,13 @@ def _persist_blob(blob_root: Path, payload: bytes) -> tuple[str, bytes]:
 def _tei_mock() -> httpx.AsyncClient:
     def handler(req):
         import json
+
         n = len(json.loads(req.read())["inputs"])
         return httpx.Response(200, json=[[0.1] * 1024] * n)
-    return httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://tei")
+
+    return httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="http://tei"
+    )
 
 
 @pytest_asyncio.fixture
@@ -129,6 +134,7 @@ async def test_index_exhausted_marks_failed_and_notifies(
 
     async def _boom(sha, mime):
         raise RuntimeError("tei-down")
+
     monkeypatch.setattr(jobs.extractmod, "extract", _boom)
 
     # attempts == max_attempts (3) → retry strategy returns None → terminal.
@@ -136,13 +142,17 @@ async def test_index_exhausted_marks_failed_and_notifies(
         await jobs.index_document(_ctx(jobs.index_document, attempts=3), version_id)
 
     row = (
-        await session.execute(
-            text(
-                "SELECT index_status, index_error FROM document_versions WHERE id = :id"
-            ),
-            {"id": version_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT index_status, index_error FROM document_versions WHERE id = :id"
+                ),
+                {"id": version_id},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     assert row["index_status"] == "failed"
     assert row["index_error"] == "exhausted retries: RuntimeError"
 
@@ -165,6 +175,7 @@ async def test_index_retries_remaining_leaves_candidate_in_processing(
 
     async def _boom(sha, mime):
         raise RuntimeError("transient")
+
     monkeypatch.setattr(jobs.extractmod, "extract", _boom)
 
     # attempts < max_attempts → retry strategy schedules a retry → no terminal.
@@ -172,13 +183,17 @@ async def test_index_retries_remaining_leaves_candidate_in_processing(
         await jobs.index_document(_ctx(jobs.index_document, attempts=0), version_id)
 
     row = (
-        await session.execute(
-            text(
-                "SELECT index_status, index_error FROM document_versions WHERE id = :id"
-            ),
-            {"id": version_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT index_status, index_error FROM document_versions WHERE id = :id"
+                ),
+                {"id": version_id},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     # ADR-0011 §5: the claim transaction commits pending→processing before the
     # extract IO (so the row lock releases). A transient IO failure with retries
     # remaining no longer rolls that flip back — the row stays 'processing' and a
@@ -205,6 +220,7 @@ async def test_index_exhausted_duplicate_does_not_duplicate_notification(
 
     async def _boom(sha, mime):
         raise RuntimeError("tei-down")
+
     monkeypatch.setattr(jobs.extractmod, "extract", _boom)
 
     ctx = _ctx(jobs.index_document, attempts=3)
@@ -225,8 +241,12 @@ async def test_index_exhausted_duplicate_does_not_duplicate_notification(
 # --- ocr_index_document terminal outcomes ----------------------------------
 
 
-def _install_ocrmypdf(monkeypatch, *, raises: type[BaseException] | None = None,
-                     exit_code_exception: type[BaseException] | None = None):
+def _install_ocrmypdf(
+    monkeypatch,
+    *,
+    raises: type[BaseException] | None = None,
+    exit_code_exception: type[BaseException] | None = None,
+):
     exc_type = exit_code_exception or type("_ExitCodeException", (Exception,), {})
 
     def _ocr(source, output, **kwargs):
@@ -235,9 +255,9 @@ def _install_ocrmypdf(monkeypatch, *, raises: type[BaseException] | None = None,
         output.write(b"%PDF-1.4 ocr")
 
     ocr_module = ModuleType("ocrmypdf")
-    ocr_module.ocr = _ocr
+    setattr(ocr_module, "ocr", _ocr)
     exceptions_module = ModuleType("ocrmypdf.exceptions")
-    exceptions_module.ExitCodeException = exc_type
+    setattr(exceptions_module, "ExitCodeException", exc_type)
     monkeypatch.setitem(sys.modules, "ocrmypdf", ocr_module)
     monkeypatch.setitem(sys.modules, "ocrmypdf.exceptions", exceptions_module)
 
@@ -252,6 +272,7 @@ async def test_ocr_exhausted_marks_failed(
 
     async def _open_for_send(sha):
         yield b"%PDF-1.4 src"
+
     monkeypatch.setattr(jobs.blob_store, "open_for_send", _open_for_send)
 
     _install_ocrmypdf(monkeypatch, raises=RuntimeError)
@@ -262,13 +283,17 @@ async def test_ocr_exhausted_marks_failed(
         )
 
     row = (
-        await session.execute(
-            text(
-                "SELECT index_status, index_error FROM document_versions WHERE id = :id"
-            ),
-            {"id": version_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT index_status, index_error FROM document_versions WHERE id = :id"
+                ),
+                {"id": version_id},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     assert row["index_status"] == "failed"
     assert row["index_error"] == "exhausted retries: RuntimeError"
 
@@ -290,21 +315,24 @@ async def test_headline_exhausted_keeps_indexed_and_notifies(
 
     async def _boom(tei, body_text, *, kind):
         raise RuntimeError("tei-headline-down")
+
     monkeypatch.setattr(jobs.embedmod, "embed", _boom)
 
     with pytest.raises(RuntimeError):
-        await jobs.refresh_headline(
-            _ctx(jobs.refresh_headline, attempts=3), version_id
-        )
+        await jobs.refresh_headline(_ctx(jobs.refresh_headline, attempts=3), version_id)
 
     row = (
-        await session.execute(
-            text(
-                "SELECT index_status, index_error FROM document_versions WHERE id = :id"
-            ),
-            {"id": version_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT index_status, index_error FROM document_versions WHERE id = :id"
+                ),
+                {"id": version_id},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     # Headline failure must not regress the indexing lifecycle.
     assert row["index_status"] == "indexed"
     assert row["index_error"] is None
@@ -332,12 +360,11 @@ async def test_headline_retries_remaining_does_not_notify(
 
     async def _boom(tei, body_text, *, kind):
         raise RuntimeError("transient")
+
     monkeypatch.setattr(jobs.embedmod, "embed", _boom)
 
     with pytest.raises(RuntimeError):
-        await jobs.refresh_headline(
-            _ctx(jobs.refresh_headline, attempts=0), version_id
-        )
+        await jobs.refresh_headline(_ctx(jobs.refresh_headline, attempts=0), version_id)
 
     notif_count = (
         await session.execute(
@@ -383,12 +410,16 @@ async def test_mark_failed_first_write_wins(session):
     )
 
     row = (
-        await session.execute(
-            text(
-                "SELECT index_status, index_error FROM document_versions WHERE id = :id"
-            ),
-            {"id": version_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT index_status, index_error FROM document_versions WHERE id = :id"
+                ),
+                {"id": version_id},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     assert row["index_status"] == "failed"
     assert row["index_error"] == "corrupted: PDFSyntaxError"

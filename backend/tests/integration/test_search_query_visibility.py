@@ -1,5 +1,6 @@
 """search_query.run threads UserCtx through readable_where and exposes
 `visibility` per row (PRD-2 reach into interno/privado)."""
+
 from buscasam.core import search_query
 from buscasam.core.auth import GUEST, UserCtx
 from buscasam.core.search_query import Filters

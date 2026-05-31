@@ -5,6 +5,7 @@ Revises: 0005
 Create Date: 2026-05-24
 
 """
+
 from alembic import op
 
 
@@ -15,9 +16,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute(
-        "CREATE INDEX chunks_body_tsv_gin ON chunks USING gin (body_tsv)"
-    )
+    op.execute("CREATE INDEX chunks_body_tsv_gin ON chunks USING gin (body_tsv)")
 
 
 def downgrade() -> None:

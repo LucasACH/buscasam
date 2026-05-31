@@ -1,5 +1,6 @@
 """Integration tests for core/documents.update_draft_metadata edit-during-candidate
 fan-out (issue #60, module map version-replacement §core/documents)."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -18,13 +19,17 @@ def _ctx(uid: int) -> UserCtx:
 
 async def _enqueued_refresh_version_ids(session) -> set[int]:
     rows = (
-        await session.execute(
-            text(
-                "SELECT (args->>'version_id')::int AS vid FROM procrastinate_jobs "
-                "WHERE task_name LIKE '%refresh_headline'"
+        (
+            await session.execute(
+                text(
+                    "SELECT (args->>'version_id')::int AS vid FROM procrastinate_jobs "
+                    "WHERE task_name LIKE '%refresh_headline'"
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return set(rows)
 
 
@@ -83,17 +88,27 @@ async def _seed_published_with_candidate(
     """A published document (version 1 current) plus a never-published candidate
     (version 2). Returns (uid, doc_id, published_version_id, candidate_version_id)."""
     uid = await make_user(session)
-    doc_id = await make_document(
-        session, publication_status="published", titulo=titulo
-    )
+    doc_id = await make_document(session, publication_status="published", titulo=titulo)
     await make_document_author(session, doc_id, user_id=uid, status="owner")
     published_id = await _insert_version(
-        session, doc_id, uid, version_no=1, is_current=True, first_published=True,
-        titulo=titulo, staged_abstract=published_abstract,
+        session,
+        doc_id,
+        uid,
+        version_no=1,
+        is_current=True,
+        first_published=True,
+        titulo=titulo,
+        staged_abstract=published_abstract,
     )
     candidate_id = await _insert_version(
-        session, doc_id, uid, version_no=2, is_current=False, first_published=False,
-        titulo=titulo, index_status=candidate_status,
+        session,
+        doc_id,
+        uid,
+        version_no=2,
+        is_current=False,
+        first_published=False,
+        titulo=titulo,
+        index_status=candidate_status,
         staged_abstract=candidate_abstract,
     )
     return uid, doc_id, published_id, candidate_id
@@ -199,16 +214,34 @@ async def test_frozen_historical_version_excluded_from_fan_out(session):
     )
     await make_document_author(session, doc_id, user_id=uid, status="owner")
     historical_id = await _insert_version(
-        session, doc_id, uid, version_no=1, is_current=False, first_published=True,
-        titulo="Título original", staged_abstract="resumen histórico",
+        session,
+        doc_id,
+        uid,
+        version_no=1,
+        is_current=False,
+        first_published=True,
+        titulo="Título original",
+        staged_abstract="resumen histórico",
     )
     published_id = await _insert_version(
-        session, doc_id, uid, version_no=2, is_current=True, first_published=True,
-        titulo="Título original", staged_abstract="resumen publicado",
+        session,
+        doc_id,
+        uid,
+        version_no=2,
+        is_current=True,
+        first_published=True,
+        titulo="Título original",
+        staged_abstract="resumen publicado",
     )
     candidate_id = await _insert_version(
-        session, doc_id, uid, version_no=3, is_current=False, first_published=False,
-        titulo="Título original", staged_abstract="resumen candidato",
+        session,
+        doc_id,
+        uid,
+        version_no=3,
+        is_current=False,
+        first_published=False,
+        titulo="Título original",
+        staged_abstract="resumen candidato",
     )
     historical_fp_before = await _headline_fingerprint(session, historical_id)
 

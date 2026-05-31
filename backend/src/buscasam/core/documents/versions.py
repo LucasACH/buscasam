@@ -1,5 +1,6 @@
 """Main-version upload, replacement, and candidate discard (ADR-0011,
 module map §version-replacement)."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -214,9 +215,7 @@ async def discard_candidate(
     if candidate_vid is None:
         raise NoCandidateToDiscard
     await session.execute(
-        text(
-            "UPDATE document_versions SET index_status = 'discarded' WHERE id = :id"
-        ),
+        text("UPDATE document_versions SET index_status = 'discarded' WHERE id = :id"),
         {"id": candidate_vid},
     )
     await session.execute(
@@ -225,23 +224,25 @@ async def discard_candidate(
     )
 
 
-async def load_candidate(
-    session: AsyncSession, version_id: int
-) -> CandidateVersion:
+async def load_candidate(session: AsyncSession, version_id: int) -> CandidateVersion:
     row = (
-        await session.execute(
-            text(
-                "SELECT v.id, v.doc_id, encode(v.sha256, 'hex') AS sha, v.mime, "
-                "       d.titulo, "
-                "       (SELECT a.user_id FROM document_authors a "
-                "         WHERE a.doc_id = v.doc_id AND a.status = 'owner' LIMIT 1) "
-                "         AS owner_user_id "
-                "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
-                "WHERE v.id = :id"
-            ),
-            {"id": version_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT v.id, v.doc_id, encode(v.sha256, 'hex') AS sha, v.mime, "
+                    "       d.titulo, "
+                    "       (SELECT a.user_id FROM document_authors a "
+                    "         WHERE a.doc_id = v.doc_id AND a.status = 'owner' LIMIT 1) "
+                    "         AS owner_user_id "
+                    "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
+                    "WHERE v.id = :id"
+                ),
+                {"id": version_id},
+            )
         )
-    ).mappings().one_or_none()
+        .mappings()
+        .one_or_none()
+    )
     if row is None:
         raise DocumentNotFound
     return CandidateVersion(

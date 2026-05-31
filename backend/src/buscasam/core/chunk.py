@@ -8,6 +8,7 @@ Chunk boundaries are measured against the e5 token budget using the vendored
 tokenizer (ADR-0002 §4): every `passage` chunk encodes to `<= 512` tokens with
 the `passage:` prefix and special tokens included. Chunking never contacts TEI.
 """
+
 from __future__ import annotations
 
 import hashlib

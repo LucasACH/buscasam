@@ -52,7 +52,11 @@ const SEEDED = [
   {
     id: 3,
     kind: "document_unhidden",
-    payload: { doc_id: 13, doc_title: "Compiladores", note: "revisado y restaurado" },
+    payload: {
+      doc_id: 13,
+      doc_title: "Compiladores",
+      note: "revisado y restaurado",
+    },
     read_at: null,
     created_at: "2026-01-02T00:00:00Z",
   },
@@ -72,7 +76,9 @@ test("happy path: invitado → login → chip + bandeja loop → logout", async 
   let marked = false;
 
   await page.route("**/api/me", (route) =>
-    loggedIn ? route.fulfill(json(USER)) : route.fulfill({ status: 401, body: "" }),
+    loggedIn
+      ? route.fulfill(json(USER))
+      : route.fulfill({ status: 401, body: "" }),
   );
   // Mocked OIDC: the login initiator stands in for the whole Google round-trip,
   // flipping the session on and landing back on the validated `next`.

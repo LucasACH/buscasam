@@ -1,4 +1,5 @@
 """FastAPI dependency-injected resources (ADR-0003 §2, §8)."""
+
 from __future__ import annotations
 
 import httpx

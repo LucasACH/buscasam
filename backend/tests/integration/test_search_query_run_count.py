@@ -1,4 +1,5 @@
 """run_count returns the same total the full run() would, without paging/headline."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -22,7 +23,9 @@ async def _seed(session) -> None:
         tipo="tesis",
     )
     await make_chunk(
-        session, physics_id, is_headline=True,
+        session,
+        physics_id,
+        is_headline=True,
         body_text="Documento sobre redes neuronales y física cuántica.",
         embedding=_unit(0),
     )
@@ -35,7 +38,9 @@ async def _seed(session) -> None:
         tipo="paper",
     )
     await make_chunk(
-        session, lit_id, is_headline=True,
+        session,
+        lit_id,
+        is_headline=True,
         body_text="Documento sobre redes neuronales en la literatura.",
         embedding=_unit(1),
     )

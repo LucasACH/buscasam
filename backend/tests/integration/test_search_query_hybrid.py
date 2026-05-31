@@ -1,4 +1,5 @@
 """Hybrid retrieval — semantic CTE + RRF fusion + match floor (slice 5)."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -22,7 +23,9 @@ async def test_search_hybrid_returns_pure_semantic_hit(session):
         abstract="Estudio sobre partículas subatómicas y su comportamiento.",
     )
     await make_chunk(
-        session, a_id, is_headline=True,
+        session,
+        a_id,
+        is_headline=True,
         body_text="Documento sobre física cuántica.",
         embedding=_unit(0),
     )
@@ -33,7 +36,9 @@ async def test_search_hybrid_returns_pure_semantic_hit(session):
         abstract="Estudio sobre novelas argentinas del siglo XX.",
     )
     await make_chunk(
-        session, b_id, is_headline=True,
+        session,
+        b_id,
+        is_headline=True,
         body_text="Documento sobre literatura.",
         embedding=_unit(1),
     )
@@ -63,7 +68,9 @@ async def test_search_excludes_below_floor(session):
     half_sim[0] = np.float16(0.5)
     half_sim[1] = np.float16(np.sqrt(0.75))
     await make_chunk(
-        session, doc_id, is_headline=True,
+        session,
+        doc_id,
+        is_headline=True,
         body_text="Documento irrelevante para la consulta.",
         embedding=half_sim,
     )
@@ -139,7 +146,9 @@ async def test_search_snippet_rule_splits_by_row_source(session):
         abstract="Resumen del documento léxico.",
     )
     await make_chunk(
-        session, lex_id, is_headline=True,
+        session,
+        lex_id,
+        is_headline=True,
         body_text="Contiene alphabravo en el texto.",
         embedding=_unit(2),
     )
@@ -150,7 +159,9 @@ async def test_search_snippet_rule_splits_by_row_source(session):
         abstract="Resumen del documento semántico relacionado.",
     )
     await make_chunk(
-        session, sem_id, is_headline=True,
+        session,
+        sem_id,
+        is_headline=True,
         body_text="Sin coincidencia textual con la consulta.",
         embedding=_unit(0),
     )

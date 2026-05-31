@@ -1,4 +1,5 @@
 """Integration tests for core/documents.get_draft_state + update_draft_metadata (issue #29)."""
+
 from __future__ import annotations
 
 import json
@@ -96,8 +97,12 @@ async def test_get_draft_state_exposes_generated_snapshot(session):
             "UPDATE document_versions SET generated_abstract = :a, "
             "  generated_keywords = :k, generated_fecha = :f WHERE id = :vid"
         ),
-        {"a": "resumen del extractor", "k": ["extractor"], "f": date(2022, 7, 1),
-         "vid": version_id},
+        {
+            "a": "resumen del extractor",
+            "k": ["extractor"],
+            "f": date(2022, 7, 1),
+            "vid": version_id,
+        },
     )
 
     state = await documents.get_draft_state(session, _ctx(uid), doc_id)
@@ -156,13 +161,21 @@ async def test_metadata_patch_leaves_generated_snapshot_immutable(session):
             "UPDATE document_versions SET generated_abstract = :a, "
             "  generated_keywords = :k, generated_fecha = :f WHERE id = :vid"
         ),
-        {"a": "resumen del extractor", "k": ["extractor"], "f": date(2022, 7, 1),
-         "vid": version_id},
+        {
+            "a": "resumen del extractor",
+            "k": ["extractor"],
+            "f": date(2022, 7, 1),
+            "vid": version_id,
+        },
     )
 
     await documents.update_draft_metadata(
-        session, _ctx(uid), doc_id,
-        abstract="resumen editado", keywords=["editado"], fecha=date(2000, 1, 1),
+        session,
+        _ctx(uid),
+        doc_id,
+        abstract="resumen editado",
+        keywords=["editado"],
+        fecha=date(2000, 1, 1),
     )
 
     state = await documents.get_draft_state(session, _ctx(uid), doc_id)
@@ -183,9 +196,7 @@ async def test_get_draft_state_processing_gates_with_processing(session):
 
 
 async def test_get_draft_state_failed_gates_with_processing_failed(session):
-    uid, doc_id, version_id = await _seed_candidate(
-        session, index_status="failed"
-    )
+    uid, doc_id, version_id = await _seed_candidate(session, index_status="failed")
 
     state = await documents.get_draft_state(session, _ctx(uid), doc_id)
 
@@ -194,14 +205,18 @@ async def test_get_draft_state_failed_gates_with_processing_failed(session):
 
 async def _enqueued_task_names(session, version_id: int) -> list[str]:
     rows = (
-        await session.execute(
-            text(
-                "SELECT task_name FROM procrastinate_jobs "
-                "WHERE args->>'version_id' = :vid"
-            ),
-            {"vid": str(version_id)},
+        (
+            await session.execute(
+                text(
+                    "SELECT task_name FROM procrastinate_jobs "
+                    "WHERE args->>'version_id' = :vid"
+                ),
+                {"vid": str(version_id)},
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return list(rows)
 
 

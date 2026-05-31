@@ -15,9 +15,13 @@ async def test_document_access_invitado_excludes_non_publico(session):
 
     where = invitado_where("d")
     result = (
-        await session.execute(
-            text(f"SELECT d.id FROM documents d WHERE {where} ORDER BY d.id")
+        (
+            await session.execute(
+                text(f"SELECT d.id FROM documents d WHERE {where} ORDER BY d.id")
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     assert result == [publico_published]

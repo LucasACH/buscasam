@@ -1,10 +1,12 @@
 """Co-author invite, revoke, accept, and decline transitions
 (module map §coauthor-invitations)."""
+
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from sqlalchemy import text
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from buscasam.core import notifications
@@ -84,21 +86,21 @@ async def revoke_invitation(
     (PRD story 29, module map §core/documents)."""
     await _assert_owner(session, user_ctx, doc_id)
 
-    result = await session.execute(
-        text(
-            "DELETE FROM document_authors "
-            "WHERE doc_id = :doc_id AND user_id = :uid AND status = 'pending'"
+    result = cast(
+        CursorResult[Any],
+        await session.execute(
+            text(
+                "DELETE FROM document_authors "
+                "WHERE doc_id = :doc_id AND user_id = :uid AND status = 'pending'"
+            ),
+            {"doc_id": doc_id, "uid": invitee_user_id},
         ),
-        {"doc_id": doc_id, "uid": invitee_user_id},
     )
     if result.rowcount == 0:
         raise CoauthorNotPending
 
     await session.execute(
-        text(
-            "DELETE FROM notifications "
-            "WHERE user_id = :uid AND event_key = :ek"
-        ),
+        text("DELETE FROM notifications WHERE user_id = :uid AND event_key = :ek"),
         {
             "uid": invitee_user_id,
             "ek": notifications.coauthor_invite_event_key(doc_id, invitee_user_id),
@@ -135,16 +137,20 @@ async def _transition_invitation(
     # Idempotency lives at the row level: the status='pending' predicate stops
     # matching after the first transition, so a re-submit is a 0-row UPDATE. The
     # readable-lifecycle guards mean a hidden/soft-deleted doc cannot ratify.
-    flipped = await session.execute(
-        text(
-            "UPDATE document_authors SET status = :new_status "
-            "WHERE doc_id = :doc_id AND user_id = :uid AND status = 'pending' "
-            "  AND EXISTS (SELECT 1 FROM documents d WHERE d.id = :doc_id "
-            "              AND d.publication_status = 'published' "
-            "              AND d.soft_deleted_at IS NULL "
-            "              AND d.moderation_hidden_at IS NULL)"
+    assert user_ctx.user_id is not None
+    flipped = cast(
+        CursorResult[Any],
+        await session.execute(
+            text(
+                "UPDATE document_authors SET status = :new_status "
+                "WHERE doc_id = :doc_id AND user_id = :uid AND status = 'pending' "
+                "  AND EXISTS (SELECT 1 FROM documents d WHERE d.id = :doc_id "
+                "              AND d.publication_status = 'published' "
+                "              AND d.soft_deleted_at IS NULL "
+                "              AND d.moderation_hidden_at IS NULL)"
+            ),
+            {"new_status": new_status, "doc_id": doc_id, "uid": user_ctx.user_id},
         ),
-        {"new_status": new_status, "doc_id": doc_id, "uid": user_ctx.user_id},
     )
     if flipped.rowcount == 0:
         raise InvitationNotPending

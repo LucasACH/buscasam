@@ -5,6 +5,7 @@ Revises: 0009
 Create Date: 2026-05-26
 
 """
+
 from alembic import op
 
 
@@ -65,12 +66,15 @@ def upgrade() -> None:
         """
     )
     op.execute(
-        "CREATE INDEX document_attachments_doc_id "
-        "ON document_attachments (doc_id)"
+        "CREATE INDEX document_attachments_doc_id ON document_attachments (doc_id)"
     )
 
-    op.execute("ALTER TABLE chunks ADD COLUMN is_current boolean NOT NULL DEFAULT false")
-    op.execute("ALTER TABLE chunks ADD COLUMN version_id bigint references document_versions(id)")
+    op.execute(
+        "ALTER TABLE chunks ADD COLUMN is_current boolean NOT NULL DEFAULT false"
+    )
+    op.execute(
+        "ALTER TABLE chunks ADD COLUMN version_id bigint references document_versions(id)"
+    )
 
     # Backfill: one synthetic document_versions row per document that has chunks;
     # then point those chunks at it and mark them is_current=true.

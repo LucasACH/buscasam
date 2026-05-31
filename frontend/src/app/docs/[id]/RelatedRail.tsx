@@ -8,7 +8,7 @@ export function RelatedRail({ docId }: { docId: number }) {
   const { related } = useRelated(docId);
   if (!related || related.length === 0) return null;
   return (
-    <section className="mt-8 border-t border-border pt-6">
+    <section className="border-border mt-8 border-t pt-6">
       <h2 className="text-[19px] font-semibold tracking-tight">
         Trabajos relacionados
       </h2>

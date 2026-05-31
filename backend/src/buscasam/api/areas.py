@@ -1,4 +1,5 @@
 """GET /api/areas — áreas reference tree for the cascader."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
@@ -20,7 +21,9 @@ class AreaDTO(BaseModel):
 async def list_areas(session: AsyncSession = Depends(get_session)) -> list[AreaDTO]:
     rows = (
         await session.execute(
-            text("SELECT area_path::text AS area_path, display_name FROM areas ORDER BY area_path")
+            text(
+                "SELECT area_path::text AS area_path, display_name FROM areas ORDER BY area_path"
+            )
         )
     ).all()
     return [AreaDTO(area_path=r.area_path, display_name=r.display_name) for r in rows]

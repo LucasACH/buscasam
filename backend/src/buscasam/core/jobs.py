@@ -4,6 +4,7 @@ Single concentration point for "what async work exists and how it retries".
 Feature code imports the typed enqueue helpers — never `procrastinate`
 directly (ADR-0008 §3, architecture test in tests/unit/test_jobs_architecture.py).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -12,12 +13,14 @@ import logging
 import zipfile
 from contextlib import asynccontextmanager
 from datetime import timedelta
+from typing import Any, cast
 
 import httpx
 from pdfminer.pdfparser import PDFSyntaxError
 from procrastinate import App, JobContext, PsycopgConnector, RetryStrategy
 from procrastinate.exceptions import AlreadyEnqueued
 from sqlalchemy import text
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from buscasam.core import blob_store
@@ -158,9 +161,7 @@ async def _run_index_document(sm, tei: httpx.AsyncClient, version_id: int) -> No
     await _complete_indexing(sm, tei, cv, doc)
 
 
-async def _run_ocr_index_document(
-    sm, tei: httpx.AsyncClient, version_id: int
-) -> None:
+async def _run_ocr_index_document(sm, tei: httpx.AsyncClient, version_id: int) -> None:
     """Runs ocrmypdf to add a text layer, then re-extracts from the OCR'd bytes.
 
     The claim commits 'processing' and releases the row lock *before* the
@@ -223,9 +224,7 @@ async def _run_ocr_index_document(
             await session.commit()
 
 
-async def _run_refresh_headline(
-    sm, tei: httpx.AsyncClient, version_id: int
-) -> None:
+async def _run_refresh_headline(sm, tei: httpx.AsyncClient, version_id: int) -> None:
     async with sm() as session:
         cv = await documents.load_candidate(session, version_id)
         staged_abstract = (
@@ -248,20 +247,24 @@ async def _run_fan_out_coauthor_invites(session: AsyncSession, doc_id: int) -> N
     only idempotency mechanism, so retries after partial completion add zero
     duplicates (module map §core/jobs, PRD story 27)."""
     rows = (
-        await session.execute(
-            text(
-                "SELECT da.user_id AS user_id, d.titulo AS doc_title, "
-                "       o.display_name AS inviter "
-                "FROM document_authors da "
-                "JOIN documents d ON d.id = da.doc_id "
-                "LEFT JOIN document_authors o "
-                "  ON o.doc_id = da.doc_id AND o.status = 'owner' "
-                "WHERE da.doc_id = :doc_id AND da.status = 'pending' "
-                "  AND da.user_id IS NOT NULL"
-            ),
-            {"doc_id": doc_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT da.user_id AS user_id, d.titulo AS doc_title, "
+                    "       o.display_name AS inviter "
+                    "FROM document_authors da "
+                    "JOIN documents d ON d.id = da.doc_id "
+                    "LEFT JOIN document_authors o "
+                    "  ON o.doc_id = da.doc_id AND o.status = 'owner' "
+                    "WHERE da.doc_id = :doc_id AND da.status = 'pending' "
+                    "  AND da.user_id IS NOT NULL"
+                ),
+                {"doc_id": doc_id},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     for r in rows:
         await notifications.notify_coauthor_invite(
             session,
@@ -290,11 +293,14 @@ async def _run_purge_deleted(session: AsyncSession) -> int:
     versions, attachments, and chunks. In-window and never-deleted documents
     are untouched; idempotent (a retried run deletes only rows still matching
     the predicate). Returns the rowcount the worker logs for operators."""
-    result = await session.execute(
-        text(
-            "DELETE FROM documents "
-            "WHERE soft_deleted_at < now() - INTERVAL '180 days'"
-        )
+    result = cast(
+        CursorResult[Any],
+        await session.execute(
+            text(
+                "DELETE FROM documents "
+                "WHERE soft_deleted_at < now() - INTERVAL '180 days'"
+            )
+        ),
     )
     return result.rowcount
 
@@ -338,7 +344,9 @@ def _get_worker_resources():
         # ADR-0002 §5: fail fast if the vendored tokenizer drifts from the model.
         embedmod.assert_model_revision_pinned()
         _worker_engine = create_async_engine(settings.database_url)
-        _worker_sessionmaker = async_sessionmaker(_worker_engine, expire_on_commit=False)
+        _worker_sessionmaker = async_sessionmaker(
+            _worker_engine, expire_on_commit=False
+        )
     if _worker_tei is None:
         _worker_tei = httpx.AsyncClient(base_url=settings.tei_url)
     return _worker_sessionmaker, _worker_tei
@@ -378,8 +386,7 @@ async def _run_attempt(context, runner, version_id, on_terminal) -> None:
         return
     except Exception as exc:
         will_retry = (
-            context.task.get_retry_exception(exception=exc, job=context.job)
-            is not None
+            context.task.get_retry_exception(exception=exc, job=context.job) is not None
         )
         if not will_retry:
             async with sm() as terminal_session:
@@ -489,7 +496,9 @@ async def _defer_with_savepoint(task, *, lock: str, **defer_kwargs) -> None:
         await cur.execute(f"SAVEPOINT {savepoint}")
     try:
         await task.configure(
-            queueing_lock=lock, lock=lock, connection=conn,
+            queueing_lock=lock,
+            lock=lock,
+            connection=conn,
         ).defer_async(**defer_kwargs)
     except AlreadyEnqueued:
         async with conn.cursor() as cur:
@@ -508,9 +517,7 @@ async def enqueue_index_document(session: AsyncSession, version_id: int) -> None
     )
 
 
-async def enqueue_ocr_index_document(
-    session: AsyncSession, version_id: int
-) -> None:
+async def enqueue_ocr_index_document(session: AsyncSession, version_id: int) -> None:
     """Same lock key as index_document per ADR-0008 §7 (`index:v{id}`)."""
     await _defer_with_savepoint(
         ocr_index_document,
@@ -546,9 +553,7 @@ async def enqueue_sweep_orphan_blobs(session: AsyncSession) -> None:
     )
 
 
-async def enqueue_fan_out_coauthor_invites(
-    session: AsyncSession, doc_id: int
-) -> None:
+async def enqueue_fan_out_coauthor_invites(session: AsyncSession, doc_id: int) -> None:
     """Defer the publish-time / post-publish coauthor fan-out (module map
     §core/jobs). Lock `coauthors:d{doc_id}` (ADR-0008 §7) collapses a duplicate
     enqueue to a no-op."""

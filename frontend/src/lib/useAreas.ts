@@ -29,7 +29,9 @@ export function useAreaLabel(
 ): string | null {
   const { data } = useAreas();
   if (!areaPath) return null;
-  const byPath = new Map((data ?? []).map((a) => [a.area_path, a.display_name]));
+  const byPath = new Map(
+    (data ?? []).map((a) => [a.area_path, a.display_name]),
+  );
   const segments = areaPath.split(".");
   const labels = segments.map(
     (_, i) => byPath.get(segments.slice(0, i + 1).join(".")) ?? segments[i],

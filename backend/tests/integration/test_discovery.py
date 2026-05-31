@@ -1,4 +1,5 @@
 """Integration tests for core/discovery (read tracking + más leídos, issue #109)."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -44,8 +45,13 @@ async def test_record_read_same_reader_same_day_is_idempotent(session):
 
 
 async def test_most_read_ranks_publico_by_lectura_count(session):
-    hot = await make_document(session, titulo="Hot", area_path="escuela_ciencia",
-                              tipo="tesis", fecha=date(2024, 3, 1))
+    hot = await make_document(
+        session,
+        titulo="Hot",
+        area_path="escuela_ciencia",
+        tipo="tesis",
+        fecha=date(2024, 3, 1),
+    )
     warm = await make_document(session, titulo="Warm")
     await _seed_reads(session, hot, days_ago=1, readers=3)
     await _seed_reads(session, warm, days_ago=1, readers=1)

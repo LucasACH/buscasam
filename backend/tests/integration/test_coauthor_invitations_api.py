@@ -3,6 +3,7 @@
 and Origin-checked, every miss mapped to a uniform 404. The accepted-invitee →
 readable end-to-end pins the accept transition into readable_where.
 """
+
 from __future__ import annotations
 
 import base64
@@ -70,8 +71,7 @@ async def _status(session, doc_id, user_id) -> str:
     return (
         await session.execute(
             text(
-                "SELECT status FROM document_authors "
-                "WHERE doc_id = :d AND user_id = :u"
+                "SELECT status FROM document_authors WHERE doc_id = :d AND user_id = :u"
             ),
             {"d": doc_id, "u": user_id},
         )
@@ -113,9 +113,13 @@ async def test_resubmit_after_transition_returns_404(client, session):
     doc_id, _invitee, _nid, cookie = await _seed(session)
     headers = {"cookie": f"sid={cookie}", "origin": ORIGIN}
 
-    first = await client.post(f"/api/coauthor_invitations/{doc_id}/accept", headers=headers)
+    first = await client.post(
+        f"/api/coauthor_invitations/{doc_id}/accept", headers=headers
+    )
     assert first.status_code == 204
-    second = await client.post(f"/api/coauthor_invitations/{doc_id}/accept", headers=headers)
+    second = await client.post(
+        f"/api/coauthor_invitations/{doc_id}/accept", headers=headers
+    )
     assert second.status_code == 404
 
 

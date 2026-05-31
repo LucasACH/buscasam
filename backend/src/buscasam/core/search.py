@@ -5,6 +5,7 @@ HTTP route (URL shape): silent lexical fallback on TEI failure (ADR-0002 §8)
 and the "second call with filters dropped" rule for unfiltered_total.
 Future authenticated routes call the same `execute`.
 """
+
 from __future__ import annotations
 
 import logging

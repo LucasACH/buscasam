@@ -65,7 +65,9 @@ export function ReportDialog({ docId }: { docId: number }) {
         className="w-72 rounded-[14px] p-4 shadow-[0_8px_30px_-8px_rgba(23,23,23,0.18)]"
       >
         <div className="space-y-3">
-          <p className="text-sm font-medium">¿Por qué reportás este documento?</p>
+          <p className="text-sm font-medium">
+            ¿Por qué reportás este documento?
+          </p>
           <fieldset className="space-y-2.5">
             {REASONS.map((r) => (
               <label

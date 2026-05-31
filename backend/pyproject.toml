@@ -34,6 +34,9 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "uvicorn>=0.32.0",
     "fpdf2>=2.7",
+    "ruff>=0.15.15",
+    "mypy>=2.1.0",
+    "types-authlib>=1.6.7.20260330",
 ]
 
 [build-system]
@@ -49,3 +52,10 @@ testpaths = ["tests"]
 markers = [
     "ocr_slow: OCR integration tests; require ocrmypdf + Tesseract installed",
 ]
+
+[tool.ruff]
+extend-exclude = ["scripts"]
+
+[[tool.mypy.overrides]]
+module = ["odf.*", "yake", "ocrmypdf", "ocrmypdf.*"]
+ignore_missing_imports = true

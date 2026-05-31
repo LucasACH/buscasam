@@ -46,7 +46,9 @@ describe("useInspect", () => {
   it("fetches the report-scoped document metadata", async () => {
     apiGet.mockResolvedValue({ data: META, error: undefined });
 
-    const { result } = renderHook(() => useInspect(42, true), { wrapper: wrapper() });
+    const { result } = renderHook(() => useInspect(42, true), {
+      wrapper: wrapper(),
+    });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.metadata).toEqual(META);
@@ -68,30 +70,37 @@ describe("useInspect", () => {
     ["hide", "/api/moderation/reports/{report_id}/hide"],
     ["unhide", "/api/moderation/reports/{report_id}/unhide"],
     ["dismiss", "/api/moderation/reports/{report_id}/dismiss"],
-  ] as const)("%s POSTs the reason to its endpoint and invalidates the queue", async (action, path) => {
-    apiGet.mockResolvedValue({ data: META, error: undefined });
-    apiPost.mockResolvedValue({ error: undefined });
-    const { result } = renderHook(() => useInspect(42, true), { wrapper: wrapper() });
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
+  ] as const)(
+    "%s POSTs the reason to its endpoint and invalidates the queue",
+    async (action, path) => {
+      apiGet.mockResolvedValue({ data: META, error: undefined });
+      apiPost.mockResolvedValue({ error: undefined });
+      const { result } = renderHook(() => useInspect(42, true), {
+        wrapper: wrapper(),
+      });
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    const invalidate = vi.spyOn(QueryClient.prototype, "invalidateQueries");
-    const err = await result.current[action]("una razón");
+      const invalidate = vi.spyOn(QueryClient.prototype, "invalidateQueries");
+      const err = await result.current[action]("una razón");
 
-    expect(err).toBeUndefined();
-    expect(apiPost).toHaveBeenCalledWith(path, {
-      params: { path: { report_id: 42 } },
-      body: { reason: "una razón" },
-    });
-    expect(invalidate.mock.calls.map((c) => c[0]?.queryKey)).toContainEqual([
-      "moderation",
-      "queue",
-    ]);
-  });
+      expect(err).toBeUndefined();
+      expect(apiPost).toHaveBeenCalledWith(path, {
+        params: { path: { report_id: 42 } },
+        body: { reason: "una razón" },
+      });
+      expect(invalidate.mock.calls.map((c) => c[0]?.queryKey)).toContainEqual([
+        "moderation",
+        "queue",
+      ]);
+    },
+  );
 
   it("surfaces a failed action as action_failed without invalidating", async () => {
     apiGet.mockResolvedValue({ data: META, error: undefined });
     apiPost.mockResolvedValue({ error: { detail: "x" } });
-    const { result } = renderHook(() => useInspect(42, true), { wrapper: wrapper() });
+    const { result } = renderHook(() => useInspect(42, true), {
+      wrapper: wrapper(),
+    });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     expect(await result.current.hide("r")).toBe("action_failed");

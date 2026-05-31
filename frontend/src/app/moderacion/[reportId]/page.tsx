@@ -16,7 +16,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { useAreaLabel } from "@/components/AreaField";
 import { useUser } from "@/lib/useUser";
-import { useInspect, type ActionError, type InspectMetadata } from "./useInspect";
+import {
+  useInspect,
+  type ActionError,
+  type InspectMetadata,
+} from "./useInspect";
 
 // Reporter-chosen categories (document_reports.reason), shown so the moderator
 // sees why the document was reported. Distinct from the moderator's free-text
@@ -34,8 +38,14 @@ export default function InspectPage() {
   const params = useParams<{ reportId: string }>();
   const reportId = Number(params.reportId);
   const isDocente = user?.role === "docente";
-  const { metadata, isLoading: inspectLoading, isError, hide, unhide, dismiss } =
-    useInspect(reportId, isDocente && !Number.isNaN(reportId));
+  const {
+    metadata,
+    isLoading: inspectLoading,
+    isError,
+    hide,
+    unhide,
+    dismiss,
+  } = useInspect(reportId, isDocente && !Number.isNaN(reportId));
 
   useEffect(() => {
     if (isInvitado) {
@@ -104,7 +114,7 @@ function InspectView({
         asChild
         variant="ghost"
         size="sm"
-        className="text-muted-foreground -ml-2 mb-4"
+        className="text-muted-foreground mb-4 -ml-2"
       >
         <Link href="/moderacion">
           <ChevronLeft size={15} /> Volver a Moderación
@@ -138,13 +148,13 @@ function InspectView({
       <h2 className="mt-7 mb-2.5 text-[19px] font-semibold tracking-tight">
         Resumen
       </h2>
-      <p className="text-neutral-700 text-[15px] leading-relaxed">
+      <p className="text-[15px] leading-relaxed text-neutral-700">
         {metadata.abstract}
       </p>
 
       <a
         href={`/api/moderation/reports/${reportId}/download`}
-        className="border-border bg-card hover:bg-neutral-50 mt-5 flex max-w-[360px] items-center gap-3 rounded-lg border p-3 transition-colors"
+        className="border-border bg-card mt-5 flex max-w-[360px] items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-neutral-50"
       >
         <span className="bg-muted text-muted-foreground grid size-9 shrink-0 place-items-center rounded-lg">
           <FileText size={18} strokeWidth={1.8} />
@@ -160,7 +170,7 @@ function InspectView({
 
       <hr className="border-border my-8" />
 
-      <div className="border-border bg-neutral-50 rounded-lg border p-5">
+      <div className="border-border rounded-lg border bg-neutral-50 p-5">
         <h2 className="text-[19px] font-semibold tracking-tight">
           Resolver reporte
         </h2>
@@ -191,10 +201,18 @@ function InspectView({
           >
             <EyeOff size={14} strokeWidth={1.9} /> Ocultar
           </Button>
-          <Button variant="outline" disabled={pending} onClick={() => run(unhide)}>
+          <Button
+            variant="outline"
+            disabled={pending}
+            onClick={() => run(unhide)}
+          >
             <Eye size={14} strokeWidth={1.9} /> Mostrar
           </Button>
-          <Button variant="ghost" disabled={pending} onClick={() => run(dismiss)}>
+          <Button
+            variant="ghost"
+            disabled={pending}
+            onClick={() => run(dismiss)}
+          >
             Descartar
           </Button>
         </div>
@@ -208,7 +226,7 @@ function NotFound() {
     <main className="mx-auto w-full max-w-3xl px-6 py-8">
       <div className="border-border bg-card rounded-lg border px-6 py-16">
         <div className="mx-auto flex max-w-[340px] flex-col items-center text-center">
-          <div className="border-border bg-neutral-100 text-muted-foreground/70 grid size-12 place-items-center rounded-lg border">
+          <div className="border-border text-muted-foreground/70 grid size-12 place-items-center rounded-lg border bg-neutral-100">
             <FileX size={22} strokeWidth={1.8} />
           </div>
           <p className="mt-4 text-base font-semibold">

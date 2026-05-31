@@ -1,4 +1,5 @@
 """Domain exceptions for the documents chokepoint (module map §core/documents)."""
+
 from __future__ import annotations
 
 

@@ -10,8 +10,12 @@ vi.mock("@/api/client", () => ({ api: { GET: apiGet } }));
 import { CoauthorPicker } from "./CoauthorPicker";
 
 function wrap(ui: React.ReactNode) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
+  );
 }
 
 function StatefulPicker({
@@ -102,7 +106,9 @@ describe("CoauthorPicker", () => {
     await act(async () => {
       vi.advanceTimersByTime(250);
     });
-    await user.click(await screen.findByRole("option", { name: /Ada Lovelace/ }));
+    await user.click(
+      await screen.findByRole("option", { name: /Ada Lovelace/ }),
+    );
 
     const remove = await screen.findByRole("button", {
       name: /Quitar Ada Lovelace/i,
@@ -110,7 +116,9 @@ describe("CoauthorPicker", () => {
     await user.click(remove);
 
     expect(onChange).toHaveBeenLastCalledWith([]);
-    expect(screen.queryByRole("button", { name: /Quitar Ada Lovelace/i })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Quitar Ada Lovelace/i }),
+    ).toBeNull();
   });
 
   it("renders a chip for an initial value before any search", async () => {

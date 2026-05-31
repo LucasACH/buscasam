@@ -68,18 +68,18 @@ export function CoauthorsPanel({ docId }: { docId: number }) {
   }
 
   return (
-    <section className="rounded-lg border border-border bg-card">
+    <section className="border-border bg-card rounded-lg border">
       <div className="flex items-center justify-between gap-3 px-[18px] py-4">
         <h2 className="text-[19px] font-semibold tracking-tight">Coautores</h2>
       </div>
       <div className="px-[18px] pb-[18px]">
-        <ul className="mb-4 divide-y divide-border rounded-lg border border-border text-sm">
+        <ul className="divide-border border-border mb-4 divide-y rounded-lg border text-sm">
           {rows.map((row) => (
             <li
               key={`${row.user_id ?? "ext"}-${row.display_name}`}
               className="flex items-center gap-3 px-3.5 py-3"
             >
-              <span className="grid size-[30px] flex-none place-items-center rounded-full bg-primary-tint text-xs font-medium text-primary">
+              <span className="bg-primary-tint text-primary grid size-[30px] flex-none place-items-center rounded-full text-xs font-medium">
                 {initials(row.display_name)}
               </span>
               <div className="min-w-0 flex-1">

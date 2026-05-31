@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { resetMocks, setMockRoute } from "./mock-helpers";
+import { setMockRoute } from "./mock-helpers";
 
 // Issue #66 tracer: an owner deletes a published document, it leaves Mis
 // trabajos and appears in the Papelera with a "Se elimina en N días" countdown,
@@ -43,7 +43,11 @@ const DETAIL = {
 };
 
 function json(body: unknown, status = 200) {
-  return { status, contentType: "application/json", body: JSON.stringify(body) };
+  return {
+    status,
+    contentType: "application/json",
+    body: JSON.stringify(body),
+  };
 }
 
 test("delete → Papelera countdown → Restaurar returns to Mis trabajos + detalle", async ({
@@ -70,7 +74,12 @@ test("delete → Papelera countdown → Restaurar returns to Mis trabajos + deta
         is_owner: true,
         attachments: [],
         coauthors: [
-          { user_id: 9, display_name: "Owner", email_local: "owner", status: "owner" },
+          {
+            user_id: 9,
+            display_name: "Owner",
+            email_local: "owner",
+            status: "owner",
+          },
         ],
         versions: [
           {
@@ -143,7 +152,10 @@ test("delete → Papelera countdown → Restaurar returns to Mis trabajos + deta
     path: "/api/areas",
     status: 200,
     body: [
-      { area_path: "escuela_ciencia", display_name: "Escuela de Ciencia y Tecnología" },
+      {
+        area_path: "escuela_ciencia",
+        display_name: "Escuela de Ciencia y Tecnología",
+      },
     ],
   });
 
@@ -174,7 +186,11 @@ test("delete → Papelera countdown → Restaurar returns to Mis trabajos + deta
   await page.goto("/mis-trabajos");
   await expect(page.getByText(TITULO)).toBeVisible(); // back in Mis trabajos
 
-  await setMockRoute({ path: `/api/docs/${DOC_ID}`, status: 200, body: DETAIL });
+  await setMockRoute({
+    path: `/api/docs/${DOC_ID}`,
+    status: 200,
+    body: DETAIL,
+  });
   const back = await page.goto(`/docs/${DOC_ID}`);
   expect(back?.status()).toBe(200);
   await expect(page.getByRole("heading", { name: TITULO })).toBeVisible();

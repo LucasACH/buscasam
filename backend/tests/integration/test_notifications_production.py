@@ -2,6 +2,7 @@
 (core/notifications). Covers the event-key format every producer/consumer
 shares and the (user_id, event_key) idempotency every notify_* helper relies on.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -17,14 +18,18 @@ def test_coauthor_invite_event_key_format():
 
 async def _payload_rows(session, user_id):
     return (
-        await session.execute(
-            text(
-                "SELECT event_key, kind, payload_json AS payload "
-                "FROM notifications WHERE user_id = :uid"
-            ),
-            {"uid": user_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT event_key, kind, payload_json AS payload "
+                    "FROM notifications WHERE user_id = :uid"
+                ),
+                {"uid": user_id},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
 
 
 async def test_notify_coauthor_invite_shape(session):
@@ -103,8 +108,13 @@ async def test_moderation_reason_none_serializes_to_json_null(session):
             s, user_id=uid, doc_id=5, version_id=9, error="e"
         ),
         lambda s, uid: notifications.notify_moderation_action(
-            s, user_id=uid, kind=notifications.DOCUMENT_HIDDEN, action_id=3,
-            doc_id=5, doc_title="T", reason="spam"
+            s,
+            user_id=uid,
+            kind=notifications.DOCUMENT_HIDDEN,
+            action_id=3,
+            doc_id=5,
+            doc_title="T",
+            reason="spam",
         ),
     ],
 )

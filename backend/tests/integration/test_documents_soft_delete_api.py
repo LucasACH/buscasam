@@ -1,6 +1,7 @@
 """Integration tests for DELETE /api/documents/{id} (issue #65). Mirrors the
 POST /publish edge: 204 for the owner, 404 (no existence leak) for a non-owner,
 an accepted coautor, or an unknown id."""
+
 from __future__ import annotations
 
 import base64

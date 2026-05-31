@@ -102,7 +102,10 @@ services:
     build:
       context: ../backend
     command: ["bash", "scripts/backup_loop.sh"]
-    environment: *backend_env
+    environment:
+      BUSCASAM_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-buscasam}:${POSTGRES_PASSWORD:-buscasam}@db:5432/${POSTGRES_DB:-buscasam}
+      BUSCASAM_BLOB_ROOT: /var/lib/buscasam/blobs
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
     volumes:
       - ./.data/blobs:/var/lib/buscasam/blobs:ro
       - ./.data/backup:/backup/buscasam
@@ -117,6 +120,8 @@ services:
     environment:
       NODE_ENV: production
       BUSCASAM_API_URL: http://api:8000
+      BUSCASAM_BASE_URL: ${BUSCASAM_BASE_URL:-http://localhost:3000}
+      BUSCASAM_INTERNAL_API_URL: ${BUSCASAM_INTERNAL_API_URL:-http://api:8000/api}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s

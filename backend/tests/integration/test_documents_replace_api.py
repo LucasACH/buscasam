@@ -1,5 +1,6 @@
 """Integration tests for POST /api/documents/{id}/replace and the extended
 GET /api/documents/{id}/draft candidate field (issue #58)."""
+
 from __future__ import annotations
 
 import base64
@@ -102,14 +103,18 @@ async def test_replace_valid_pdf_returns_202(client, session, blob_root):
     assert r.status_code == 202
     assert await _version_count(session, doc_id) == 2
     candidate = (
-        await session.execute(
-            text(
-                "SELECT index_status, is_current FROM document_versions "
-                "WHERE doc_id = :d AND version_no = 2"
-            ),
-            {"d": doc_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT index_status, is_current FROM document_versions "
+                    "WHERE doc_id = :d AND version_no = 2"
+                ),
+                {"d": doc_id},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     assert candidate["index_status"] == "pending"
     assert candidate["is_current"] is False
 
@@ -175,7 +180,9 @@ async def test_replace_encrypted_pdf_returns_415(
     assert await _version_count(session, doc_id) == 1
 
 
-async def test_replace_without_published_version_returns_409(client, session, blob_root):
+async def test_replace_without_published_version_returns_409(
+    client, session, blob_root
+):
     uid = await make_user(session)
     sid = await _seed_session(session, uid)
     # Draft doc with a non-current candidate only — never published.

@@ -1,4 +1,5 @@
 """GET /api/search — URL → Filters, validation, DTO shaping. Orchestration in core/search."""
+
 from __future__ import annotations
 
 from dataclasses import asdict

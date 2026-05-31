@@ -9,6 +9,9 @@ import {
 
 const { useUserMock } = vi.hoisted(() => ({ useUserMock: vi.fn() }));
 vi.mock("@/lib/useUser", () => ({ useUser: () => useUserMock() }));
+vi.mock("@/components/AreaField", () => ({
+  useAreaLabel: (areaPath: string) => areaPath,
+}));
 
 const { useInspectMock, hide, unhide, dismiss } = vi.hoisted(() => ({
   useInspectMock: vi.fn(),
@@ -94,9 +97,10 @@ describe("/moderacion/[reportId] inspect view", () => {
   it("links to the current main-file download", () => {
     render(<InspectPage />);
 
-    expect(
-      screen.getByRole("link", { name: /descargar/i }),
-    ).toHaveAttribute("href", "/api/moderation/reports/42/download");
+    expect(screen.getByRole("link", { name: /descargar/i })).toHaveAttribute(
+      "href",
+      "/api/moderation/reports/42/download",
+    );
   });
 
   it("shows why the document was reported", () => {
@@ -120,25 +124,26 @@ describe("/moderacion/[reportId] inspect view", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /ocultar/i }));
 
-    await waitFor(() =>
-      expect(hide).toHaveBeenCalledWith("plagio comprobado"),
-    );
+    await waitFor(() => expect(hide).toHaveBeenCalledWith("plagio comprobado"));
     await waitFor(() => expect(push).toHaveBeenCalledWith("/moderacion"));
   });
 
   it.each([
     ["mostrar", () => unhide],
     ["descartar", () => dismiss],
-  ] as const)("%s acts with an empty reason and returns to the queue", async (name, getFn) => {
-    render(<InspectPage />);
+  ] as const)(
+    "%s acts with an empty reason and returns to the queue",
+    async (name, getFn) => {
+      render(<InspectPage />);
 
-    const btn = screen.getByRole("button", { name: new RegExp(name, "i") });
-    expect(btn).toBeEnabled();
-    fireEvent.click(btn);
+      const btn = screen.getByRole("button", { name: new RegExp(name, "i") });
+      expect(btn).toBeEnabled();
+      fireEvent.click(btn);
 
-    await waitFor(() => expect(getFn()).toHaveBeenCalledWith(""));
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/moderacion"));
-  });
+      await waitFor(() => expect(getFn()).toHaveBeenCalledWith(""));
+      await waitFor(() => expect(push).toHaveBeenCalledWith("/moderacion"));
+    },
+  );
 
   it("toasts and stays on the page when hiding fails", async () => {
     hide.mockResolvedValue("action_failed");
@@ -158,7 +163,9 @@ describe("/moderacion/[reportId] inspect view", () => {
 
     render(<InspectPage />);
 
-    expect(screen.getByText(/no se pudo cargar el reporte/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/no se pudo cargar el reporte/i),
+    ).toBeInTheDocument();
   });
 
   it("redirects an invitado to login, preserving the next path", () => {

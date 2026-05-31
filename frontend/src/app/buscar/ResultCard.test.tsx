@@ -1,6 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { ResultCard, type ResultCardData } from "./ResultCard";
 
@@ -16,6 +16,8 @@ function renderCard(result: ResultCardData) {
 }
 
 describe("ResultCard", () => {
+  afterEach(() => cleanup());
+
   it("renders document markup as text while preserving lexical highlights", () => {
     const { container } = renderCard({
       doc_id: 1,
@@ -53,7 +55,9 @@ describe("ResultCard", () => {
 
     expect(container.querySelectorAll("p").length).toBe(1);
     expect(
-      screen.getByText("Francisco presenta un descargo ante un acta de comprobación."),
+      screen.getByText(
+        "Francisco presenta un descargo ante un acta de comprobación.",
+      ),
     ).toBeInTheDocument();
   });
 

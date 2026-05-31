@@ -17,12 +17,11 @@ services:
   db:
     image: pgvector/pgvector:pg16@sha256:00ba258a66dac104fd5171074a0084462a64a1369d8513f3d0a634e2f24d15bc
     command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
-    ports: []
+    ports: !reset []
     volumes:
       - /var/lib/buscasam/postgres:/var/lib/postgresql/data
       - ./postgresql.conf:/etc/postgresql/postgresql.conf:ro
     oom_score_adj: -500
-    env_file: ./.env
     logging: *default-logging
 
   tei:
@@ -42,36 +41,41 @@ services:
     logging: *default-logging
 
   api:
+    build: !reset null
     image: ${BUSCASAM_IMAGE_REPO}/backend:${BUSCASAM_VERSION:-latest}
-    env_file: ./.env
+    environment: &backend-model-revision
+      BUSCASAM_EMBEDDING_MODEL_REVISION: ${EMBEDDING_MODEL_REVISION:?set EMBEDDING_MODEL_REVISION}
     volumes:
       - /var/lib/buscasam/blobs:/var/lib/buscasam/blobs
     logging: *default-logging
 
   worker_default:
+    build: !reset null
     image: ${BUSCASAM_IMAGE_REPO}/backend:${BUSCASAM_VERSION:-latest}
-    env_file: ./.env
+    environment: *backend-model-revision
     volumes:
       - /var/lib/buscasam/blobs:/var/lib/buscasam/blobs
     logging: *default-logging
 
   worker_ocr:
+    build: !reset null
     image: ${BUSCASAM_IMAGE_REPO}/backend:${BUSCASAM_VERSION:-latest}
-    env_file: ./.env
+    environment: *backend-model-revision
     volumes:
       - /var/lib/buscasam/blobs:/var/lib/buscasam/blobs
     mem_limit: 2g
     logging: *default-logging
 
   backup:
+    build: !reset null
     image: ${BUSCASAM_IMAGE_REPO}/backend:${BUSCASAM_VERSION:-latest}
-    env_file: ./.env
     volumes:
       - /var/lib/buscasam/blobs:/var/lib/buscasam/blobs:ro
       - /backup/buscasam:/backup/buscasam
     logging: *default-logging
 
   frontend:
+    build: !reset null
     image: ${BUSCASAM_IMAGE_REPO}/frontend:${BUSCASAM_VERSION:-latest}
     logging: *default-logging
 
@@ -90,8 +94,8 @@ services:
     logging: *default-logging
 
   migrate:
+    build: !reset null
     image: ${BUSCASAM_IMAGE_REPO}/backend:${BUSCASAM_VERSION:-latest}
-    env_file: ./.env
 
   certbot:
     image: certbot/certbot@sha256:0107d084c225631fc64a8313e19adb07275f7296fde338f7dfa93986c80b2e3e

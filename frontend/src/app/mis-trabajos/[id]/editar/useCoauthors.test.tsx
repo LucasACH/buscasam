@@ -45,7 +45,13 @@ function returns(overrides: Partial<DraftStateDTO> = {}) {
     area_path: "escuela.carrera.materia",
     attachments: [],
     coauthors: [
-      { user_id: 1, display_name: "Ada", email_local: "ada", email: null, status: "owner" },
+      {
+        user_id: 1,
+        display_name: "Ada",
+        email_local: "ada",
+        email: null,
+        status: "owner",
+      },
     ],
     versions: [],
     candidate: null,
@@ -66,11 +72,25 @@ describe("useCoauthors", () => {
     returns({
       is_owner: true,
       coauthors: [
-        { user_id: 1, display_name: "Ada", email_local: "ada", email: null, status: "owner" },
-        { user_id: 2, display_name: "Bob", email_local: "bob", email: null, status: "pending" },
+        {
+          user_id: 1,
+          display_name: "Ada",
+          email_local: "ada",
+          email: null,
+          status: "owner",
+        },
+        {
+          user_id: 2,
+          display_name: "Bob",
+          email_local: "bob",
+          email: null,
+          status: "pending",
+        },
       ],
     });
-    const { result } = renderHook(() => useCoauthors(1), { wrapper: wrapper() });
+    const { result } = renderHook(() => useCoauthors(1), {
+      wrapper: wrapper(),
+    });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.isOwner).toBe(true);
@@ -83,17 +103,19 @@ describe("useCoauthors", () => {
   it("invite POSTs the user_id and invalidates the draft query", async () => {
     returns();
     apiPost.mockResolvedValue({ error: undefined });
-    const { result } = renderHook(() => useCoauthors(7), { wrapper: wrapper() });
+    const { result } = renderHook(() => useCoauthors(7), {
+      wrapper: wrapper(),
+    });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     const initialGets = apiGet.mock.calls.length;
     const err = await result.current.invite(99);
 
     expect(err).toBeUndefined();
-    expect(apiPost).toHaveBeenCalledWith(
-      "/api/documents/{doc_id}/coauthors",
-      { params: { path: { doc_id: 7 } }, body: { user_id: 99 } },
-    );
+    expect(apiPost).toHaveBeenCalledWith("/api/documents/{doc_id}/coauthors", {
+      params: { path: { doc_id: 7 } },
+      body: { user_id: 99 },
+    });
     await waitFor(() =>
       expect(apiGet.mock.calls.length).toBeGreaterThan(initialGets),
     );
@@ -105,7 +127,9 @@ describe("useCoauthors", () => {
       error: { detail: "x" },
       response: { status: 409 },
     });
-    const { result } = renderHook(() => useCoauthors(1), { wrapper: wrapper() });
+    const { result } = renderHook(() => useCoauthors(1), {
+      wrapper: wrapper(),
+    });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     const err = await result.current.invite(99);
@@ -119,7 +143,9 @@ describe("useCoauthors", () => {
       error: { detail: "x" },
       response: { status: 403 },
     });
-    const { result } = renderHook(() => useCoauthors(1), { wrapper: wrapper() });
+    const { result } = renderHook(() => useCoauthors(1), {
+      wrapper: wrapper(),
+    });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     expect(await result.current.invite(99)).toEqual({ kind: "forbidden" });
@@ -131,7 +157,9 @@ describe("useCoauthors", () => {
       error: { detail: "x" },
       response: { status: 500 },
     });
-    const { result } = renderHook(() => useCoauthors(1), { wrapper: wrapper() });
+    const { result } = renderHook(() => useCoauthors(1), {
+      wrapper: wrapper(),
+    });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     expect(await result.current.invite(99)).toEqual({ kind: "network" });
@@ -140,7 +168,9 @@ describe("useCoauthors", () => {
   it("revoke DELETEs the user_id and invalidates the draft query", async () => {
     returns();
     apiDelete.mockResolvedValue({ error: undefined });
-    const { result } = renderHook(() => useCoauthors(7), { wrapper: wrapper() });
+    const { result } = renderHook(() => useCoauthors(7), {
+      wrapper: wrapper(),
+    });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     const initialGets = apiGet.mock.calls.length;

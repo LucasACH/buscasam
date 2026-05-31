@@ -3,6 +3,7 @@
 Both helpers pre-allocate ids via `nextval` and route through
 `buscasam.fixtures.seed.insert_*`, so schema changes touch one writer.
 """
+
 from __future__ import annotations
 
 import json
@@ -152,9 +153,7 @@ async def make_chunk(
     embedding: np.ndarray | None = None,
 ) -> int:
     conn = await session.connection()
-    new_id = (
-        await conn.execute(text("SELECT nextval('chunks_id_seq')"))
-    ).scalar_one()
+    new_id = (await conn.execute(text("SELECT nextval('chunks_id_seq')"))).scalar_one()
     await insert_chunk(
         conn,
         Chunk(

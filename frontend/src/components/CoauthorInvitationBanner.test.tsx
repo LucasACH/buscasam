@@ -37,7 +37,9 @@ describe("CoauthorInvitationBanner", () => {
     renderBanner("banner");
     expect(screen.getByText(/Ada Lovelace/)).toBeInTheDocument();
     expect(screen.getByText(/Redes neuronales/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Aceptar/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Aceptar/i }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Rechazar/i }),
     ).toBeInTheDocument();

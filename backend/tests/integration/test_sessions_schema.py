@@ -24,23 +24,25 @@ async def test_sessions_default_expires_at_is_created_at_plus_90_days(session):
     sid = secrets.token_bytes(32)
 
     await session.execute(
-        text(
-            "INSERT INTO sessions (sid, user_id) VALUES (:sid, :uid)"
-        ),
+        text("INSERT INTO sessions (sid, user_id) VALUES (:sid, :uid)"),
         {"sid": sid, "uid": user_id},
     )
     await session.commit()
 
     row = (
-        await session.execute(
-            text(
-                "SELECT expires_at = created_at + interval '90 days' AS ok, "
-                "last_seen_at IS NOT NULL AS has_last_seen "
-                "FROM sessions WHERE sid = :sid"
-            ),
-            {"sid": sid},
+        (
+            await session.execute(
+                text(
+                    "SELECT expires_at = created_at + interval '90 days' AS ok, "
+                    "last_seen_at IS NOT NULL AS has_last_seen "
+                    "FROM sessions WHERE sid = :sid"
+                ),
+                {"sid": sid},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
 
     assert row["ok"] is True
     assert row["has_last_seen"] is True

@@ -55,7 +55,7 @@ export function AttachmentsPanel({
   }
 
   return (
-    <section className="rounded-lg border border-border bg-card">
+    <section className="border-border bg-card rounded-lg border">
       <div className="flex items-center justify-between gap-3 px-[18px] py-4">
         <h2 className="text-[19px] font-semibold tracking-tight">Adjuntos</h2>
       </div>
@@ -67,9 +67,9 @@ export function AttachmentsPanel({
             {attachments.map((a) => (
               <li
                 key={a.id}
-                className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5 transition hover:bg-neutral-50"
+                className="border-border bg-card flex items-center gap-3 rounded-lg border px-3 py-2.5 transition hover:bg-neutral-50"
               >
-                <div className="grid size-9 place-items-center rounded-md bg-primary-tint text-primary">
+                <div className="bg-primary-tint text-primary grid size-9 place-items-center rounded-md">
                   <FileText className="size-4" strokeWidth={1.8} />
                 </div>
                 <div className="min-w-0 flex-1">

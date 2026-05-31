@@ -7,6 +7,7 @@ regardless of visibility and moderation_hidden_at, for any report status, and
 excludes only author-soft-deleted documents. Pinned at the predicate boundary
 so the router tests stay focused on transport + role gating.
 """
+
 from __future__ import annotations
 
 import pytest

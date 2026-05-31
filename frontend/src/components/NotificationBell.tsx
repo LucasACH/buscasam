@@ -2,7 +2,10 @@
 
 import { Bell } from "lucide-react";
 
-import { usePrefetchNotifications, useUnreadCount } from "@/lib/useNotifications";
+import {
+  usePrefetchNotifications,
+  useUnreadCount,
+} from "@/lib/useNotifications";
 
 import { BandejaPanel } from "./BandejaPanel";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";

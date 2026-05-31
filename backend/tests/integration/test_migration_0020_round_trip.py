@@ -5,6 +5,7 @@ Follows the test_migration_0014_round_trip.py pattern: stands up an isolated
 database, runs migrations through 0019, then verifies the table and index appear
 on upgrade and disappear on downgrade, and that ON DELETE CASCADE drops reads.
 """
+
 from __future__ import annotations
 
 import os
@@ -59,8 +60,9 @@ def _table_exists(url: str, table: str) -> bool:
     try:
         with eng.connect() as c:
             return (
-                c.execute(text("SELECT to_regclass('public.' || :t)"), {"t": table})
-                .scalar()
+                c.execute(
+                    text("SELECT to_regclass('public.' || :t)"), {"t": table}
+                ).scalar()
                 is not None
             )
     finally:
@@ -72,8 +74,9 @@ def _index_exists(url: str, index: str) -> bool:
     try:
         with eng.connect() as c:
             return (
-                c.execute(text("SELECT to_regclass('public.' || :i)"), {"i": index})
-                .scalar()
+                c.execute(
+                    text("SELECT to_regclass('public.' || :i)"), {"i": index}
+                ).scalar()
                 is not None
             )
     finally:

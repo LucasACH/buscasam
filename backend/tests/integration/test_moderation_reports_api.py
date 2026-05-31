@@ -2,6 +2,7 @@
 §api/moderation). require_authenticated + Origin-checked; a readable doc files
 an open report (204), a duplicate is a silent 204 no-op, and every non-readable
 target maps to a uniform 404 so hidden/private/deleted existence never leaks."""
+
 from __future__ import annotations
 
 import base64

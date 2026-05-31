@@ -4,6 +4,7 @@ Public surface (ADR-0006 §3):
     put_stream, open_for_send, internal_path, local_path, exists,
     discard_if_unreferenced, delete
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -41,9 +42,7 @@ def _sharded_path(sha256: str) -> Path:
     return BLOB_ROOT / sha256[:2] / sha256[2:4] / sha256
 
 
-async def put_stream(
-    stream: AsyncIterator[bytes], *, max_bytes: int
-) -> BlobPutResult:
+async def put_stream(stream: AsyncIterator[bytes], *, max_bytes: int) -> BlobPutResult:
     tmp_dir = BLOB_ROOT / ".tmp"
     tmp_dir.mkdir(parents=True, exist_ok=True)
 

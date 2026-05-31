@@ -4,6 +4,7 @@
 `record_read` is the only writer; `most_read` is the only reader. Reads never
 feed search ranking (ADR-0014).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

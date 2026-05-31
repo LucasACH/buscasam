@@ -1,5 +1,6 @@
 """Draft creation, metadata edits, and the editar-form / mis-trabajos
 projections (module map §core/documents)."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -58,6 +59,7 @@ class CandidateState:
     """In-flight replacement candidate projection for the editar CandidatePanel
     (module map §core/documents, ADR-0011 §9). `status` is the raw lifecycle
     collapsed to the three UI states; the Spanish labels live on the frontend."""
+
     status: Literal["processing", "ready", "failed"]
     index_stage: str | None  # pipeline checkpoint while status='processing'
     staged_abstract: str | None
@@ -167,11 +169,15 @@ async def create_draft(
     coauthor_names: dict[int, str] = {}
     if coauthor_user_ids:
         rows = (
-            await session.execute(
-                text("SELECT id, name FROM users WHERE id = ANY(:ids)"),
-                {"ids": coauthor_user_ids},
+            (
+                await session.execute(
+                    text("SELECT id, name FROM users WHERE id = ANY(:ids)"),
+                    {"ids": coauthor_user_ids},
+                )
             )
-        ).mappings().all()
+            .mappings()
+            .all()
+        )
         coauthor_names = {r["id"]: r["name"] for r in rows}
         missing = set(coauthor_user_ids) - coauthor_names.keys()
         if missing:
@@ -231,17 +237,21 @@ async def update_draft_metadata(
     # current) are excluded — their staged_* must not move and they get no
     # reindex. Pre-update staged_abstract drives per-version change detection.
     rows = (
-        await session.execute(
-            text(
-                "SELECT v.id AS version_id, v.index_status, v.staged_abstract, "
-                "       d.titulo "
-                "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
-                "WHERE v.doc_id = :doc_id AND v.index_status <> 'discarded' "
-                "  AND (v.is_current = true OR v.first_published_at IS NULL)"
-            ),
-            {"doc_id": doc_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT v.id AS version_id, v.index_status, v.staged_abstract, "
+                    "       d.titulo "
+                    "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
+                    "WHERE v.doc_id = :doc_id AND v.index_status <> 'discarded' "
+                    "  AND (v.is_current = true OR v.first_published_at IS NULL)"
+                ),
+                {"doc_id": doc_id},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
 
     doc_sets: list[str] = []
     doc_params: dict = {"doc_id": doc_id}
@@ -310,24 +320,28 @@ async def get_draft_state(
 ) -> DraftState:
     await assert_manageable(session, user_ctx, doc_id)
     row = (
-        await session.execute(
-            text(
-                "SELECT v.id AS version_id, v.index_status, v.index_stage, "
-                "       v.staged_abstract, "
-                "       v.staged_keywords, v.staged_fecha, v.index_error, "
-                "       v.generated_abstract, v.generated_keywords, "
-                "       v.generated_fecha, "
-                "       v.headline_fingerprint, d.titulo, d.visibility, "
-                "       d.area_path::text AS area_path, "
-                "       (SELECT a.user_id FROM document_authors a "
-                "         WHERE a.doc_id = d.id AND a.status = 'owner' LIMIT 1) "
-                "         AS owner_user_id "
-                "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
-                "WHERE v.doc_id = :doc_id ORDER BY v.version_no DESC LIMIT 1"
-            ),
-            {"doc_id": doc_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT v.id AS version_id, v.index_status, v.index_stage, "
+                    "       v.staged_abstract, "
+                    "       v.staged_keywords, v.staged_fecha, v.index_error, "
+                    "       v.generated_abstract, v.generated_keywords, "
+                    "       v.generated_fecha, "
+                    "       v.headline_fingerprint, d.titulo, d.visibility, "
+                    "       d.area_path::text AS area_path, "
+                    "       (SELECT a.user_id FROM document_authors a "
+                    "         WHERE a.doc_id = d.id AND a.status = 'owner' LIMIT 1) "
+                    "         AS owner_user_id "
+                    "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
+                    "WHERE v.doc_id = :doc_id ORDER BY v.version_no DESC LIMIT 1"
+                ),
+                {"doc_id": doc_id},
+            )
         )
-    ).mappings().one_or_none()
+        .mappings()
+        .one_or_none()
+    )
     if row is None:
         raise DocumentNotFound
 
@@ -337,14 +351,18 @@ async def get_draft_state(
         row["titulo"], row["staged_abstract"] or ""
     )
     att_rows = (
-        await session.execute(
-            text(
-                "SELECT id, original_filename, bytes, mime "
-                "FROM document_attachments WHERE doc_id = :doc_id ORDER BY id"
-            ),
-            {"doc_id": doc_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT id, original_filename, bytes, mime "
+                    "FROM document_attachments WHERE doc_id = :doc_id ORDER BY id"
+                ),
+                {"doc_id": doc_id},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     # ADR-0011 §4: the editar Versiones list mirrors get_detail.versions —
     # one projection (_published_version_history) so both stay aligned.
     version_history = await _published_version_history(session, doc_id)
@@ -353,20 +371,24 @@ async def get_draft_state(
     # row, so one_or_none is the contract, not a LIMIT.
     is_owner = row["owner_user_id"] == user_ctx.user_id
     cand_row = (
-        await session.execute(
-            text(
-                "SELECT v.index_status, v.index_stage, v.staged_abstract, "
-                "       v.staged_keywords, "
-                "       v.staged_fecha, v.indexed_at, v.index_error, "
-                "       v.headline_fingerprint, d.titulo "
-                "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
-                "WHERE v.doc_id = :doc_id AND v.is_current = false "
-                "  AND v.index_status <> 'discarded' "
-                "  AND v.first_published_at IS NULL"
-            ),
-            {"doc_id": doc_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT v.index_status, v.index_stage, v.staged_abstract, "
+                    "       v.staged_keywords, "
+                    "       v.staged_fecha, v.indexed_at, v.index_error, "
+                    "       v.headline_fingerprint, d.titulo "
+                    "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
+                    "WHERE v.doc_id = :doc_id AND v.is_current = false "
+                    "  AND v.index_status <> 'discarded' "
+                    "  AND v.first_published_at IS NULL"
+                ),
+                {"doc_id": doc_id},
+            )
         )
-    ).mappings().one_or_none()
+        .mappings()
+        .one_or_none()
+    )
     candidate: CandidateState | None = None
     if cand_row is not None:
         cand_matches = cand_row["headline_fingerprint"] == headline_fingerprint(
@@ -388,18 +410,22 @@ async def get_draft_state(
     # regardless of the row id; document_authors.id is monotonic per insert so
     # ordering by id is the insertion order the module map prescribes.
     coauthor_rows = (
-        await session.execute(
-            text(
-                "SELECT da.user_id, da.display_name, da.status, da.email, "
-                "       split_part(u.email, '@', 1) AS email_local "
-                "FROM document_authors da "
-                "LEFT JOIN users u ON u.id = da.user_id "
-                "WHERE da.doc_id = :doc_id "
-                "ORDER BY (da.status = 'owner') DESC, da.id"
-            ),
-            {"doc_id": doc_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT da.user_id, da.display_name, da.status, da.email, "
+                    "       split_part(u.email, '@', 1) AS email_local "
+                    "FROM document_authors da "
+                    "LEFT JOIN users u ON u.id = da.user_id "
+                    "WHERE da.doc_id = :doc_id "
+                    "ORDER BY (da.status = 'owner') DESC, da.id"
+                ),
+                {"doc_id": doc_id},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     return DraftState(
         doc_id=doc_id,
         version_id=row["version_id"],
@@ -413,9 +439,7 @@ async def get_draft_state(
         generated_keywords=row["generated_keywords"] or [],
         generated_fecha=row["generated_fecha"],
         index_error=row["index_error"],
-        publish_gate_reason=_publish_gate_reason(
-            row["index_status"], matches
-        ),
+        publish_gate_reason=_publish_gate_reason(row["index_status"], matches),
         is_owner=is_owner,
         visibility=row["visibility"],
         area_path=row["area_path"],
@@ -448,16 +472,20 @@ async def list_own_documents(
 ) -> list[OwnDocSummary]:
     where, params = manageable_where("d", user_ctx)
     rows = (
-        await session.execute(
-            text(
-                f"SELECT d.id, d.titulo, d.publication_status, d.visibility, "
-                f"       d.published_at, "
-                f"       d.moderation_hidden_at IS NOT NULL AS moderation_hidden "
-                f"FROM documents d WHERE {where} ORDER BY d.id"
-            ),
-            params,
+        (
+            await session.execute(
+                text(
+                    f"SELECT d.id, d.titulo, d.publication_status, d.visibility, "
+                    f"       d.published_at, "
+                    f"       d.moderation_hidden_at IS NOT NULL AS moderation_hidden "
+                    f"FROM documents d WHERE {where} ORDER BY d.id"
+                ),
+                params,
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     return [
         OwnDocSummary(
             id=r["id"],

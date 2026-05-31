@@ -9,8 +9,14 @@ const USER = {
 };
 
 const AREAS = [
-  { area_path: "escuela_ciencia", display_name: "Escuela de Ciencia y Tecnología" },
-  { area_path: "escuela_ciencia.carrera_informatica", display_name: "Ing. Informática" },
+  {
+    area_path: "escuela_ciencia",
+    display_name: "Escuela de Ciencia y Tecnología",
+  },
+  {
+    area_path: "escuela_ciencia.carrera_informatica",
+    display_name: "Ing. Informática",
+  },
   {
     area_path: "escuela_ciencia.carrera_informatica.materia_bd",
     display_name: "Bases de Datos",
@@ -39,7 +45,9 @@ test("publish happy path: upload → edit → publish → visible to invitado in
   let ownDocs: Array<Record<string, unknown>> = [];
 
   await page.route("**/api/me", (route) => route.fulfill(json(USER)));
-  await page.route("**/api/me/documents", (route) => route.fulfill(json(ownDocs)));
+  await page.route("**/api/me/documents", (route) =>
+    route.fulfill(json(ownDocs)),
+  );
   await page.route("**/api/notifications**", (route) =>
     route.fulfill(json({ items: [] })),
   );
@@ -49,7 +57,13 @@ test("publish happy path: upload → edit → publish → visible to invitado in
   await page.route("**/api/documents", async (route) => {
     if (route.request().method() === "POST") {
       ownDocs = [
-        { id: DOC_ID, title: TITLE, publication_status: "draft", visibility: "publico", published_at: null },
+        {
+          id: DOC_ID,
+          title: TITLE,
+          publication_status: "draft",
+          visibility: "publico",
+          published_at: null,
+        },
       ];
       await route.fulfill(json({ id: DOC_ID }, 201));
       return;
@@ -111,7 +125,9 @@ test("publish happy path: upload → edit → publish → visible to invitado in
   // 1. Upload from /nuevo.
   await page.goto("/mis-trabajos/nuevo");
   await page.getByLabel(/Título/i).fill(TITLE);
-  await page.getByRole("button", { name: /Escuela de Ciencia y Tecnología/ }).click();
+  await page
+    .getByRole("button", { name: /Escuela de Ciencia y Tecnología/ })
+    .click();
   await page.getByRole("button", { name: /Ing\. Informática/ }).click();
   await page.getByRole("button", { name: /Bases de Datos/ }).click();
   await page.getByLabel(/Tipo/i).selectOption("tesis");
@@ -126,9 +142,12 @@ test("publish happy path: upload → edit → publish → visible to invitado in
   // 2. Land on editar with Procesando, then watch it flip to publishable.
   await expect(page).toHaveURL(new RegExp(`/mis-trabajos/${DOC_ID}/editar$`));
   await expect(page.getByTestId("status-pill")).toHaveText(/Procesando…/);
-  await expect(page.getByTestId("status-pill")).toHaveText(/Listo para publicar/, {
-    timeout: 10_000,
-  });
+  await expect(page.getByTestId("status-pill")).toHaveText(
+    /Listo para publicar/,
+    {
+      timeout: 10_000,
+    },
+  );
 
   // 3. Edit the abstract; Publicar is enabled for the owner once publishable.
   const publishBtn = page.getByRole("button", { name: /Publicar/i });
@@ -141,12 +160,16 @@ test("publish happy path: upload → edit → publish → visible to invitado in
   //    to /mis-trabajos, doc now under Publicados.
   await publishBtn.click();
   await expect(page).toHaveURL(/\/mis-trabajos$/, { timeout: 10_000 });
-  await expect(page.getByRole("link", { name: new RegExp(TITLE) })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: new RegExp(TITLE) }),
+  ).toBeVisible();
 
   // 5. An invitado in a second context finds the published doc in /buscar.
   const invitadoCtx = await browser.newContext();
   const invitado = await invitadoCtx.newPage();
-  await invitado.route("**/api/me", (route) => route.fulfill({ status: 401, body: "" }));
+  await invitado.route("**/api/me", (route) =>
+    route.fulfill({ status: 401, body: "" }),
+  );
   await invitado.route("**/api/notifications**", (route) =>
     route.fulfill(json({ items: [] })),
   );

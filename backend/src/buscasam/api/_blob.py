@@ -5,6 +5,7 @@ prod (empty body), inline `FileResponse` for local dev (`serve_blobs_inline`).
 Both `api/docs` and `api/moderation` hand a blob off through here so the
 projection cannot drift between routers.
 """
+
 from __future__ import annotations
 
 from urllib.parse import quote

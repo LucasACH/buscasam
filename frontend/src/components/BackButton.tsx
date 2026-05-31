@@ -19,7 +19,7 @@ export function BackButton() {
       size="sm"
       variant="ghost"
       onClick={goBack}
-      className="text-muted-foreground -ml-2 mb-3"
+      className="text-muted-foreground mb-3 -ml-2"
     >
       <ArrowLeft />
       Volver a resultados

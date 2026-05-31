@@ -1,5 +1,6 @@
 """Integration tests for DELETE /api/documents/{id}/candidate and the
 post-discard GET /draft / version-download surfaces (issue #59)."""
+
 from __future__ import annotations
 
 import base64

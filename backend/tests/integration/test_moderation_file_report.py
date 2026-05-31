@@ -3,17 +3,18 @@
 (ADR-0010 §7); a second open report by the same reporter on the same doc is a
 harmless no-op (unique partial index); a non-readable doc raises
 DocumentNotReadable (router → 404)."""
+
 from __future__ import annotations
 
 import pytest
 from sqlalchemy import text
 
 from buscasam.core import moderation
-from buscasam.core.auth import UserCtx
+from buscasam.core.auth import Role, UserCtx
 from tests.factories import make_document, make_document_author, make_user
 
 
-def _ctx(user_id: int, *, role: str = "estudiante") -> UserCtx:
+def _ctx(user_id: int, *, role: Role = "estudiante") -> UserCtx:
     return UserCtx(user_id=user_id, is_unsam=True, role=role)
 
 

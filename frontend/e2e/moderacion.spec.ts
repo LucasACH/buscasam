@@ -23,7 +23,11 @@ const ENTRY = {
 };
 
 function json(body: unknown, status = 200) {
-  return { status, contentType: "application/json", body: JSON.stringify(body) };
+  return {
+    status,
+    contentType: "application/json",
+    body: JSON.stringify(body),
+  };
 }
 
 test("docente reaches the queue from the nav and sees a reported document", async ({

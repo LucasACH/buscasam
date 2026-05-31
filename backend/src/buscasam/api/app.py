@@ -1,4 +1,5 @@
 """FastAPI app factory and lifespan (ADR-0003 §1, §2, §8)."""
+
 from __future__ import annotations
 
 from contextlib import asynccontextmanager

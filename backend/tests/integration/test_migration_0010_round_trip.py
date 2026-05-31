@@ -6,6 +6,7 @@ Runs against an isolated database; verifies:
 - Backfill sets is_current=true on pre-existing chunks and links them to a
   synthesized document_versions row.
 """
+
 from __future__ import annotations
 
 import os
@@ -123,7 +124,9 @@ def _chunk_row(url: str, chunk_id: int) -> dict:
                 c.execute(
                     text("SELECT version_id, is_current FROM chunks WHERE id = :id"),
                     {"id": chunk_id},
-                ).mappings().one()
+                )
+                .mappings()
+                .one()
             )
     finally:
         eng.dispose()
@@ -157,7 +160,9 @@ def test_0010_upgrade_then_downgrade_then_upgrade(isolated_db):
     assert _table_exists(url, "document_versions") is True
 
 
-def test_0013_backfills_unversioned_chunks_and_allows_replacement_sequences(isolated_db):
+def test_0013_backfills_unversioned_chunks_and_allows_replacement_sequences(
+    isolated_db,
+):
     url = isolated_db
     cfg = _alembic_cfg(url)
 
@@ -173,12 +178,15 @@ def test_0013_backfills_unversioned_chunks_and_allows_replacement_sequences(isol
     eng = create_engine(url)
     try:
         with eng.begin() as c:
-            assert c.execute(
-                text(
-                    "SELECT is_nullable FROM information_schema.columns "
-                    "WHERE table_name = 'chunks' AND column_name = 'version_id'"
-                )
-            ).scalar_one() == "NO"
+            assert (
+                c.execute(
+                    text(
+                        "SELECT is_nullable FROM information_schema.columns "
+                        "WHERE table_name = 'chunks' AND column_name = 'version_id'"
+                    )
+                ).scalar_one()
+                == "NO"
+            )
             replacement_id = c.execute(
                 text(
                     "INSERT INTO document_versions "
@@ -198,9 +206,12 @@ def test_0013_backfills_unversioned_chunks_and_allows_replacement_sequences(isol
                 ),
                 {"doc": doc_id, "version": replacement_id},
             )
-            assert c.execute(
-                text("SELECT count(*) FROM chunks WHERE doc_id = :doc"),
-                {"doc": doc_id},
-            ).scalar_one() == 2
+            assert (
+                c.execute(
+                    text("SELECT count(*) FROM chunks WHERE doc_id = :doc"),
+                    {"doc": doc_id},
+                ).scalar_one()
+                == 2
+            )
     finally:
         eng.dispose()

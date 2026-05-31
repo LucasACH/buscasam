@@ -1,5 +1,6 @@
 """Integration tests for core/documents.discard_candidate (module map
 §core/documents, issue #59). Exercises the explicit descartar chokepoint."""
+
 from __future__ import annotations
 
 import pytest
@@ -89,7 +90,9 @@ async def _seed_chunk(session, *, doc_id: int, version_id: int) -> None:
     )
 
 
-@pytest.mark.parametrize("candidate_status", ["pending", "processing", "indexed", "failed"])
+@pytest.mark.parametrize(
+    "candidate_status", ["pending", "processing", "indexed", "failed"]
+)
 async def test_discard_transitions_any_non_current_candidate(session, candidate_status):
     owner = await make_user(session)
     doc_id, _, candidate_vid = await _seed_published_with_candidate(
@@ -118,11 +121,15 @@ async def test_discard_deletes_candidate_chunks_only(session):
     await documents.discard_candidate(session, _ctx(owner), doc_id)
 
     remaining = (
-        await session.execute(
-            text("SELECT version_id FROM chunks WHERE doc_id = :d"),
-            {"d": doc_id},
+        (
+            await session.execute(
+                text("SELECT version_id FROM chunks WHERE doc_id = :d"),
+                {"d": doc_id},
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     # Only the candidate's chunks are deleted; the current version's stay.
     assert remaining == [current_vid]
 
@@ -130,9 +137,7 @@ async def test_discard_deletes_candidate_chunks_only(session):
 async def test_discard_cross_user_raises_not_found(session):
     owner = await make_user(session)
     intruder = await make_user(session)
-    doc_id, _, _ = await _seed_published_with_candidate(
-        session, owner_user_id=owner
-    )
+    doc_id, _, _ = await _seed_published_with_candidate(session, owner_user_id=owner)
 
     with pytest.raises(documents.DocumentNotFound):
         await documents.discard_candidate(session, _ctx(intruder), doc_id)

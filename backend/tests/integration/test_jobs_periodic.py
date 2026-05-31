@@ -5,6 +5,7 @@ register as daily Procrastinate periodic tasks on the `default` queue, and both
 acquire one shared maintenance advisory lock (the namespace ADR-0009 backups
 reuse) so blob deletion cannot race a backup recovery point.
 """
+
 from __future__ import annotations
 
 from sqlalchemy import text

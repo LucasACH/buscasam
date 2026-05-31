@@ -13,7 +13,11 @@ import { TIPO_LABEL, VISIBILITY_LABEL } from "@/lib/labels";
 
 import { fetchAreas, fetchDocDetail, type Area } from "./fetchDetail";
 import { RelatedRail } from "./RelatedRail";
-import type { DetailDoc, DetailWithInvitationDoc, MinimalInviteDoc } from "./types";
+import type {
+  DetailDoc,
+  DetailWithInvitationDoc,
+  MinimalInviteDoc,
+} from "./types";
 
 type PageProps = { params: Promise<{ id: string }> };
 
@@ -60,7 +64,9 @@ function areaLabel(areas: Area[], areaPath: string): string {
   const byPath = new Map(areas.map((a) => [a.area_path, a.display_name]));
   const segments = areaPath.split(".");
   return segments
-    .map((_, i) => byPath.get(segments.slice(0, i + 1).join(".")) ?? segments[i])
+    .map(
+      (_, i) => byPath.get(segments.slice(0, i + 1).join(".")) ?? segments[i],
+    )
     .join(" › ");
 }
 
@@ -94,7 +100,9 @@ function DetailView({
 }) {
   const tipo = TIPO_LABEL[detail.tipo] ?? detail.tipo;
   const visibilityBadge =
-    detail.visibility !== "publico" ? VISIBILITY_LABEL[detail.visibility] : null;
+    detail.visibility !== "publico"
+      ? VISIBILITY_LABEL[detail.visibility]
+      : null;
   const autores = detail.autores.map((a) => a.display_name).join(", ");
 
   return (
@@ -144,11 +152,11 @@ function DetailView({
           </dl>
 
           {detail.abstract && (
-            <section className="mt-6 border-t border-border pt-6">
+            <section className="border-border mt-6 border-t pt-6">
               <h2 className="text-[19px] font-semibold tracking-tight">
                 Resumen
               </h2>
-              <p className="text-neutral-700 mt-3 text-[15px] leading-relaxed">
+              <p className="mt-3 text-[15px] leading-relaxed text-neutral-700">
                 {detail.abstract}
               </p>
             </section>
@@ -189,7 +197,7 @@ function DetailView({
               </h2>
             </div>
             <div className="p-3">
-              <div className="hover:bg-neutral-50 hover:border-border-strong flex items-center gap-3 rounded-md border border-border bg-card p-3 transition-colors">
+              <div className="hover:border-border-strong border-border bg-card flex items-center gap-3 rounded-md border p-3 transition-colors hover:bg-neutral-50">
                 <div className="bg-primary-tint text-primary grid size-9 flex-none place-items-center rounded-md">
                   <FileText size={18} />
                 </div>
@@ -220,7 +228,7 @@ function DetailView({
                 {detail.adjuntos.map((att) => (
                   <li
                     key={att.id}
-                    className="hover:bg-neutral-50 hover:border-border-strong flex items-center gap-3 rounded-md border border-border bg-card p-3 transition-colors"
+                    className="hover:border-border-strong border-border bg-card flex items-center gap-3 rounded-md border p-3 transition-colors hover:bg-neutral-50"
                   >
                     <div className="bg-primary-tint text-primary grid size-9 flex-none place-items-center rounded-md">
                       <FileText size={18} />
@@ -257,7 +265,7 @@ function DetailView({
                 </h2>
               </div>
               <div className="p-3">
-                <div className="flex items-center gap-3 rounded-md border border-border bg-card p-3">
+                <div className="border-border bg-card flex items-center gap-3 rounded-md border p-3">
                   <div className="bg-primary-tint text-primary grid size-9 flex-none place-items-center rounded-md">
                     <Mail size={18} />
                   </div>

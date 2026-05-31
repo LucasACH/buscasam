@@ -40,7 +40,9 @@ def test_prod_env_rejects_dev_oidc_client_secret():
 
 
 def test_prod_env_accepts_non_dev_secrets():
-    s = Settings(env="prod", secret_key="real-secret", oidc_client_secret="real-client-secret")
+    s = Settings(
+        env="prod", secret_key="real-secret", oidc_client_secret="real-client-secret"
+    )
     assert s.env == "prod"
 
 

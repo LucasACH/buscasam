@@ -4,6 +4,7 @@ Owns five stacked invariants: source-after-access (security-load-bearing per
 ADR-0010 §6, PRD story 33), headline-existence gate, candidate readable_where,
 similarity floor (reused from search calibration; ADR-0002 §7), source exclusion.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -51,9 +52,7 @@ async def fetch_related(
     src_where, src_params = readable_where("d", user_ctx)
     readable = (
         await session.execute(
-            text(
-                f"SELECT 1 FROM documents d WHERE d.id = :doc_id AND ({src_where})"
-            ),
+            text(f"SELECT 1 FROM documents d WHERE d.id = :doc_id AND ({src_where})"),
             {"doc_id": doc_id, **src_params},
         )
     ).scalar_one_or_none()
@@ -89,49 +88,57 @@ async def fetch_related(
     # index — mirrors _run_hybrid's distance-only `sem` candidate ordering.
     cand_where, cand_params = readable_where("d", user_ctx)
     rows = (
-        await session.execute(
-            text(
-                "WITH cand AS ("
-                "  SELECT d.id, d.titulo, d.fecha, d.area_path::text AS area_path, "
-                "         d.tipo, "
-                "         c.embedding <=> CAST(:src_vec AS halfvec(1024)) AS distance "
-                "  FROM chunks c "
-                "  JOIN documents d ON d.id = c.doc_id "
-                f"  WHERE c.is_headline AND c.is_current "
-                f"    AND d.id <> :doc_id "
-                f"    AND ({cand_where}) "
-                f"    AND 1 - (c.embedding <=> CAST(:src_vec AS halfvec(1024))) "
-                f"        >= :min_sim "
-                "  ORDER BY c.embedding <=> CAST(:src_vec AS halfvec(1024)) "
-                "  LIMIT :k"
-                ") "
-                "SELECT id, titulo, fecha, area_path, tipo, "
-                "       1 - distance AS similarity "
-                "FROM cand "
-                "ORDER BY distance, id"
-            ),
-            {
-                "doc_id": doc_id,
-                "src_vec": src_vec,
-                "min_sim": min_semantic_similarity,
-                "k": k,
-                **cand_params,
-            },
+        (
+            await session.execute(
+                text(
+                    "WITH cand AS ("
+                    "  SELECT d.id, d.titulo, d.fecha, d.area_path::text AS area_path, "
+                    "         d.tipo, "
+                    "         c.embedding <=> CAST(:src_vec AS halfvec(1024)) AS distance "
+                    "  FROM chunks c "
+                    "  JOIN documents d ON d.id = c.doc_id "
+                    f"  WHERE c.is_headline AND c.is_current "
+                    f"    AND d.id <> :doc_id "
+                    f"    AND ({cand_where}) "
+                    f"    AND 1 - (c.embedding <=> CAST(:src_vec AS halfvec(1024))) "
+                    f"        >= :min_sim "
+                    "  ORDER BY c.embedding <=> CAST(:src_vec AS halfvec(1024)) "
+                    "  LIMIT :k"
+                    ") "
+                    "SELECT id, titulo, fecha, area_path, tipo, "
+                    "       1 - distance AS similarity "
+                    "FROM cand "
+                    "ORDER BY distance, id"
+                ),
+                {
+                    "doc_id": doc_id,
+                    "src_vec": src_vec,
+                    "min_sim": min_semantic_similarity,
+                    "k": k,
+                    **cand_params,
+                },
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     if not rows:
         return []
 
     survivor_ids = [r["id"] for r in rows]
     author_rows = (
-        await session.execute(
-            text(
-                "SELECT doc_id, display_name, user_id "
-                "FROM document_authors WHERE doc_id = ANY(:ids) ORDER BY doc_id, id"
-            ),
-            {"ids": survivor_ids},
+        (
+            await session.execute(
+                text(
+                    "SELECT doc_id, display_name, user_id "
+                    "FROM document_authors WHERE doc_id = ANY(:ids) ORDER BY doc_id, id"
+                ),
+                {"ids": survivor_ids},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     by_doc: dict[int, list[AuthorDisplay]] = {sid: [] for sid in survivor_ids}
     for a in author_rows:
         by_doc[a["doc_id"]].append(

@@ -1,4 +1,5 @@
 """Sole owner of "what counts as a readable document" — ADR-0010 §6."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -74,7 +75,9 @@ def pending_invitation_disclosure_where(
     `require_authenticated` upstream.
     """
     if user_ctx.user_id is None:
-        raise ValueError("pending_invitation_disclosure_where requires an authenticated user")
+        raise ValueError(
+            "pending_invitation_disclosure_where requires an authenticated user"
+        )
     where = (
         f"{alias}.publication_status = 'published' "
         f"AND {alias}.soft_deleted_at IS NULL "

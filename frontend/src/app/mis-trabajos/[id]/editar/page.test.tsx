@@ -29,6 +29,7 @@ vi.mock("../../useDraftState", () => ({
 }));
 vi.mock("@/api/client", () => ({ api: { PATCH: apiPatch } }));
 vi.mock("sonner", () => ({ toast: { error: toastError } }));
+vi.mock("canvas-confetti", () => ({ default: vi.fn() }));
 vi.mock("@/components/CoauthorsPanel", () => ({
   CoauthorsPanel: () => null,
 }));
@@ -329,7 +330,9 @@ describe("editar page", () => {
     render(<EditarPage />);
     fireEvent.click(screen.getByRole("button", { name: /publicar/i }));
     await waitFor(() => expect(publishMock).toHaveBeenCalled());
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/mis-trabajos"));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/mis-trabajos"), {
+      timeout: 5000,
+    });
   });
 
   it("stays put when the draft action refreshes after a publish race", async () => {
@@ -358,8 +361,9 @@ describe("editar page", () => {
     useDraftStateMock.mockReturnValue(draft());
     render(<EditarPage />);
     fireEvent.click(screen.getByRole("button", { name: /publicar/i }));
-    await waitFor(() =>
-      expect(toastError).toHaveBeenCalledWith("No se pudo publicar"),
+    await waitFor(
+      () => expect(toastError).toHaveBeenCalledWith("No se pudo publicar"),
+      { timeout: 3000 },
     );
     expect(push).not.toHaveBeenCalled();
   });

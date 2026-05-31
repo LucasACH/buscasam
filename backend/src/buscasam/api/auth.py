@@ -4,6 +4,7 @@ Per module map §`api/auth`: this router orchestrates `core/auth` primitives;
 it never opens transactions, queries `users`/`sessions` directly, or touches
 `oauth_state` beyond reading the cookie value to forward.
 """
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -78,16 +79,20 @@ async def search_users(
     session: AsyncSession = Depends(get_session),
 ) -> list[UserSearchResult]:
     rows = (
-        await session.execute(
-            text(
-                "SELECT id, name, split_part(email, '@', 1) AS email_local, picture_url "
-                "FROM users "
-                "WHERE id != :uid AND (name ILIKE :prefix OR email ILIKE :prefix) "
-                "ORDER BY name LIMIT 10"
-            ),
-            {"uid": user_ctx.user_id, "prefix": f"{q}%"},
+        (
+            await session.execute(
+                text(
+                    "SELECT id, name, split_part(email, '@', 1) AS email_local, picture_url "
+                    "FROM users "
+                    "WHERE id != :uid AND (name ILIKE :prefix OR email ILIKE :prefix) "
+                    "ORDER BY name LIMIT 10"
+                ),
+                {"uid": user_ctx.user_id, "prefix": f"{q}%"},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     return [
         UserSearchResult(
             user_id=r["id"],
@@ -105,14 +110,19 @@ async def me(
     session: AsyncSession = Depends(get_session),
 ) -> MeResponse:
     row = (
-        await session.execute(
-            text(
-                "SELECT role, name, email, picture_url, hd "
-                "FROM users WHERE id = :uid"
-            ),
-            {"uid": user_ctx.user_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT role, name, email, picture_url, hd "
+                    "FROM users WHERE id = :uid"
+                ),
+                {"uid": user_ctx.user_id},
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
     if row is None:  # session row referenced a now-deleted user
         raise HTTPException(status_code=401)
+    assert user_ctx.user_id is not None
     return MeResponse(user_id=user_ctx.user_id, **row)

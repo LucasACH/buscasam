@@ -4,12 +4,14 @@ The seam the durable queue calls into: begin/stage/finalize the index pipeline,
 refresh the headline, and stamp terminal failure. Every write is gated on the
 version's index_status so a descartar committed mid-IO leaves no resurrected
 rows."""
+
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 from sqlalchemy import text
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from buscasam.core import notifications
@@ -31,8 +33,7 @@ async def _begin_indexing(
     status = (
         await session.execute(
             text(
-                "SELECT index_status FROM document_versions "
-                "WHERE id = :id FOR UPDATE"
+                "SELECT index_status FROM document_versions WHERE id = :id FOR UPDATE"
             ),
             {"id": version_id},
         )
@@ -55,9 +56,7 @@ async def _begin_indexing(
     return await load_candidate(session, version_id)
 
 
-async def set_index_stage(
-    session: AsyncSession, version_id: int, stage: str
-) -> None:
+async def set_index_stage(session: AsyncSession, version_id: int, stage: str) -> None:
     """Record the worker's current pipeline checkpoint for the editar progress
     UI. Guarded on index_status='processing' (like the finalize write) so a
     descartar committed mid-IO leaves the stage untouched — a no-op on a
@@ -161,16 +160,23 @@ async def write_indexed_candidate(
     from buscasam.core.chunk import headline_fingerprint as _compute_fp
 
     drift = (
-        await session.execute(
-            text(
-                "SELECT d.titulo, v.staged_abstract "
-                "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
-                "WHERE v.id = :id"
-            ),
-            {"id": version_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT d.titulo, v.staged_abstract "
+                    "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
+                    "WHERE v.id = :id"
+                ),
+                {"id": version_id},
+            )
         )
-    ).mappings().one()
-    if _compute_fp(drift["titulo"], drift["staged_abstract"] or "") != headline_fingerprint:
+        .mappings()
+        .one()
+    )
+    if (
+        _compute_fp(drift["titulo"], drift["staged_abstract"] or "")
+        != headline_fingerprint
+    ):
         from buscasam.core import jobs
 
         await jobs.enqueue_refresh_headline(session, version_id)
@@ -194,15 +200,19 @@ async def write_headline(
     # published current version is always 'indexed', so this is transparent to
     # the post-publish headline-reindex path.
     row = (
-        await session.execute(
-            text(
-                "SELECT v.doc_id, v.is_current, d.titulo, v.staged_abstract "
-                "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
-                "WHERE v.id = :id AND v.index_status = 'indexed' FOR UPDATE OF v"
-            ),
-            {"id": version_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT v.doc_id, v.is_current, d.titulo, v.staged_abstract "
+                    "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
+                    "WHERE v.id = :id AND v.index_status = 'indexed' FOR UPDATE OF v"
+                ),
+                {"id": version_id},
+            )
         )
-    ).mappings().one_or_none()
+        .mappings()
+        .one_or_none()
+    )
     if row is None:
         return
     current_fp = _compute_fp(row["titulo"], row["staged_abstract"] or "")
@@ -213,9 +223,7 @@ async def write_headline(
     doc_id = row["doc_id"]
 
     await session.execute(
-        text(
-            "DELETE FROM chunks WHERE version_id = :vid AND is_headline"
-        ),
+        text("DELETE FROM chunks WHERE version_id = :vid AND is_headline"),
         {"vid": version_id},
     )
     await session.execute(
@@ -235,16 +243,12 @@ async def write_headline(
         },
     )
     await session.execute(
-        text(
-            "UPDATE document_versions SET headline_fingerprint = :fp WHERE id = :id"
-        ),
+        text("UPDATE document_versions SET headline_fingerprint = :fp WHERE id = :id"),
         {"fp": headline_fingerprint, "id": version_id},
     )
 
 
-async def mark_failed(
-    session: AsyncSession, version_id: int, error: str
-) -> None:
+async def mark_failed(session: AsyncSession, version_id: int, error: str) -> None:
     """Candidate terminal-state writer (ADR-0008 §5, ADR-0010 §9).
 
     Single seam called by every fatal indexing path — recognized parse/OCR
@@ -258,13 +262,16 @@ async def mark_failed(
     # failure handler running after a descartar must not resurrect the row to
     # 'failed' nor notify. '<> failed' keeps first-write-wins (a later
     # exhausted-retries reason cannot overwrite an earlier corrupted cause).
-    result = await session.execute(
-        text(
-            "UPDATE document_versions SET index_status = 'failed', "
-            "  index_error = :err "
-            "WHERE id = :id AND index_status NOT IN ('failed', 'discarded')"
+    result = cast(
+        CursorResult[Any],
+        await session.execute(
+            text(
+                "UPDATE document_versions SET index_status = 'failed', "
+                "  index_error = :err "
+                "WHERE id = :id AND index_status NOT IN ('failed', 'discarded')"
+            ),
+            {"err": error, "id": version_id},
         ),
-        {"err": error, "id": version_id},
     )
     # No transition (already failed, or discarded mid-flight) → no notification.
     if result.rowcount == 0 or cv.owner_user_id is None:

@@ -5,6 +5,7 @@ database, runs migrations through 0015, then verifies the two moderation tables,
 the open-report unique partial index, and the reason/status/action CHECKs appear
 on upgrade and disappear on downgrade.
 """
+
 from __future__ import annotations
 
 import os

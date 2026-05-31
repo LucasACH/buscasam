@@ -4,6 +4,7 @@ Returns ids of `publico`, published, non-deleted, non-hidden documents through t
 `invitado_where` access predicate so the crawler surface never leaks unauthorized
 documents (SPEC §Criterios de Aceptación). The frontend renders absolute URLs.
 """
+
 from __future__ import annotations
 
 from datetime import datetime

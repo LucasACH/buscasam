@@ -1,5 +1,6 @@
 """Integration tests for core/documents.publish (module map §core/documents,
 issue #30). Exercises the publish transaction through the domain chokepoint."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -20,19 +21,24 @@ def _ctx(user_id: int) -> UserCtx:
 
 async def _enqueued_task_names(session, version_id: int) -> list[str]:
     rows = (
-        await session.execute(
-            text(
-                "SELECT task_name FROM procrastinate_jobs "
-                "WHERE args->>'version_id' = :vid"
-            ),
-            {"vid": str(version_id)},
+        (
+            await session.execute(
+                text(
+                    "SELECT task_name FROM procrastinate_jobs "
+                    "WHERE args->>'version_id' = :vid"
+                ),
+                {"vid": str(version_id)},
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return list(rows)
 
 
 def _doc_ids(results) -> list[int]:
     return [r.doc_id for r in results.rows]
+
 
 _EMB = "[" + ",".join(["0.1"] * 1024) + "]"
 
@@ -55,8 +61,10 @@ async def _seed_candidate(
         session, publication_status="draft", titulo=title, abstract=None
     )
     await make_document_author(session, doc_id, user_id=owner_user_id, status="owner")
-    fp = fingerprint if fingerprint is not None else headline_fingerprint(
-        title, staged_abstract
+    fp = (
+        fingerprint
+        if fingerprint is not None
+        else headline_fingerprint(title, staged_abstract)
     )
     version_id = (
         await session.execute(
@@ -91,7 +99,14 @@ async def _seed_candidate(
                 "VALUES (:doc, :seq, :hl, :body, cast(:emb as halfvec(1024)), "
                 " 'm', :vid, false)"
             ),
-            {"doc": doc_id, "seq": seq, "hl": hl, "body": body, "emb": _EMB, "vid": version_id},
+            {
+                "doc": doc_id,
+                "seq": seq,
+                "hl": hl,
+                "body": body,
+                "emb": _EMB,
+                "vid": version_id,
+            },
         )
     return doc_id, version_id
 
@@ -119,23 +134,33 @@ async def test_publish_flips_current_and_copies_staged(session):
     assert ver is True
 
     chunk_currents = (
-        await session.execute(
-            text("SELECT is_current FROM chunks WHERE version_id = :v ORDER BY chunk_seq"),
-            {"v": version_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT is_current FROM chunks WHERE version_id = :v ORDER BY chunk_seq"
+                ),
+                {"v": version_id},
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert chunk_currents == [True, True]
 
     doc = (
-        await session.execute(
-            text(
-                "SELECT publication_status, abstract, keywords, fecha, "
-                "       published_at IS NOT NULL AS has_published_at "
-                "FROM documents WHERE id = :id"
-            ),
-            {"id": doc_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT publication_status, abstract, keywords, fecha, "
+                    "       published_at IS NOT NULL AS has_published_at "
+                    "FROM documents WHERE id = :id"
+                ),
+                {"id": doc_id},
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     assert doc["publication_status"] == "published"
     assert doc["abstract"] == "Un resumen"
     assert doc["keywords"] == ["bd", "sql"]
@@ -152,14 +177,18 @@ async def test_publish_enqueues_fan_out_coauthor_invites_in_same_txn(session):
     await documents.publish(session, ctx, doc_id)
 
     row = (
-        await session.execute(
-            text(
-                "SELECT task_name FROM procrastinate_jobs "
-                "WHERE args->>'doc_id' = :did"
-            ),
-            {"did": str(doc_id)},
+        (
+            await session.execute(
+                text(
+                    "SELECT task_name FROM procrastinate_jobs "
+                    "WHERE args->>'doc_id' = :did"
+                ),
+                {"did": str(doc_id)},
+            )
         )
-    ).mappings().one_or_none()
+        .mappings()
+        .one_or_none()
+    )
     assert row is not None
     assert row["task_name"].endswith("fan_out_coauthor_invites")
 
@@ -290,14 +319,18 @@ async def test_published_replacement_becomes_searchable_only_on_publish(session)
     assert doc_id in _doc_ids(after)
     assert doc_id not in _doc_ids(old)
     currents = (
-        await session.execute(
-            text(
-                "SELECT id, is_current FROM document_versions "
-                "WHERE id IN (:original, :replacement) ORDER BY id"
-            ),
-            {"original": original_id, "replacement": replacement_id},
+        (
+            await session.execute(
+                text(
+                    "SELECT id, is_current FROM document_versions "
+                    "WHERE id IN (:original, :replacement) ORDER BY id"
+                ),
+                {"original": original_id, "replacement": replacement_id},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     assert [(r["id"], r["is_current"]) for r in currents] == [
         (original_id, False),
         (replacement_id, True),
@@ -356,9 +389,7 @@ async def test_publish_stamps_first_published_at_once_and_does_not_restamp(sessi
 
     before = (
         await session.execute(
-            text(
-                "SELECT first_published_at FROM document_versions WHERE id = :id"
-            ),
+            text("SELECT first_published_at FROM document_versions WHERE id = :id"),
             {"id": version_id},
         )
     ).scalar_one()
@@ -368,9 +399,7 @@ async def test_publish_stamps_first_published_at_once_and_does_not_restamp(sessi
 
     stamped = (
         await session.execute(
-            text(
-                "SELECT first_published_at FROM document_versions WHERE id = :id"
-            ),
+            text("SELECT first_published_at FROM document_versions WHERE id = :id"),
             {"id": version_id},
         )
     ).scalar_one()
@@ -383,9 +412,7 @@ async def test_publish_stamps_first_published_at_once_and_does_not_restamp(sessi
 
     after = (
         await session.execute(
-            text(
-                "SELECT first_published_at FROM document_versions WHERE id = :id"
-            ),
+            text("SELECT first_published_at FROM document_versions WHERE id = :id"),
             {"id": version_id},
         )
     ).scalar_one()

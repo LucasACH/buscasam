@@ -85,6 +85,10 @@ test("authenticated: Interno/Privado chips render on non-publico results", async
 
   await expect(internoCard.getByText("Interno", { exact: true })).toBeVisible();
   await expect(privadoCard.getByText("Privado", { exact: true })).toBeVisible();
-  await expect(publicoCard.getByText("Interno", { exact: true })).toHaveCount(0);
-  await expect(publicoCard.getByText("Privado", { exact: true })).toHaveCount(0);
+  await expect(publicoCard.getByText("Interno", { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(publicoCard.getByText("Privado", { exact: true })).toHaveCount(
+    0,
+  );
 });

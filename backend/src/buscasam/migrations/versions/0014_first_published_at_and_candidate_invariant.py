@@ -6,6 +6,7 @@ Revises: 0013
 Create Date: 2026-05-27
 
 """
+
 from alembic import op
 
 
@@ -61,6 +62,4 @@ def downgrade() -> None:
         "ADD CONSTRAINT document_versions_index_status_check "
         "CHECK (index_status IN ('pending', 'processing', 'indexed', 'failed'))"
     )
-    op.execute(
-        "ALTER TABLE document_versions DROP COLUMN IF EXISTS first_published_at"
-    )
+    op.execute("ALTER TABLE document_versions DROP COLUMN IF EXISTS first_published_at")

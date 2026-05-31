@@ -38,7 +38,7 @@ export function BandejaPanel() {
         </ul>
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center gap-2 px-3.5 py-8 text-center">
-          <div className="border-border bg-neutral-100 text-muted-foreground/70 grid size-12 place-items-center rounded-lg border">
+          <div className="border-border text-muted-foreground/70 grid size-12 place-items-center rounded-lg border bg-neutral-100">
             <Inbox className="size-5" />
           </div>
           <p className="text-base font-semibold">No tenés notificaciones.</p>
