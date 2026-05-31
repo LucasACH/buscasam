@@ -12,7 +12,9 @@ export function useMostRead() {
   const query = useQuery<PopularResponse>({
     queryKey: ["popular"],
     queryFn: async () => {
-      const { data, error } = await api.GET("/api/docs/popular");
+      const { data, error } = await api.GET("/api/docs/popular", {
+        params: { query: { limit: 3 } },
+      });
       if (error) throw error;
       if (!data) throw new Error("empty popular response");
       return data;
