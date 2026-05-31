@@ -88,7 +88,10 @@ asyncio.run(main())
 "
 ```
 
-Populates `areas` (escuelas/carreras/materias for the dropdowns) and 15 sample documents with chunks/embeddings. Without this the área dropdown is empty.
+Populates `areas` with the real UNSAM oferta académica (8 escuelas → áreas →
+carreras → materias, ~2.9k rows; regenerate with `uv run
+scripts/build_unsam_areas.py`) plus 15 sample documents with chunks/embeddings.
+Without this the área dropdown is empty.
 
 ## Start the services
 

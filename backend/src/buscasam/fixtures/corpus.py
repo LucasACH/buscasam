@@ -18,12 +18,6 @@ EMBEDDING_MODEL_VERSION = "intfloat/multilingual-e5-large"
 
 
 @dataclass(frozen=True)
-class Area:
-    area_path: str
-    display_name: str
-
-
-@dataclass(frozen=True)
 class Document:
     id: int
     visibility: str
@@ -44,22 +38,6 @@ class Chunk:
     chunk_seq: int
     is_headline: bool
     body_text: str
-
-
-AREAS: tuple[Area, ...] = (
-    Area("escuela_ciencia", "Escuela de Ciencia y Tecnología"),
-    Area("escuela_ciencia.carrera_informatica", "Ing. Informática"),
-    Area("escuela_ciencia.carrera_informatica.materia_bd", "Bases de Datos"),
-    Area("escuela_ciencia.carrera_informatica.materia_algoritmos", "Algoritmos"),
-    Area("escuela_humanidades", "Escuela de Humanidades"),
-    Area("escuela_humanidades.carrera_filosofia", "Filosofía"),
-    Area("escuela_humanidades.carrera_filosofia.materia_logica", "Lógica"),
-    Area("escuela_humanidades.carrera_letras", "Letras"),
-    Area(
-        "escuela_humanidades.carrera_letras.materia_literatura_argentina",
-        "Literatura Argentina",
-    ),
-)
 
 
 DOCUMENTS: tuple[Document, ...] = (
