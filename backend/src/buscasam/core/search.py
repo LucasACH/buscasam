@@ -13,9 +13,11 @@ from typing import TYPE_CHECKING
 
 import httpx
 import numpy as np
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from buscasam.core import search_query
+from buscasam.core.document_access import invitado_where
 from buscasam.core.embed import EmbedUnavailable, embed
 from buscasam.core.search_query import Filters, ResultRow
 
@@ -41,6 +43,16 @@ def _has_filter(filters: Filters) -> bool:
         or filters.desde is not None
         or filters.hasta is not None
     )
+
+
+async def count_public_documents(session: AsyncSession) -> int:
+    """The público catalog size for the landing footnote — the unfiltered público
+    total under `core/document_access.invitado_where` (module map §core/search)."""
+    return (
+        await session.execute(
+            text(f"SELECT count(*) FROM documents d WHERE {invitado_where('d')}")
+        )
+    ).scalar_one()
 
 
 async def _embed_or_fallback(

@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 import pytest_asyncio
+from fastapi import Response
 from sqlalchemy import text
 
 from buscasam.core import auth
@@ -292,3 +293,45 @@ def test_require_docente_rejects_non_docente():
 def test_require_docente_returns_docente():
     uc = auth.UserCtx(user_id=7, is_unsam=True, role="docente")
     assert auth.require_docente(uc) is uc
+
+
+def _request(cookies: dict[str, str] | None = None) -> "Request":
+    from starlette.requests import Request
+
+    header = "; ".join(f"{k}={v}" for k, v in (cookies or {}).items())
+    headers = [(b"cookie", header.encode())] if header else []
+    return Request({"type": "http", "headers": headers})
+
+
+def test_reader_key_authenticated_is_user_scoped_no_cookie():
+    resp = Response()
+    uc = auth.UserCtx(user_id=42, is_unsam=True, role="docente")
+
+    key = auth.reader_key(uc, _request(), resp)
+
+    assert key == "u:42"
+    assert "set-cookie" not in {k.lower() for k, _ in resp.raw_headers}
+
+
+def test_reader_key_invitado_mints_rid_cookie():
+    resp = Response()
+
+    key = auth.reader_key(auth.GUEST, _request(), resp)
+
+    assert key.startswith("a:")
+    anon_id = key[2:]
+    assert anon_id  # non-empty opaque id
+    set_cookie = resp.headers["set-cookie"]
+    assert f"{auth.RID_COOKIE}={anon_id}" in set_cookie
+    assert "httponly" in set_cookie.lower()
+    assert "samesite=lax" in set_cookie.lower()
+
+
+def test_reader_key_invitado_reuses_existing_rid_without_minting():
+    resp = Response()
+    req = _request({auth.RID_COOKIE: "existing-anon"})
+
+    key = auth.reader_key(auth.GUEST, req, resp)
+
+    assert key == "a:existing-anon"
+    assert "set-cookie" not in {k.lower() for k, _ in resp.raw_headers}
