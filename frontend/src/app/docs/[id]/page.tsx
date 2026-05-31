@@ -2,6 +2,7 @@ import { FileText, Mail } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { BackButton } from "@/components/BackButton";
 import { CoauthorInvitationBanner } from "@/components/CoauthorInvitationBanner";
 import { CopyEmailButton } from "@/components/CopyEmailButton";
 import { ReportDialog } from "@/components/ReportDialog";
@@ -108,6 +109,7 @@ function DetailView({
       )}
       <article className="grid items-start gap-10 lg:grid-cols-[1fr_300px]">
         <header className="min-w-0">
+          <BackButton />
           <h1 className="text-[28px] leading-[1.18] font-semibold tracking-tight">
             {detail.titulo}
           </h1>
