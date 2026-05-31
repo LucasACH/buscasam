@@ -130,7 +130,7 @@ function BuscarPageInner() {
                 id="q"
                 type="text"
                 autoFocus
-                className="flex-1 bg-transparent text-[17px] outline-none placeholder:text-muted-foreground/70"
+                className="placeholder:text-muted-foreground/70 min-w-0 flex-1 bg-transparent text-[17px] outline-none"
                 placeholder="Buscar por título, tema, autor…"
                 value={qInput}
                 onChange={(e) => setQInput(e.target.value)}
@@ -160,7 +160,7 @@ function BuscarPageInner() {
                 key={t}
                 type="button"
                 onClick={() => update({ tipos: [t] })}
-                className="border-input hover:border-neutral-400 hover:bg-neutral-50 inline-flex h-[30px] items-center rounded-full border bg-background px-3 text-[13px] font-medium transition-colors"
+                className="border-input bg-background inline-flex h-[30px] items-center rounded-full border px-3 text-[13px] font-medium transition-colors hover:border-neutral-400 hover:bg-neutral-50"
               >
                 {TIPO_LABEL[t]}
               </button>
@@ -168,7 +168,7 @@ function BuscarPageInner() {
             <button
               type="button"
               onClick={() => update({ orden: "recientes" })}
-              className="border-primary-tint-2 text-primary hover:bg-primary-tint inline-flex h-[30px] items-center rounded-full border bg-background px-3 text-[13px] font-medium transition-colors"
+              className="border-primary-tint-2 text-primary hover:bg-primary-tint bg-background inline-flex h-[30px] items-center rounded-full border px-3 text-[13px] font-medium transition-colors"
             >
               Ver más recientes
             </button>
@@ -197,7 +197,7 @@ function BuscarPageInner() {
             <input
               id="q"
               type="text"
-              className="border-input bg-background focus:border-primary focus:ring-primary-tint h-11 w-full rounded-lg border pr-10 pl-[42px] text-sm outline-none transition focus:ring-[3px]"
+              className="border-input bg-background focus:border-primary focus:ring-primary-tint h-11 w-full rounded-lg border pr-10 pl-[42px] text-sm transition outline-none focus:ring-[3px]"
               placeholder="Buscar por título, tema, autor…"
               value={qInput}
               onChange={(e) => setQInput(e.target.value)}
@@ -313,7 +313,7 @@ function BuscarPageInner() {
 function EmptyResults({ onClear }: { onClear?: () => void }) {
   return (
     <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
-      <div className="border-border bg-neutral-100 text-muted-foreground/70 grid size-12 place-items-center rounded-lg border">
+      <div className="border-border text-muted-foreground/70 grid size-12 place-items-center rounded-lg border bg-neutral-100">
         <Search className="size-[22px]" />
       </div>
       <div className="text-base font-semibold tracking-tight">
@@ -324,7 +324,12 @@ function EmptyResults({ onClear }: { onClear?: () => void }) {
         búsqueda.
       </div>
       {onClear && (
-        <Button variant="outline" size="sm" className="mt-1.5" onClick={onClear}>
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-1.5"
+          onClick={onClear}
+        >
           Limpiar filtros
         </Button>
       )}
