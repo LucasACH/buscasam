@@ -28,6 +28,7 @@ const USER = {
   user_id: 7,
   role: "estudiante",
   name: "Ada Lovelace",
+  email: "ada@estudiantes.unsam.edu.ar",
   picture_url: null,
   hd: "estudiantes.unsam.edu.ar",
 };
@@ -159,7 +160,8 @@ test("happy path: invitado → login → chip + bandeja loop → logout", async 
   await expect(page.getByText(/Álgebra lineal/)).toBeVisible();
   await expect(bell).not.toContainText(String(SEEDED.length));
 
-  // 6. Logout returns to the invitado view.
+  // 6. Logout (inside the user menu) returns to the invitado view.
+  await page.getByRole("button", { name: /Ada Lovelace/i }).click();
   await page.getByRole("button", { name: /Cerrar sesión/i }).click();
   await expect(page).toHaveURL("/");
   await expect(

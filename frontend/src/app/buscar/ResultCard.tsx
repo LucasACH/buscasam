@@ -62,42 +62,60 @@ export function ResultCard({ result }: { result: ResultCardData }) {
       ? VISIBILITY_LABEL[result.visibility]
       : null;
   const autores = result.autores?.map((a) => a.display_name).join(", ");
+  const meta = [year, result.area_path, tipo].filter(Boolean) as string[];
   return (
-    <article className="border-border bg-background rounded-lg border p-4 shadow-sm">
-      <h2 className="text-foreground text-lg leading-snug font-semibold">
+    <article className="group border-border hover:border-border-strong relative rounded-lg border bg-card px-5 py-[18px] transition-all hover:shadow-[0_2px_8px_-2px_rgba(23,23,23,0.08)]">
+      <h2 className="text-[17px] leading-[1.3] font-semibold tracking-tight">
         <Link
           href={`/docs/${result.doc_id}`}
-          className="hover:underline underline-offset-2"
+          className="text-foreground transition-colors group-hover:text-primary group-hover:underline underline-offset-2 after:absolute after:inset-0 after:content-['']"
         >
           {result.titulo}
         </Link>
       </h2>
       {autores && (
-        <div className="text-muted-foreground mt-1 text-xs">{autores}</div>
+        <div className="text-muted-foreground mt-1.5 text-[13px]">{autores}</div>
       )}
-      <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-        {year && <span>{year}</span>}
-        <span>{result.area_path}</span>
-        <span>{tipo}</span>
+      <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-2 text-[13px]">
+        {meta.map((m, i) => (
+          <span key={i} className="flex items-center gap-2">
+            {i > 0 && <span className="text-muted-foreground/60">·</span>}
+            {m}
+          </span>
+        ))}
         {visibilityBadge && (
-          <span className="border-border bg-muted text-foreground rounded-full border px-2 py-0.5 font-medium">
+          <span className="bg-status-blue-bg text-status-blue-fg ml-0.5 inline-flex h-[22px] items-center rounded-full px-[9px] text-xs font-medium">
             {visibilityBadge}
           </span>
         )}
       </div>
       {result.abstract && (
-        <p className="text-muted-foreground mt-3 text-sm">
+        <p className="mt-2.5 text-sm leading-relaxed text-neutral-700">
           {truncate(result.abstract, 280)}
         </p>
       )}
       {result.snippet !== undefined &&
         (result.snippet_is_html ? (
-          <p className="mt-3 text-sm leading-relaxed [&_mark]:bg-yellow-200 [&_mark]:px-0.5 [&_mark]:font-medium">
+          <p className="mt-2.5 text-sm leading-relaxed text-neutral-700">
             {renderHighlightedSnippet(result.snippet)}
           </p>
         ) : (
-          <p className="mt-3 text-sm leading-relaxed">{result.snippet}</p>
+          <p className="mt-2.5 text-sm leading-relaxed text-neutral-700">
+            {result.snippet}
+          </p>
         ))}
     </article>
+  );
+}
+
+export function ResultCardSkeleton() {
+  return (
+    <div className="border-border rounded-lg border bg-card px-5 py-[18px]">
+      <div className="bg-muted h-4 w-[72%] animate-pulse rounded-sm" />
+      <div className="bg-muted mt-3 h-[11px] w-[38%] animate-pulse rounded-sm" />
+      <div className="bg-muted mt-2 h-[11px] w-[64%] animate-pulse rounded-sm" />
+      <div className="bg-muted mt-3.5 h-[11px] w-full animate-pulse rounded-sm" />
+      <div className="bg-muted mt-1.5 h-[11px] w-[92%] animate-pulse rounded-sm" />
+    </div>
   );
 }

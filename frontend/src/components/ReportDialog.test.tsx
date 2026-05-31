@@ -2,12 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-const { useUserMock, apiPost } = vi.hoisted(() => ({
+const { useUserMock, apiPost, toastSuccess } = vi.hoisted(() => ({
   useUserMock: vi.fn(),
   apiPost: vi.fn(),
+  toastSuccess: vi.fn(),
 }));
 vi.mock("@/lib/useUser", () => ({ useUser: () => useUserMock() }));
 vi.mock("@/api/client", () => ({ api: { POST: apiPost } }));
+vi.mock("sonner", () => ({ toast: { success: toastSuccess } }));
 
 import { ReportDialog } from "./ReportDialog";
 
@@ -27,6 +29,7 @@ describe("ReportDialog", () => {
   beforeEach(() => {
     useUserMock.mockReset();
     apiPost.mockReset().mockResolvedValue({ response: { status: 204 } });
+    toastSuccess.mockReset();
   });
   afterEach(() => cleanup());
 
@@ -66,7 +69,11 @@ describe("ReportDialog", () => {
     expect(apiPost).toHaveBeenCalledWith("/api/moderation/reports", {
       body: { doc_id: 7, reason: "plagio" },
     });
-    expect(await screen.findByText(/recibimos tu reporte/i)).toBeInTheDocument();
+    await vi.waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith(
+        "Recibimos tu reporte. Gracias.",
+      ),
+    );
   });
 
   it("shows an alert and no confirmation when the request fails", async () => {
@@ -78,7 +85,7 @@ describe("ReportDialog", () => {
     await userEvent.click(screen.getByRole("button", { name: /Enviar/i }));
 
     expect(await screen.findByRole("alert")).toBeInTheDocument();
-    expect(screen.queryByText(/recibimos tu reporte/i)).not.toBeInTheDocument();
+    expect(toastSuccess).not.toHaveBeenCalled();
   });
 
   it("confirms silently on the duplicate no-op (204) with no error", async () => {
@@ -89,7 +96,11 @@ describe("ReportDialog", () => {
     await userEvent.click(screen.getByRole("radio", { name: /Spam/i }));
     await userEvent.click(screen.getByRole("button", { name: /Enviar/i }));
 
-    expect(await screen.findByText(/recibimos tu reporte/i)).toBeInTheDocument();
+    await vi.waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith(
+        "Recibimos tu reporte. Gracias.",
+      ),
+    );
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

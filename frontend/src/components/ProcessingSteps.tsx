@@ -33,14 +33,14 @@ export function ProcessingSteps({
   const pct = Math.round((step / TOTAL_STEPS) * 100);
 
   return (
-    <div data-testid="processing-steps" className="w-full max-w-md space-y-2">
+    <div data-testid="processing-steps" className="w-full max-w-md space-y-2.5">
       <div className="flex items-center gap-2">
-        <Loader2 className="text-muted-foreground h-4 w-4 shrink-0 animate-spin" />
-        <span className="text-sm">{label}</span>
+        <Loader2 className="text-primary h-4 w-4 shrink-0 animate-spin" />
+        <span className="text-sm font-medium">{label}</span>
       </div>
-      <div className="bg-muted h-1.5 w-full overflow-hidden rounded-full">
+      <div className="h-[7px] w-full overflow-hidden rounded-full bg-[#f0f1f2]">
         <div
-          className="bg-primary h-full rounded-full transition-all duration-500"
+          className="bg-primary h-full rounded-full transition-[width] duration-500"
           style={{ width: `${pct}%` }}
         />
       </div>

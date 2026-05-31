@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 
-import { AuthNav } from "@/components/AuthNav";
+import { SiteHeader } from "@/components/SiteHeader";
 
 import { Providers } from "./providers";
 import "./globals.css";
@@ -34,9 +34,7 @@ export default function RootLayout({
     >
       <body className="flex min-h-full flex-col">
         <Providers>
-          <header className="border-border flex h-12 items-center justify-end border-b px-4">
-            <AuthNav />
-          </header>
+          <SiteHeader />
           {children}
           <Toaster position="bottom-center" richColors />
         </Providers>

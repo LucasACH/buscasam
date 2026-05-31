@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BUSCASAM — Foundations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/components.css">
+<style>
+  body { background: var(--neutral-50); }
+  .sheet { max-width: 1080px; margin: 0 auto; padding: 64px 40px 120px; }
+
+  /* doc header */
+  .doc-head { margin-bottom: 56px; }
+  .doc-eyebrow { font-size: var(--text-meta); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--primary); margin-bottom: 14px; }
+  .doc-title { font-size: 40px; font-weight: 700; letter-spacing: -0.035em; line-height: 1.05; margin: 0 0 14px; }
+  .doc-sub { font-size: var(--text-lg); color: var(--fg-muted); max-width: 620px; line-height: var(--lh-snug); margin: 0; }
+
+  section.block { margin-top: 64px; }
+  .block-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 24px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+  .block-num { font-family: var(--font-mono); font-size: var(--text-meta); color: var(--fg-subtle); }
+  .block-title { font-size: 22px; font-weight: 600; letter-spacing: -0.025em; margin: 0; }
+  .block-note { font-size: var(--text-meta); color: var(--fg-muted); margin-left: auto; }
+
+  .grid-cards { display: grid; gap: 20px; }
+  .demo {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--r-lg); padding: 28px;
+  }
+  .demo-label { font-size: var(--text-meta); font-weight: 600; color: var(--fg-muted); letter-spacing: -0.01em; margin: 0 0 18px; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .col { display: flex; flex-direction: column; gap: 14px; }
+
+  /* wordmark showcase */
+  .wm-stage { display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; }
+  .wm-hero { background: var(--card); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 48px; display: flex; flex-direction: column; gap: 28px; justify-content: center; }
+  .wm-variants { display: flex; flex-direction: column; gap: 14px; }
+  .wm-tile { background: var(--card); border: 1px solid var(--border); border-radius: var(--r-base); padding: 18px 20px; display: flex; align-items: center; justify-content: space-between; }
+  .wm-tile.dark { background: var(--neutral-900); border-color: var(--neutral-700); }
+  .wm-tile.dark .wordmark { color: #fff; }
+  .wm-tile .tag { font-size: 11px; font-family: var(--font-mono); color: var(--fg-subtle); }
+  .wm-tile.dark .tag { color: var(--neutral-400); }
+
+  /* color swatches */
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+  .sw { border: 1px solid var(--border); border-radius: var(--r-base); overflow: hidden; background: var(--card); }
+  .sw__chip { height: 60px; }
+  .sw__meta { padding: 10px 12px; }
+  .sw__name { font-size: var(--text-meta); font-weight: 600; }
+  .sw__val { font-size: 11px; font-family: var(--font-mono); color: var(--fg-muted); margin-top: 2px; }
+
+  /* type scale */
+  .type-row { display: flex; align-items: baseline; gap: 24px; padding: 14px 0; border-bottom: 1px solid var(--border); }
+  .type-row:last-child { border-bottom: none; }
+  .type-spec { font-family: var(--font-mono); font-size: 12px; color: var(--fg-muted); width: 160px; flex: none; }
+  .type-sample { letter-spacing: -0.02em; }
+
+  /* spacing scale */
+  .sp-row { display: flex; align-items: center; gap: 16px; padding: 7px 0; }
+  .sp-bar { height: 16px; background: var(--primary-tint-2); border-radius: 3px; }
+  .sp-tag { font-family: var(--font-mono); font-size: 12px; color: var(--fg-muted); width: 90px; flex: none; }
+
+  /* radii */
+  .radii { display: flex; gap: 18px; flex-wrap: wrap; }
+  .radii .rd { text-align: center; }
+  .radii .rd__box { width: 72px; height: 72px; background: var(--primary-tint); border: 1px solid var(--primary-tint-2); }
+  .radii .rd__tag { font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted); margin-top: 8px; }
+
+  .def-list { display: grid; grid-template-columns: 130px 1fr; gap: 10px 20px; font-size: var(--text-sm); }
+  .def-list dt { color: var(--fg-muted); }
+  .def-list dd { margin: 0; font-weight: 500; }
+
+  .caption { font-size: var(--text-meta); color: var(--fg-muted); margin-top: 14px; line-height: var(--lh-snug); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 760px) {
+    .sheet { padding: 40px 20px 80px; }
+    .doc-title { font-size: 32px; }
+    .wm-stage, .two { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="doc-head">
+    <div class="doc-eyebrow">Sistema de diseño · v1</div>
+    <h1 class="doc-title">BUSCASAM Foundations</h1>
+    <p class="doc-sub">Portal de búsqueda académica de la comunidad UNSAM. Modern-minimal: base neutra, un único acento azul profundo, tipografía Geist. Light mode. Construido sobre los componentes de shadcn (estilo radix-nova), reestilizados.</p>
+  </header>
+
+  <!-- WORDMARK -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">01</span>
+      <h2 class="block-title">Wordmark</h2>
+      <span class="block-note">"BUSCA" + "SAM" · acento en la sigla UNSAM</span>
+    </div>
+    <div class="wm-stage">
+      <div class="wm-hero">
+        <span class="wordmark wordmark--lg">
+          <span class="wordmark__mark" id="mark-lg"></span>
+          <span class="wordmark__text">BUSCA<span class="accent">SAM</span></span>
+        </span>
+        <p class="caption" style="margin:0;max-width:380px">Marca geométrica: lupa sobre cuadrado azul profundo, sugiriendo búsqueda + documento. Tracking ajustado, Geist 600. Legible desde 24px.</p>
+      </div>
+      <div class="wm-variants">
+        <div class="wm-tile">
+          <span class="wordmark"><span class="wordmark__mark" id="mark-sm"></span><span class="wordmark__text">BUSCA<span class="accent">SAM</span></span></span>
+          <span class="tag">header · 21px</span>
+        </div>
+        <div class="wm-tile">
+          <span class="wordmark" style="font-size:16px"><span class="wordmark__mark" id="mark-xs" style="width:20px;height:20px"></span><span class="wordmark__text">BUSCA<span class="accent">SAM</span></span></span>
+          <span class="tag">mín · 16px</span>
+        </div>
+        <div class="wm-tile dark">
+          <span class="wordmark"><span class="wordmark__mark" id="mark-dk"></span><span class="wordmark__text">BUSCA<span style="color:#7aa2ff">SAM</span></span></span>
+          <span class="tag">sobre oscuro</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COLOR -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">02</span>
+      <h2 class="block-title">Color</h2>
+      <span class="block-note">Base neutra + un acento azul profundo</span>
+    </div>
+
+    <div class="demo" style="margin-bottom:20px">
+      <p class="demo-label">Acento — azul profundo</p>
+      <div class="swatches">
+        <div class="sw"><div class="sw__chip" style="background:#1d4ed8"></div><div class="sw__meta"><div class="sw__name">Primary</div><div class="sw__val">#1D4ED8 · oklch(.49 .20 264)</div></div></div>
+        <div class="sw"><div class="sw__chip" style="background:#1e40af"></div><div class="sw__meta"><div class="sw__name">Primary hover</div><div class="sw__val">#1E40AF</div></div></div>
+        <div class="sw"><div class="sw__chip" style="background:#dbe6fe"></div><div class="sw__meta"><div class="sw__name">Tint</div><div class="sw__val">#DBE6FE</div></div></div>
+        <div class="sw"><div class="sw__chip" style="background:#eff4ff;border-bottom:1px solid var(--border)"></div><div class="sw__meta"><div class="sw__name">Tint soft</div><div class="sw__val">#EFF4FF</div></div></div>
+      </div>
+    </div>
+
+    <div class="demo" style="margin-bottom:20px">
+      <p class="demo-label">Neutrales — texto, superficies, bordes</p>
+      <div class="swatches">
+        <div class="sw"><div class="sw__chip" style="background:#171717"></div><div class="sw__meta"><div class="sw__name">Texto</div><div class="sw__val">#171717</div></div></div>
+        <div class="sw"><div class="sw__chip" style="background:#6b7280"></div><div class="sw__meta"><div class="sw__name">Texto sec.</div><div class="sw__val">#6B7280</div></div></div>
+        <div class="sw"><div class="sw__chip" style="background:#9ca3af"></div><div class="sw__meta"><div class="sw__name">Sutil</div><div class="sw__val">#9CA3AF</div></div></div>
+        <div class="sw"><div class="sw__chip" style="background:#e5e7eb"></div><div class="sw__meta"><div class="sw__name">Borde</div><div class="sw__val">#E5E7EB</div></div></div>
+        <div class="sw"><div class="sw__chip" style="background:#fafafa;border-bottom:1px solid var(--border)"></div><div class="sw__meta"><div class="sw__name">Superficie</div><div class="sw__val">#FAFAFA</div></div></div>
+        <div class="sw"><div class="sw__chip" style="background:#ffffff;border-bottom:1px solid var(--border)"></div><div class="sw__meta"><div class="sw__name">Fondo / card</div><div class="sw__val">#FFFFFF</div></div></div>
+      </div>
+    </div>
+
+    <div class="demo">
+      <p class="demo-label">Estado — badges suaves (tinte + texto legible, nunca saturados)</p>
+      <div class="row" style="gap:10px">
+        <span class="badge badge--neutral">Borrador</span>
+        <span class="badge badge--amber">Procesando</span>
+        <span class="badge badge--green">Publicado</span>
+        <span class="badge badge--red">Oculto</span>
+        <span class="badge badge--blue">Interno</span>
+      </div>
+      <div class="row" style="margin-top:18px;gap:10px;align-items:center">
+        <span style="font-size:var(--text-sm)">Resaltado de búsqueda:</span>
+        <span style="font-size:var(--text-sm)">…modelos de <mark>aprendizaje automático</mark> aplicados a…</span>
+        <span style="font-size:var(--text-sm);margin-left:18px">Destructivo:</span>
+        <span class="badge" style="background:var(--danger);color:#fff">Eliminar</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- TYPE -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">03</span>
+      <h2 class="block-title">Tipografía</h2>
+      <span class="block-note">Geist Sans · Geist Mono para IDs/código</span>
+    </div>
+    <div class="demo">
+      <div class="type-row"><span class="type-spec">Display · 44 / 700</span><span class="type-sample" style="font-size:44px;font-weight:700;letter-spacing:-0.035em">Búsqueda académica</span></div>
+      <div class="type-row"><span class="type-spec">H1 · 28 / 600</span><span class="type-sample" style="font-size:28px;font-weight:600;letter-spacing:-0.03em">Mis trabajos</span></div>
+      <div class="type-row"><span class="type-spec">H2 · 19 / 600</span><span class="type-sample" style="font-size:19px;font-weight:600;letter-spacing:-0.02em">Trabajos relacionados</span></div>
+      <div class="type-row"><span class="type-spec">Body · 15 / 400</span><span class="type-sample" style="font-size:15px;line-height:var(--lh-read)">El resumen se lee con interlineado cómodo para abstracts extensos.</span></div>
+      <div class="type-row"><span class="type-spec">Meta · 13 / 400</span><span class="type-sample" style="font-size:13px;color:var(--fg-muted)">2024 · Escuela de Ciencia y Tecnología · Tesis</span></div>
+      <div class="type-row"><span class="type-spec">Mono · 13</span><span class="type-sample mono" style="font-size:13px;color:var(--fg-muted)">doc_a1f93c · v3</span></div>
+    </div>
+    <p class="caption">Un solo salto de peso entre niveles. Máximo 3 pesos por pantalla. Tracking negativo en títulos.</p>
+  </section>
+
+  <!-- SPACING + RADII -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">04</span>
+      <h2 class="block-title">Espaciado, radios y elevación</h2>
+      <span class="block-note">Grilla de 8px · sombras casi nulas</span>
+    </div>
+    <div class="two">
+      <div class="demo">
+        <p class="demo-label">Escala de espaciado (8px)</p>
+        <div class="sp-row"><span class="sp-tag">4 / 8</span><div class="sp-bar" style="width:8px"></div></div>
+        <div class="sp-row"><span class="sp-tag">12 / 16</span><div class="sp-bar" style="width:16px"></div></div>
+        <div class="sp-row"><span class="sp-tag">24</span><div class="sp-bar" style="width:24px"></div></div>
+        <div class="sp-row"><span class="sp-tag">32</span><div class="sp-bar" style="width:32px"></div></div>
+        <div class="sp-row"><span class="sp-tag">48</span><div class="sp-bar" style="width:48px"></div></div>
+        <div class="sp-row"><span class="sp-tag">64</span><div class="sp-bar" style="width:64px"></div></div>
+      </div>
+      <div class="demo">
+        <p class="demo-label">Radios</p>
+        <div class="radii">
+          <div class="rd"><div class="rd__box" style="border-radius:6px"></div><div class="rd__tag">6 · sm</div></div>
+          <div class="rd"><div class="rd__box" style="border-radius:10px"></div><div class="rd__tag">10 · base</div></div>
+          <div class="rd"><div class="rd__box" style="border-radius:14px"></div><div class="rd__tag">14 · lg</div></div>
+          <div class="rd"><div class="rd__box" style="border-radius:999px"></div><div class="rd__tag">full · pill</div></div>
+        </div>
+        <hr class="sep" style="margin:24px 0">
+        <p class="demo-label" style="margin-bottom:14px">Elevación</p>
+        <div class="row">
+          <div style="width:120px;height:56px;border-radius:10px;background:#fff;border:1px solid var(--border);display:grid;place-items:center;font-size:12px;color:var(--fg-muted)">hairline</div>
+          <div style="width:120px;height:56px;border-radius:10px;background:#fff;box-shadow:var(--shadow-pop);display:grid;place-items:center;font-size:12px;color:var(--fg-muted)">popover</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BUTTONS -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">05</span>
+      <h2 class="block-title">Botones</h2>
+      <span class="block-note">primary · secondary · outline · ghost · destructive</span>
+    </div>
+    <div class="demo">
+      <div class="row" style="margin-bottom:18px">
+        <button class="btn btn--primary">Subir trabajo</button>
+        <button class="btn btn--secondary">Papelera</button>
+        <button class="btn btn--outline">Tipo (2)</button>
+        <button class="btn btn--ghost">Limpiar</button>
+        <button class="btn btn--destructive">Eliminar</button>
+        <button class="btn btn--primary" disabled>Deshabilitado</button>
+      </div>
+      <div class="row" style="margin-bottom:18px">
+        <button class="btn btn--primary btn--lg">Iniciar sesión con UNSAM</button>
+        <button class="btn btn--outline btn--sm">Aceptar</button>
+        <button class="btn btn--ghost btn--sm">Rechazar</button>
+      </div>
+      <div class="row">
+        <span style="font-size:var(--text-meta);color:var(--fg-muted)">Filtro activo →</span>
+        <button class="btn btn--outline btn--filter is-set">Año <span style="opacity:.7">2020–2024</span></button>
+        <button class="btn btn--outline btn--filter">Tipo <span class="count">2</span></button>
+      </div>
+      <p class="caption">Press: escala 0.98. Focus-visible: anillo azul de 2px. Transición de color de estado en ~180ms.</p>
+    </div>
+  </section>
+
+  <!-- INPUTS -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">06</span>
+      <h2 class="block-title">Campos y formularios</h2>
+      <span class="block-note">input · input-group · textarea · select · field</span>
+    </div>
+    <div class="demo">
+      <div class="two" style="align-items:start">
+        <div class="col">
+          <div class="field">
+            <label class="label">Título <span class="req">*</span></label>
+            <input class="input" type="text" value="Análisis de redes neuronales en clasificación de imágenes satelitales">
+          </div>
+          <div class="field">
+            <label class="label">Buscar</label>
+            <div class="input-group">
+              <svg class="input-group__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              <input class="input" type="text" placeholder="Buscar por título, tema, autor…">
+            </div>
+          </div>
+          <div class="field">
+            <label class="label">Tipo</label>
+            <select class="native-select"><option>Tesis</option><option>Paper</option><option>Trabajo práctico</option></select>
+          </div>
+        </div>
+        <div class="col">
+          <div class="field">
+            <label class="label">Resumen</label>
+            <textarea class="textarea" rows="3">Este trabajo propone un modelo de aprendizaje profundo para…</textarea>
+          </div>
+          <div class="field field--invalid">
+            <label class="label">Área <span class="req">*</span></label>
+            <input class="input" type="text" placeholder="Elegí una Materia">
+            <span class="field__error">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+              Elegí una Materia.
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CARDS + ITEMS -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">07</span>
+      <h2 class="block-title">Card de resultado y filas de lista</h2>
+      <span class="block-note">item · card · segmented · chips</span>
+    </div>
+    <div class="col">
+      <div class="row" style="justify-content:space-between">
+        <div class="segmented">
+          <button class="is-active">Relevancia</button>
+          <button>Recientes</button>
+        </div>
+        <div class="row" style="gap:8px">
+          <span class="chip chip--active chip--removable">Tesis <span class="chip__x">✕</span></span>
+          <span class="chip">Paper</span>
+          <span class="chip">Trabajo práctico</span>
+        </div>
+      </div>
+
+      <a class="card" style="display:block;text-decoration:none" id="result-card-demo">
+        <div style="font-size:17px;font-weight:600;letter-spacing:-0.02em;color:var(--fg);margin-bottom:6px">Detección temprana de Chagas mediante visión por computadora</div>
+        <div style="font-size:var(--text-meta);color:var(--fg-muted);margin-bottom:8px">M. Rodríguez, J. Pérez, L. Gómez</div>
+        <div style="font-size:var(--text-meta);color:var(--fg-muted);display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+          <span>2024</span><span>·</span><span>ECyT › Bioingeniería › Procesamiento de imágenes</span><span>·</span><span>Tesis</span>
+          <span class="badge badge--blue" style="margin-left:2px">Interno</span>
+        </div>
+        <div style="font-size:var(--text-sm);color:var(--neutral-700);line-height:var(--lh-read)">Se presenta un sistema de <mark>visión por computadora</mark> para asistir en el diagnóstico temprano, evaluado sobre un conjunto de imágenes de microscopía con resultados que superan…</div>
+      </a>
+
+      <div class="panel">
+        <div class="list--divided">
+          <div class="item item--link">
+            <div style="flex:1">
+              <div style="font-weight:500;font-size:var(--text-sm)">Modelos de lenguaje para corpus en español rioplatense</div>
+              <div style="font-size:var(--text-meta);color:var(--fg-muted);margin-top:2px">Publicado el 14 mar 2025</div>
+            </div>
+            <span class="badge badge--green">Publicado</span>
+          </div>
+          <div class="item item--link">
+            <div style="flex:1">
+              <div style="font-weight:500;font-size:var(--text-sm)">Borrador — Optimización de rutas de recolección urbana</div>
+              <div style="font-size:var(--text-meta);color:var(--fg-muted);margin-top:2px">Editado hace 2 días</div>
+            </div>
+            <span class="badge badge--neutral">Borrador</span>
+          </div>
+          <div class="item item--link">
+            <div style="flex:1">
+              <div style="font-weight:500;font-size:var(--text-sm)">Estudio de microplásticos en el Río Reconquista</div>
+              <div style="font-size:var(--text-meta);color:var(--fg-muted);margin-top:2px">Oculto por moderación</div>
+            </div>
+            <span class="badge badge--red">Oculto</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="caption">Card: borde hairline, hover eleva sutilmente (borde + sombra tenue). Listas: filas divididas por hairline, hover con fondo neutro.</p>
+  </section>
+
+  <!-- POPOVER + SKELETON + EMPTY -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">08</span>
+      <h2 class="block-title">Popover, skeleton y estado vacío</h2>
+      <span class="block-note">cada lista lleva sus variantes loading + empty + error</span>
+    </div>
+    <div class="grid-cards" style="grid-template-columns:repeat(3,1fr)">
+      <div class="demo">
+        <p class="demo-label">Popover — Año</p>
+        <div class="popover" style="width:220px">
+          <div style="padding:10px 8px 12px">
+            <div style="display:flex;gap:10px">
+              <div class="field" style="flex:1"><label class="label" style="font-size:12px">Desde</label><input class="input" style="height:34px" value="2020"></div>
+              <div class="field" style="flex:1"><label class="label" style="font-size:12px">Hasta</label><input class="input" style="height:34px" value="2024"></div>
+            </div>
+            <button class="btn btn--primary btn--sm btn--block" style="margin-top:12px">Aplicar</button>
+          </div>
+        </div>
+      </div>
+      <div class="demo">
+        <p class="demo-label">Skeleton — card de resultado</p>
+        <div class="card" style="padding:18px">
+          <div class="skeleton" style="height:16px;width:75%;margin-bottom:12px"></div>
+          <div class="skeleton" style="height:11px;width:45%;margin-bottom:8px"></div>
+          <div class="skeleton" style="height:11px;width:60%;margin-bottom:14px"></div>
+          <div class="skeleton" style="height:11px;width:100%;margin-bottom:6px"></div>
+          <div class="skeleton" style="height:11px;width:88%"></div>
+        </div>
+      </div>
+      <div class="demo">
+        <p class="demo-label">Empty state</p>
+        <div class="card" style="padding:0">
+          <div class="empty" style="padding:28px 20px">
+            <div class="empty__icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m13.5 8.5-5 5"/><path d="m8.5 8.5 5 5"/><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            </div>
+            <div class="empty__title">No encontramos resultados</div>
+            <div class="empty__text">Probá con otras palabras o quitá algún filtro.</div>
+            <button class="btn btn--outline btn--sm empty__action">Limpiar filtros</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MOTION + STATES note -->
+  <section class="block">
+    <div class="block-head">
+      <span class="block-num">09</span>
+      <h2 class="block-title">Movimiento y matriz de estados</h2>
+      <span class="block-note">sutil y con propósito · respeta prefers-reduced-motion</span>
+    </div>
+    <div class="two">
+      <div class="demo">
+        <p class="demo-label">Movimiento</p>
+        <dl class="def-list">
+          <dt>Listas / cards</dt><dd>fade + sube 8px · 220ms · stagger</dd>
+          <dt>Botones</dt><dd>press 0.98 + color de estado</dd>
+          <dt>Popover / dialog</dt><dd>fade + scale-in 4px · 180ms</dd>
+          <dt>Progreso</dt><dd>ancho animado, fill azul</dd>
+          <dt>Async</dt><dd>skeleton en cada lista/detalle</dd>
+        </dl>
+      </div>
+      <div class="demo">
+        <p class="demo-label">Cada componente se diseña para</p>
+        <div class="row" style="gap:8px">
+          <span class="chip">default</span><span class="chip">hover</span>
+          <span class="chip">focus-visible</span><span class="chip">active / selected</span>
+          <span class="chip">disabled</span><span class="chip">loading</span>
+          <span class="chip">empty</span><span class="chip">error</span>
+        </div>
+        <p class="caption" style="margin-top:18px">Ninguna lista se entrega sin sus variantes empty + loading + error.</p>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+  // Wordmark mark SVG — magnifier on a deep-blue rounded square
+  function markSVG(size, blue) {
+    const s = size;
+    return `<svg width="${s}" height="${s}" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="26" height="26" rx="7.5" fill="${blue}"/>
+      <circle cx="11" cy="11" r="4.4" stroke="#fff" stroke-width="2.1"/>
+      <path d="M14.4 14.4 18.5 18.5" stroke="#fff" stroke-width="2.1" stroke-linecap="round"/>
+    </svg>`;
+  }
+  document.getElementById('mark-lg').innerHTML = markSVG(38, '#1d4ed8');
+  document.getElementById('mark-sm').innerHTML = markSVG(26, '#1d4ed8');
+  document.getElementById('mark-xs').innerHTML = markSVG(20, '#1d4ed8');
+  document.getElementById('mark-dk').innerHTML = markSVG(26, '#2f5ee0');
+</script>
+</body>
+</html>

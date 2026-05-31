@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm, useFieldArray, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -11,6 +12,14 @@ import { useUser } from "@/lib/useUser";
 import { AreasCascader } from "@/components/AreasCascader";
 import { CoauthorPicker } from "@/components/CoauthorPicker";
 import { Button } from "@/components/ui/button";
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronLeft,
+  Plus,
+  Upload,
+  X,
+} from "lucide-react";
 
 const DOCUMENT_TYPES = [
   { value: "tesis", label: "Tesis" },
@@ -164,78 +173,113 @@ function NuevoForm() {
     }
   }
 
+  const inputClass =
+    "h-10 w-full rounded-lg border border-border-strong bg-card px-3 text-sm outline-none hover:border-neutral-400 focus:border-primary focus:ring-[3px] focus:ring-primary-tint transition";
+
   return (
-    <main className="mx-auto w-full max-w-2xl px-4 py-8">
-      <h1 className="text-2xl font-semibold tracking-tight">Nuevo trabajo</h1>
+    <main className="mx-auto w-full max-w-3xl px-6 py-8">
+      <Link
+        href="/mis-trabajos"
+        className="-ml-1 mb-4 inline-flex items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground"
+      >
+        <ChevronLeft className="size-4" />
+        Mis trabajos
+      </Link>
 
-      <form className="mt-6 space-y-6" onSubmit={handleSubmit(onSubmit)}>
-        <div className="space-y-1">
+      <h1 className="text-[28px] font-semibold tracking-tight">Nuevo trabajo</h1>
+
+      <form className="mt-7 space-y-6" onSubmit={handleSubmit(onSubmit)}>
+        <div className="space-y-1.5">
           <label htmlFor="titulo" className="text-sm font-medium">
-            Título
+            Título <span className="text-destructive">*</span>
           </label>
-          <input
-            id="titulo"
-            className="w-full rounded-md border px-3 py-2 text-sm"
-            {...register("titulo")}
-          />
+          <input id="titulo" className={inputClass} {...register("titulo")} />
           {errors.titulo && (
-            <p className="text-destructive text-xs">{errors.titulo.message}</p>
+            <p className="flex items-center gap-1.5 text-[13px] text-destructive">
+              <AlertTriangle className="size-3.5" />
+              {errors.titulo.message}
+            </p>
           )}
         </div>
 
-        <Controller
-          name="area_path"
-          control={control}
-          render={({ field }) => (
-            <AreasCascader
-              requireLeaf
-              onChange={(area) => field.onChange(area ?? "")}
-            />
+        <div className="space-y-1.5">
+          <span className="text-sm font-medium">
+            Área <span className="text-destructive">*</span>
+          </span>
+          <Controller
+            name="area_path"
+            control={control}
+            render={({ field }) => (
+              <div className="overflow-hidden rounded-lg border border-border bg-card">
+                <AreasCascader
+                  value={field.value || null}
+                  onChange={(area) => field.onChange(area ?? "")}
+                />
+              </div>
+            )}
+          />
+          {errors.area_path && (
+            <p className="flex items-center gap-1.5 text-[13px] text-destructive">
+              <AlertTriangle className="size-3.5" />
+              {errors.area_path.message}
+            </p>
           )}
-        />
-        {errors.area_path && (
-          <p className="text-destructive text-xs">{errors.area_path.message}</p>
-        )}
+        </div>
 
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           <label htmlFor="tipo" className="text-sm font-medium">
-            Tipo
+            Tipo <span className="text-destructive">*</span>
           </label>
-          <select
-            id="tipo"
-            className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
-            {...register("tipo")}
-          >
-            {DOCUMENT_TYPES.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
-              </option>
-            ))}
-          </select>
+          <div className="relative">
+            <select
+              id="tipo"
+              className={`${inputClass} appearance-none pr-9`}
+              {...register("tipo")}
+            >
+              {DOCUMENT_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          </div>
         </div>
 
-        <fieldset className="space-y-2">
+        <fieldset className="space-y-1.5">
           <legend className="text-sm font-medium">Visibilidad</legend>
-          {VISIBILITIES.map((v) => (
-            <label key={v.value} className="flex items-start gap-2 text-sm">
-              <input type="radio" value={v.value} {...register("visibilidad")} />
-              <span>
-                <span className="font-medium">{v.label}</span>
-                <span className="text-muted-foreground ml-2 text-xs">{v.help}</span>
-              </span>
-            </label>
-          ))}
+          <div className="flex flex-col gap-2">
+            {VISIBILITIES.map((v) => (
+              <label
+                key={v.value}
+                className="flex cursor-pointer items-start gap-3 rounded-lg border border-border-strong bg-card px-3.5 py-3 text-sm hover:border-neutral-400 has-[:checked]:border-primary has-[:checked]:bg-primary-tint transition"
+              >
+                <input
+                  type="radio"
+                  value={v.value}
+                  className="mt-0.5 accent-[var(--primary)]"
+                  {...register("visibilidad")}
+                />
+                <span>
+                  <span className="block font-semibold">{v.label}</span>
+                  <span className="mt-0.5 block text-[13px] text-muted-foreground">
+                    {v.help}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
         </fieldset>
 
-        <div className="space-y-2">
-          <span className="text-sm font-medium">Coautores externos</span>
+        <div className="space-y-2.5">
+          <span className="block text-sm font-medium">Coautores externos</span>
           {externalAuthors.fields.map((row, i) => (
             <div key={row.id} className="space-y-1">
               <div className="flex items-start gap-2">
-                <div className="flex-1 space-y-1">
+                <div className="flex-1 space-y-1.5">
                   <input
                     placeholder="Nombre"
-                    className="w-full rounded-md border px-3 py-2 text-sm"
+                    className={inputClass}
                     {...register(`external_authors.${i}.name`, {
                       onBlur: (e) =>
                         setValue(
@@ -245,15 +289,16 @@ function NuevoForm() {
                     })}
                   />
                   {errors.external_authors?.[i]?.name && (
-                    <p className="text-destructive text-xs">
+                    <p className="flex items-center gap-1.5 text-[13px] text-destructive">
+                      <AlertTriangle className="size-3.5" />
                       {errors.external_authors[i]?.name?.message}
                     </p>
                   )}
                 </div>
-                <div className="flex-1 space-y-1">
+                <div className="flex-1 space-y-1.5">
                   <input
                     placeholder="Apellido"
-                    className="w-full rounded-md border px-3 py-2 text-sm"
+                    className={inputClass}
                     {...register(`external_authors.${i}.surname`, {
                       onBlur: (e) =>
                         setValue(
@@ -263,20 +308,22 @@ function NuevoForm() {
                     })}
                   />
                   {errors.external_authors?.[i]?.surname && (
-                    <p className="text-destructive text-xs">
+                    <p className="flex items-center gap-1.5 text-[13px] text-destructive">
+                      <AlertTriangle className="size-3.5" />
                       {errors.external_authors[i]?.surname?.message}
                     </p>
                   )}
                 </div>
-                <div className="flex-1 space-y-1">
+                <div className="flex-[1.4] space-y-1.5">
                   <input
                     type="email"
                     placeholder="Email"
-                    className="w-full rounded-md border px-3 py-2 text-sm"
+                    className={inputClass}
                     {...register(`external_authors.${i}.email`)}
                   />
                   {errors.external_authors?.[i]?.email && (
-                    <p className="text-destructive text-xs">
+                    <p className="flex items-center gap-1.5 text-[13px] text-destructive">
+                      <AlertTriangle className="size-3.5" />
                       {errors.external_authors[i]?.email?.message}
                     </p>
                   )}
@@ -284,10 +331,10 @@ function NuevoForm() {
                 <button
                   type="button"
                   onClick={() => externalAuthors.remove(i)}
-                  className="text-muted-foreground hover:text-destructive px-2 py-2 text-sm"
+                  className="grid size-10 flex-none place-items-center rounded-lg text-muted-foreground hover:bg-neutral-100 hover:text-destructive transition"
                   aria-label="Quitar coautor externo"
                 >
-                  ✕
+                  <X className="size-4" />
                 </button>
               </div>
             </div>
@@ -300,6 +347,7 @@ function NuevoForm() {
               externalAuthors.append({ name: "", surname: "", email: "" })
             }
           >
+            <Plus className="size-3.5" />
             Agregar coautor externo
           </Button>
         </div>
@@ -312,23 +360,41 @@ function NuevoForm() {
           )}
         />
 
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           <label htmlFor="main_file" className="text-sm font-medium">
-            Archivo principal
+            Archivo principal <span className="text-destructive">*</span>
           </label>
-          <input
-            id="main_file"
-            type="file"
-            accept=".pdf,.docx,.odt"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="block w-full text-sm"
-          />
+          <label
+            htmlFor="main_file"
+            className="flex cursor-pointer flex-col items-center rounded-lg border-[1.5px] border-dashed border-border-strong bg-neutral-50 px-6 py-8 text-center hover:border-neutral-400 hover:bg-neutral-100 transition"
+          >
+            <span className="grid size-11 place-items-center rounded-lg border border-border bg-card text-primary">
+              <Upload className="size-5" />
+            </span>
+            <span className="mt-3 text-sm font-medium">
+              {file ? file.name : "Arrastrá tu archivo o hacé clic para elegir"}
+            </span>
+            <span className="mt-1 text-[11px] text-muted-foreground">
+              PDF, DOCX u ODT · hasta 50 MB
+            </span>
+            <input
+              id="main_file"
+              type="file"
+              accept=".pdf,.docx,.odt"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              className="sr-only"
+            />
+          </label>
         </div>
 
         {submitError && (
-          <p role="alert" className="text-destructive text-sm">
-            {submitError}
-          </p>
+          <div
+            role="alert"
+            className="flex items-start gap-2.5 rounded-lg border border-destructive/30 bg-destructive/5 px-3.5 py-3 text-sm text-destructive"
+          >
+            <AlertTriangle className="mt-0.5 size-4 flex-none" />
+            <span>{submitError}</span>
+          </div>
         )}
 
         <Button type="submit" disabled={submitting}>

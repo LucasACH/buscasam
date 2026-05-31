@@ -1,0 +1,109 @@
+/* ============================================================
+   BUSCASAM — Design Tokens (light only)
+   Neutral base + single deep-blue accent. Geist Sans / Geist Mono.
+   ============================================================ */
+
+:root {
+  /* ---- Neutral ramp (OKLCH-derived, hex for reference) ---- */
+  --white:        #ffffff;   /* oklch(1 0 0)            */
+  --neutral-50:   #fafafa;   /* oklch(0.985 0 0)        */
+  --neutral-100:  #f5f5f5;   /* oklch(0.97 0 0)         */
+  --neutral-150:  #f0f1f2;
+  --neutral-200:  #e5e7eb;   /* oklch(0.922 0.004 264)  hairline border */
+  --neutral-300:  #d4d6db;   /* oklch(0.87 0.006 264)   */
+  --neutral-400:  #9ca3af;   /* oklch(0.71 0.02 264)    */
+  --neutral-500:  #6b7280;   /* oklch(0.55 0.02 264)    secondary text */
+  --neutral-600:  #4b5563;
+  --neutral-700:  #374151;
+  --neutral-900:  #171717;   /* oklch(0.21 0 0)         primary text */
+
+  /* ---- Semantic surfaces ---- */
+  --background:   var(--white);
+  --surface:      var(--neutral-50);
+  --surface-2:    var(--neutral-100);
+  --card:         var(--white);
+  --border:       var(--neutral-200);
+  --border-strong:var(--neutral-300);
+
+  /* ---- Text ---- */
+  --fg:           var(--neutral-900);
+  --fg-muted:     var(--neutral-500);
+  --fg-subtle:    var(--neutral-400);
+
+  /* ---- Accent: deep blue ---- */
+  --primary:        #1d4ed8;  /* oklch(0.49 0.20 264) */
+  --primary-hover:  #1e40af;  /* oklch(0.43 0.18 264) */
+  --primary-active: #1b3a9c;
+  --primary-fg:     #ffffff;
+  --primary-tint:   #eff4ff;  /* selected / filled-filter bg */
+  --primary-tint-2: #dbe6fe;
+  --ring:           #1d4ed8;
+
+  /* ---- Destructive ---- */
+  --danger:       #dc2626;
+  --danger-hover: #b91c1c;
+  --danger-fg:    #ffffff;
+  --danger-tint:  #fef2f2;
+
+  /* ---- Status badges (soft tinted) ---- */
+  --status-amber-bg:   #fef3c7;  --status-amber-fg:   #92400e;
+  --status-green-bg:   #dcfce7;  --status-green-fg:   #166534;
+  --status-red-bg:     #fee2e2;  --status-red-fg:     #991b1b;
+  --status-neutral-bg: #f3f4f6;  --status-neutral-fg: #374151;
+  --status-blue-bg:    #e0e9ff;  --status-blue-fg:    #1e40af;
+
+  /* ---- Search highlight ---- */
+  --mark-bg: #fef3c7;
+  --mark-fg: #422006;
+
+  /* ---- Typography ---- */
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --text-display: 44px;
+  --text-h1:      28px;
+  --text-h2:      19px;
+  --text-lg:      16px;
+  --text-body:    15px;
+  --text-sm:      14px;
+  --text-meta:    13px;
+  --text-caption: 12px;
+
+  --lh-tight: 1.15;
+  --lh-snug:  1.35;
+  --lh-read:  1.65;
+
+  /* ---- Spacing (8px grid) ---- */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 20px; --sp-6: 24px; --sp-8: 32px; --sp-10: 40px;
+  --sp-12: 48px; --sp-16: 64px; --sp-20: 80px;
+
+  /* ---- Radii ---- */
+  --r-sm:   6px;
+  --r-base: 10px;
+  --r-lg:   14px;
+  --r-full: 999px;
+
+  /* ---- Shadows (almost none) ---- */
+  --shadow-pop: 0 4px 16px -2px rgba(23,23,23,0.10), 0 2px 6px -2px rgba(23,23,23,0.06);
+  --shadow-card-hover: 0 2px 8px -2px rgba(23,23,23,0.08);
+
+  /* ---- Layout ---- */
+  --col-read: 768px;
+  --col-narrow: 640px;
+  --header-h: 60px;
+
+  /* ---- Motion ---- */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 130ms;
+  --dur: 180ms;
+  --dur-slow: 220ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

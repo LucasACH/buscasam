@@ -111,18 +111,11 @@ test("upload happy path: nuevo → editar pill flips from Procesando to Listo", 
   // 2. Fill the form.
   await page.getByLabel(/Título/i).fill("Mi tesis BD");
 
-  await expect(page.getByRole("combobox", { name: /Escuela/i })).toContainText(
-    /Ciencia/,
-  );
   await page
-    .getByRole("combobox", { name: /Escuela/i })
-    .selectOption("escuela_ciencia");
-  await page
-    .getByRole("combobox", { name: /Carrera/i })
-    .selectOption("escuela_ciencia.carrera_informatica");
-  await page
-    .getByRole("combobox", { name: /Materia/i })
-    .selectOption("escuela_ciencia.carrera_informatica.materia_bd");
+    .getByRole("button", { name: /Escuela de Ciencia y Tecnología/ })
+    .click();
+  await page.getByRole("button", { name: /Ing\. Informática/ }).click();
+  await page.getByRole("button", { name: /Bases de Datos/ }).click();
 
   await page.getByLabel(/Tipo/i).selectOption("tesis");
   await page.getByLabel(/Público/i).check();

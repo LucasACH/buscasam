@@ -2,21 +2,17 @@
 
 import { Bell } from "lucide-react";
 
-import { useNotifications, useUnreadCount } from "@/lib/useNotifications";
+import { usePrefetchNotifications, useUnreadCount } from "@/lib/useNotifications";
 
 import { BandejaPanel } from "./BandejaPanel";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 
 export function NotificationBell() {
   const { count } = useUnreadCount();
-  const { markAllRead } = useNotifications();
+  usePrefetchNotifications();
 
   return (
-    <Popover
-      onOpenChange={(open) => {
-        if (open && count > 0) markAllRead();
-      }}
-    >
+    <Popover>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -25,8 +21,8 @@ export function NotificationBell() {
         >
           <Bell className="size-4" />
           {count > 0 && (
-            <span className="bg-primary text-primary-foreground absolute -top-0.5 -right-0.5 inline-flex min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-medium">
-              {count}
+            <span className="bg-primary text-primary-foreground border-background absolute top-1 right-1 inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-full border-2 px-1 text-[10px] font-bold">
+              {count > 9 ? "9+" : count}
             </span>
           )}
         </button>

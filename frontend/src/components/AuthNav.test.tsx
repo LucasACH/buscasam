@@ -96,7 +96,7 @@ describe("AuthNav", () => {
     );
   });
 
-  it("authenticated: shows avatar + role label + logout", async () => {
+  it("authenticated: shows name + role and exposes logout in the menu", async () => {
     asAuthenticated({
       user_id: 7,
       role: "docente",
@@ -110,6 +110,10 @@ describe("AuthNav", () => {
       await screen.findByText("Docente", { exact: false }),
     ).toBeInTheDocument();
     expect(await screen.findByText("Ada Lovelace")).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /Ada Lovelace/i }),
+    );
     expect(
       await screen.findByRole("button", { name: /Cerrar sesión/i }),
     ).toBeInTheDocument();
@@ -155,6 +159,9 @@ describe("AuthNav", () => {
     });
     renderAuthNav();
 
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Ada Lovelace/i }),
+    );
     const btn = await screen.findByRole("button", { name: /Cerrar sesión/i });
     await userEvent.click(btn);
 
@@ -174,6 +181,9 @@ describe("AuthNav", () => {
     });
     renderAuthNav();
 
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Ada Lovelace/i }),
+    );
     const btn = await screen.findByRole("button", { name: /Cerrar sesión/i });
     await userEvent.click(btn);
 

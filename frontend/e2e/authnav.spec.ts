@@ -37,6 +37,7 @@ test("authenticated: avatar + role label + logout returns to invitado", async ({
     user_id: 7,
     role: "docente",
     name: "Ada Lovelace",
+    email: "ada@unsam.edu.ar",
     picture_url: "https://example.test/a.png",
     hd: "unsam.edu.ar",
   };
@@ -77,6 +78,7 @@ test("authenticated: avatar + role label + logout returns to invitado", async ({
   await expect(misTrabajos).toBeVisible();
   await expect(misTrabajos).toHaveAttribute("href", "/mis-trabajos");
 
+  await page.getByRole("button", { name: /Ada Lovelace/i }).click();
   const logoutBtn = page.getByRole("button", { name: /Cerrar sesión/i });
   await expect(logoutBtn).toBeVisible();
   await logoutBtn.click();

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { ProcessingSteps } from "@/components/ProcessingSteps";
+import { type BadgeTone } from "@/components/StatusBadge";
 import type {
   Candidate,
   DraftWorkspaceActions,
@@ -68,74 +69,94 @@ export function CandidatePanel({
   }
 
   return (
-    <section className="rounded-lg border p-4">
-      <h2 className="text-muted-foreground text-sm font-medium">
-        Archivo principal
-      </h2>
-      {error && (
-        <p
-          data-testid="replace-error"
-          className="text-destructive mt-2 text-sm"
-        >
-          {error}
-        </p>
-      )}
-
-      {candidate === null && (
-        <div className="mt-3 space-y-2">
-          <ReplaceButton label="Reemplazar archivo principal" onPick={onPick} />
-          <p className="text-muted-foreground text-sm">{HELPER}</p>
-        </div>
-      )}
-
-      {candidate?.status === "processing" && (
-        <div className="mt-3 space-y-3">
-          <ProcessingSteps stage={candidate.stage} />
-          <ReplaceButton label="Reemplazar" onPick={onPick} />
-          {candidate.canDiscard && (
-            <DiscardButton onClick={onDiscard} disabled={discarding} />
-          )}
-        </div>
-      )}
-
-      {candidate?.status === "ready" && (
-        <div className="mt-3 space-y-3">
-          <StatusPill>{candidate.statusLabel}</StatusPill>
-          <dl className="space-y-2 text-sm">
-            <Staged label="Resumen">{candidate.stagedAbstract || "—"}</Staged>
-            <Staged label="Palabras clave">
-              {candidate.stagedKeywords.join(", ") || "—"}
-            </Staged>
-            <Staged label="Fecha">{candidate.stagedFecha || "—"}</Staged>
-          </dl>
-          <Button
-            disabled={!candidate.canPublish || publishing}
-            onClick={onPublish}
+    <section className="rounded-lg border border-border bg-card">
+      <div className="flex items-center justify-between gap-3 px-[18px] py-4">
+        <h2 className="text-[19px] font-semibold tracking-tight">
+          Archivo principal
+        </h2>
+      </div>
+      <div className="px-[18px] pb-[18px]">
+        {error && (
+          <p
+            data-testid="replace-error"
+            className="text-destructive mb-3 flex items-center gap-1.5 text-[13px]"
           >
-            Publicar
-          </Button>
-          {candidate.canDiscard && (
-            <DiscardButton onClick={onDiscard} disabled={discarding} />
-          )}
-        </div>
-      )}
+            {error}
+          </p>
+        )}
 
-      {candidate?.status === "failed" && (
-        <div className="mt-3 space-y-2">
-          <StatusPill>{candidate.statusLabel}</StatusPill>
-          {candidate.error && (
-            <p
-              data-testid="candidate-error"
-              className="text-destructive text-sm"
-            >
-              {candidate.error}
+        {candidate === null && (
+          <div className="space-y-3">
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              {HELPER}
             </p>
-          )}
-          {candidate.canDiscard && (
-            <DiscardButton onClick={onDiscard} disabled={discarding} />
-          )}
-        </div>
-      )}
+            <ReplaceButton
+              label="Reemplazar archivo principal"
+              onPick={onPick}
+            />
+          </div>
+        )}
+
+        {candidate?.status === "processing" && (
+          <div className="space-y-4">
+            <ProcessingSteps stage={candidate.stage} />
+            <div className="flex flex-wrap gap-2">
+              <ReplaceButton label="Reemplazar" onPick={onPick} />
+              {candidate.canDiscard && (
+                <DiscardButton onClick={onDiscard} disabled={discarding} />
+              )}
+            </div>
+          </div>
+        )}
+
+        {candidate?.status === "ready" && (
+          <div className="space-y-3.5">
+            <StatusPill tone="green">{candidate.statusLabel}</StatusPill>
+            <div className="rounded-lg border border-border bg-neutral-50 p-3.5">
+              <div className="text-muted-foreground mb-2.5 text-[11px] font-semibold tracking-[0.05em] uppercase">
+                Metadatos detectados
+              </div>
+              <dl className="grid grid-cols-[110px_1fr] gap-x-4 gap-y-2.5 text-sm">
+                <Staged label="Resumen">
+                  {candidate.stagedAbstract || "—"}
+                </Staged>
+                <Staged label="Palabras clave">
+                  {candidate.stagedKeywords.join(", ") || "—"}
+                </Staged>
+                <Staged label="Fecha">{candidate.stagedFecha || "—"}</Staged>
+              </dl>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                disabled={!candidate.canPublish || publishing}
+                onClick={onPublish}
+              >
+                Publicar
+              </Button>
+              {candidate.canDiscard && (
+                <DiscardButton onClick={onDiscard} disabled={discarding} />
+              )}
+            </div>
+          </div>
+        )}
+
+        {candidate?.status === "failed" && (
+          <div className="space-y-3">
+            <StatusPill tone="red">{candidate.statusLabel}</StatusPill>
+            {candidate.error && (
+              <p
+                data-testid="candidate-error"
+                className="text-destructive text-sm"
+              >
+                {candidate.error}
+              </p>
+            )}
+            {candidate.canDiscard && (
+              <DiscardButton onClick={onDiscard} disabled={discarding} />
+            )}
+          </div>
+        )}
+      </div>
     </section>
   );
 }
@@ -177,11 +198,25 @@ function ReplaceButton({
   );
 }
 
-function StatusPill({ children }: { children: React.ReactNode }) {
+const PILL_TONE: Record<BadgeTone, string> = {
+  neutral: "bg-status-neutral-bg text-status-neutral-fg",
+  amber: "bg-status-amber-bg text-status-amber-fg",
+  green: "bg-status-green-bg text-status-green-fg",
+  red: "bg-status-red-bg text-status-red-fg",
+  blue: "bg-status-blue-bg text-status-blue-fg",
+};
+
+function StatusPill({
+  tone,
+  children,
+}: {
+  tone: BadgeTone;
+  children: React.ReactNode;
+}) {
   return (
     <span
       data-testid="candidate-status-pill"
-      className="bg-muted inline-block rounded-full px-3 py-1 text-sm"
+      className={`inline-flex h-[22px] items-center gap-1 rounded-full px-[9px] text-xs font-medium whitespace-nowrap ${PILL_TONE[tone]}`}
     >
       {children}
     </span>
@@ -196,9 +231,9 @@ function Staged({
   children: React.ReactNode;
 }) {
   return (
-    <div>
-      <dt className="text-muted-foreground text-xs">{label}</dt>
-      <dd className="mt-0.5">{children}</dd>
-    </div>
+    <>
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="text-neutral-700">{children}</dd>
+    </>
   );
 }

@@ -55,7 +55,7 @@ describe("NotificationBell", () => {
     expect(screen.queryByText("0")).not.toBeInTheDocument();
   });
 
-  it("opening the popover fires markAllRead and renders the panel", async () => {
+  it("opening the popover renders the panel without marking everything read", async () => {
     setup({ count: 2, items: [notif(1, false), notif(2, false)] });
     render(<NotificationBell />);
 
@@ -63,18 +63,9 @@ describe("NotificationBell", () => {
       screen.getByRole("button", { name: /Notificaciones/i }),
     );
 
-    expect(markAllRead).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText(/Doc 1/)).toBeInTheDocument();
-  });
-
-  it("opening with zero unread does not fire markAllRead", async () => {
-    setup({ count: 0, items: [] });
-    render(<NotificationBell />);
-
-    await userEvent.click(
-      screen.getByRole("button", { name: /Notificaciones/i }),
-    );
-
+    // Auto-marking on open would hide the unread-gated invite actions before
+    // the user can act on them; reads happen via explicit controls instead.
     expect(markAllRead).not.toHaveBeenCalled();
+    expect(await screen.findByText(/Doc 1/)).toBeInTheDocument();
   });
 });

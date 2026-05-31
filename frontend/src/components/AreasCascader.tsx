@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Check, ChevronLeft, ChevronRight, MapPin, X } from "lucide-react";
 
 import { api } from "@/api/client";
 import type { components } from "@/api/schema";
+import { cn } from "@/lib/utils";
 
 type Area = components["schemas"]["AreaDTO"];
 
@@ -26,111 +28,89 @@ function parentOf(area_path: string): string {
 
 export type AreasCascaderProps = {
   onChange: (area_path: string | null) => void;
-  requireLeaf?: boolean;
   value?: string | null;
 };
 
-function segmentAt(value: string | null | undefined, level: number): string {
-  if (!value) return "";
-  const parts = value.split(".");
-  return parts.length >= level ? parts.slice(0, level).join(".") : "";
-}
-
-export function AreasCascader({
-  onChange,
-  requireLeaf,
-  value,
-}: AreasCascaderProps) {
+// Drill-down Escuela › Carrera › Materia cascader. Only leaves (the deepest
+// level under a branch) are selectable; branch rows drill into their children.
+export function AreasCascader({ onChange, value }: AreasCascaderProps) {
   const { data } = useQuery({ queryKey: ["areas"], queryFn: fetchAreas });
-  const [escuela, setEscuela] = useState<string>(() => segmentAt(value, 1));
-  const [carrera, setCarrera] = useState<string>(() => segmentAt(value, 2));
-  const [materia, setMateria] = useState<string>(() => segmentAt(value, 3));
-
-  function emit(nextEscuela: string, nextCarrera: string, nextMateria: string) {
-    if (requireLeaf) {
-      onChange(nextMateria || null);
-      return;
-    }
-    onChange(nextMateria || nextCarrera || nextEscuela || null);
-  }
-
   const rows = data ?? [];
-  const escuelas = rows.filter((a) => levelOf(a.area_path) === 1);
-  const carreras = rows.filter(
-    (a) => levelOf(a.area_path) === 2 && parentOf(a.area_path) === escuela,
-  );
-  const materias = rows.filter(
-    (a) => levelOf(a.area_path) === 3 && parentOf(a.area_path) === carrera,
-  );
+  const byPath = new Map(rows.map((a) => [a.area_path, a.display_name]));
+
+  // `nav` is the parent path whose children are listed; "" lists the escuelas.
+  const [nav, setNav] = useState<string>(() => (value ? parentOf(value) : ""));
+
+  const children = rows.filter((a) => parentOf(a.area_path) === nav);
+  const isLeaf = (path: string) =>
+    !rows.some((a) => parentOf(a.area_path) === path);
+
+  const depth = nav ? levelOf(nav) : 0;
 
   return (
-    <div className="flex flex-col gap-2">
-      <label className="flex flex-col gap-1 text-sm">
-        <span>Escuela</span>
-        <select
-          value={escuela}
-          onChange={(e) => {
-            setEscuela(e.target.value);
-            setCarrera("");
-            setMateria("");
-            emit(e.target.value, "", "");
-          }}
-          className="border-input bg-background h-9 rounded-md border px-2"
-        >
-          <option value="">Elegí una escuela…</option>
-          {escuelas.map((a) => (
-            <option key={a.area_path} value={a.area_path}>
-              {a.display_name}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      {escuela && (
-        <label className="flex flex-col gap-1 text-sm">
-          <span>Carrera</span>
-          <select
-            value={carrera}
-            onChange={(e) => {
-              setCarrera(e.target.value);
-              setMateria("");
-              emit(escuela, e.target.value, "");
-            }}
-            className="border-input bg-background h-9 rounded-md border px-2"
+    <div className="flex flex-col">
+      <div className="flex min-h-[42px] items-center gap-2 border-b border-border px-3 py-2.5">
+        {nav && (
+          <button
+            type="button"
+            aria-label="Volver"
+            onClick={() => setNav(parentOf(nav))}
+            className="grid size-[26px] place-items-center rounded-md text-muted-foreground hover:bg-neutral-100"
           >
-            <option value="">Elegí una carrera…</option>
-            {carreras.map((a) => (
-              <option key={a.area_path} value={a.area_path}>
-                {a.display_name}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
+            <ChevronLeft className="size-4" />
+          </button>
+        )}
+        <div className="flex-1 truncate text-xs text-muted-foreground">
+          {depth === 0 ? (
+            <span>Elegí una Escuela</span>
+          ) : (
+            <b className="text-foreground">{byPath.get(nav)}</b>
+          )}
+        </div>
+      </div>
 
-      {carrera && (
-        <label className="flex flex-col gap-1 text-sm">
-          <span>Materia</span>
-          <select
-            value={materia}
-            onChange={(e) => {
-              setMateria(e.target.value);
-              emit(escuela, carrera, e.target.value);
-            }}
-            className="border-input bg-background h-9 rounded-md border px-2"
+      <div className="max-h-[280px] overflow-y-auto p-1.5">
+        {children.map((a) => {
+          const leaf = isLeaf(a.area_path);
+          const selected = leaf && value === a.area_path;
+          return (
+            <button
+              key={a.area_path}
+              type="button"
+              onClick={() =>
+                leaf ? onChange(a.area_path) : setNav(a.area_path)
+              }
+              className={cn(
+                "flex w-full items-center gap-2 rounded-md px-2.5 py-2.5 text-left text-sm text-foreground",
+                selected ? "bg-primary-tint" : "hover:bg-neutral-100",
+              )}
+            >
+              {leaf && (
+                <MapPin className="size-3.5 flex-none text-muted-foreground" />
+              )}
+              <span className="flex-1 truncate">{a.display_name}</span>
+              {!leaf && (
+                <ChevronRight className="size-[15px] text-muted-foreground" />
+              )}
+              {selected && (
+                <Check className="size-[15px] text-primary" strokeWidth={2.5} />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {value && (
+        <div className="border-t border-border p-2">
+          <button
+            type="button"
+            onClick={() => onChange(null)}
+            className="flex w-full items-center justify-center gap-1.5 rounded-md px-2.5 py-2 text-sm text-destructive hover:bg-neutral-100"
           >
-            <option value="">Elegí una materia…</option>
-            {materias.map((a) => (
-              <option key={a.area_path} value={a.area_path}>
-                {a.display_name}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-
-      {requireLeaf && (escuela || carrera) && !materia && (
-        <p className="text-destructive text-xs">Elegí una Materia</p>
+            <X className="size-3.5" />
+            Quitar área
+          </button>
+        </div>
       )}
     </div>
   );
