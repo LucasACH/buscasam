@@ -24,8 +24,9 @@ class DocumentNotReadable(Exception):
 
 
 class OwnDocumentReport(Exception):
-    """The reporter owns the target document — reporting one's own publication is
-    meaningless (the owner can edit or delete it). Router maps this to 403."""
+    """The reporter manages the target document (owner or accepted coauthor) —
+    reporting one's own publication is meaningless (a manager can edit it). Router
+    maps this to 403."""
 
 
 async def file_report(
@@ -36,8 +37,8 @@ async def file_report(
     A second open report by the same reporter on the same doc is a harmless
     no-op (`ON CONFLICT` on the unique partial index
     `(doc_id, reporter_user_id) WHERE status='open'`). A non-readable doc raises
-    `DocumentNotReadable`; the doc's owner raises `OwnDocumentReport` —
-    `require_authenticated` is the caller's job."""
+    `DocumentNotReadable`; a manager (owner or accepted coauthor) raises
+    `OwnDocumentReport` — `require_authenticated` is the caller's job."""
     where, params = readable_where("d", user_ctx)
     readable = (
         await session.execute(
@@ -48,16 +49,17 @@ async def file_report(
     if readable is None:
         raise DocumentNotReadable
 
-    is_owner = (
+    is_manager = (
         await session.execute(
             text(
                 "SELECT 1 FROM document_authors "
-                "WHERE doc_id = :doc_id AND user_id = :user_id AND status = 'owner'"
+                "WHERE doc_id = :doc_id AND user_id = :user_id "
+                "AND status IN ('owner', 'accepted')"
             ),
             {"doc_id": doc_id, "user_id": user_ctx.user_id},
         )
     ).scalar_one_or_none()
-    if is_owner is not None:
+    if is_manager is not None:
         raise OwnDocumentReport
 
     await session.execute(

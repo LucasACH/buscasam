@@ -72,6 +72,17 @@ async def test_owner_may_not_report_own_doc(session):
     assert await _reports(session, doc_id) == []
 
 
+async def test_accepted_coauthor_may_not_report_own_doc(session):
+    doc_id = await make_document(session, visibility="privado")
+    coauthor = await make_user(session)
+    await make_document_author(session, doc_id, user_id=coauthor, status="accepted")
+
+    with pytest.raises(moderation.OwnDocumentReport):
+        await moderation.file_report(session, _ctx(coauthor), doc_id, "error")
+
+    assert await _reports(session, doc_id) == []
+
+
 async def test_new_report_accepted_after_prior_resolved(session):
     doc_id = await make_document(session, visibility="publico")
     reporter = await make_user(session)
