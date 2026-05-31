@@ -36,6 +36,7 @@ Queda fuera del MVP:
 ### Ranking
 - Híbrido: embeddings multilingües + ranking full-text de PostgreSQL en español.
 - Fusión por Reciprocal Rank Fusion; sin boost por popularidad o recencia.
+- **Más leídos** es una superficie de visualización separada, no una señal de ranking: las lecturas nunca alteran el orden de búsqueda (ver `docs/adr/0014-most-read-display-only.md`).
 - Se muestra un resultado si hay match léxico o si supera el piso semántico calibrado antes del lanzamiento.
 - Si no hay resultados sobre el piso, se informa claramente y se sugieren cambios de consulta/filtros.
 - Con filtros activos, se puede consultar el conteo sin filtros aplicando la misma visibilidad.
@@ -43,6 +44,14 @@ Queda fuera del MVP:
 ### Idioma
 - Pipeline de texto en español; documentos en otros idiomas se aceptan con calidad potencialmente menor.
 - Título y abstract ingresados/revisados por el autor también se indexan.
+
+### Más leídos
+- **Lectura**: apertura exitosa del detalle de un documento (`GET /api/docs/{id}` que devuelve detalle real). Deduplicada a lo sumo una por lector, por documento, por día. Cuenta a todos los visitantes, incluidos **Invitados**. Una descarga no es una lectura.
+- **Más leídos**: ranking único y compartido de documentos `público` ordenados por cantidad de lecturas en una ventana móvil de 7 días, mostrado en la portada de búsqueda. No es personalizado ni por visitante.
+- Las lecturas de documentos no `público` se registran, pero nunca aparecen en el ranking de **Más leídos**.
+- Privacidad: una cookie `rid` opaca identifica a un **Invitado** únicamente para deduplicar sus lecturas; los usuarios autenticados se deduplican por su identidad de sesión.
+- Retención: las lecturas crudas se conservan; la purga periódica es trabajo futuro (aún no implementada).
+- La portada muestra el tamaño del catálogo público como nota: "Buscando en N trabajos".
 
 ---
 
