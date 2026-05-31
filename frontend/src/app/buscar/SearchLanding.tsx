@@ -85,7 +85,7 @@ export function SearchLanding({
 }: {
   onApply: (patch: FilterPatch & { q?: string }) => void;
 }) {
-  const { user, isInvitado } = useUser();
+  const { user, isInvitado, isLoading: userLoading } = useUser();
   const { publicTotal, results, isLoading } = useMostRead();
   const { isLoading: areasLoading } = useAreas();
   const [q, setQ] = useState("");
@@ -102,7 +102,11 @@ export function SearchLanding({
         <div className="flex flex-col items-center text-center">
           <HomeMark />
           <h1 className="mt-5 text-[40px] leading-[1.05] font-semibold tracking-[-0.035em]">
-            {title}
+            {userLoading ? (
+              <span className="bg-muted block h-[42px] w-[280px] animate-pulse rounded-md" />
+            ) : (
+              title
+            )}
           </h1>
           <p className="text-muted-foreground mt-2.5 text-[17px] tracking-[-0.01em]">
             ¿Qué querés investigar hoy?
@@ -150,9 +154,13 @@ export function SearchLanding({
           </div>
           <p className="text-muted-foreground/60 mt-3 text-center text-xs">
             Buscando en{" "}
-            <b className="text-muted-foreground font-semibold">
-              {new Intl.NumberFormat("es-AR").format(publicTotal)}
-            </b>{" "}
+            {isLoading ? (
+              <span className="bg-muted inline-block h-[0.9em] w-7 animate-pulse rounded-sm align-middle" />
+            ) : (
+              <b className="text-muted-foreground font-semibold">
+                {new Intl.NumberFormat("es-AR").format(publicTotal)}
+              </b>
+            )}{" "}
             trabajos de la comunidad UNSAM
           </p>
         </form>
