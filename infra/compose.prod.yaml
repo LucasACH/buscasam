@@ -6,9 +6,6 @@
 #   - db host port removed (§6)                 - mem limits + db oom guard (§14)
 #   - persistent state under /var/lib/buscasam (§7)
 #   - TEI offline + pinned revision (§10)       - nginx :443 for TLS_MODE=self (§9)
-#
-# TODO: replace every `@sha256:...` placeholder with the resolved digest before
-# the first prod deploy. `docker compose ... config`/`pull` fails until they are real.
 
 x-logging: &default-logging
   driver: json-file
@@ -18,7 +15,7 @@ x-logging: &default-logging
 
 services:
   db:
-    image: pgvector/pgvector:pg16@sha256:REPLACE_ME
+    image: pgvector/pgvector:pg16@sha256:00ba258a66dac104fd5171074a0084462a64a1369d8513f3d0a634e2f24d15bc
     command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
     ports: []
     volumes:
@@ -29,7 +26,7 @@ services:
     logging: *default-logging
 
   tei:
-    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.6@sha256:REPLACE_ME
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.6@sha256:66db77d7856c9319bbfaf2c5b80a6d0e0ac9ff128ade09eaca1d9c20213617a4
     command:
       - "--model-id"
       - "${EMBEDDING_MODEL_ID:-intfloat/multilingual-e5-large}"
@@ -45,30 +42,21 @@ services:
     logging: *default-logging
 
   api:
-    image: buscasam-backend:${BUSCASAM_VERSION:-latest}
-    build:
-      context: ../backend
-      args:
-        UID: "1000"
-        GID: "1000"
+    image: ${BUSCASAM_IMAGE_REPO}/backend:${BUSCASAM_VERSION:-latest}
     env_file: ./.env
     volumes:
       - /var/lib/buscasam/blobs:/var/lib/buscasam/blobs
     logging: *default-logging
 
   worker_default:
-    image: buscasam-backend:${BUSCASAM_VERSION:-latest}
-    build:
-      context: ../backend
+    image: ${BUSCASAM_IMAGE_REPO}/backend:${BUSCASAM_VERSION:-latest}
     env_file: ./.env
     volumes:
       - /var/lib/buscasam/blobs:/var/lib/buscasam/blobs
     logging: *default-logging
 
   worker_ocr:
-    image: buscasam-backend:${BUSCASAM_VERSION:-latest}
-    build:
-      context: ../backend
+    image: ${BUSCASAM_IMAGE_REPO}/backend:${BUSCASAM_VERSION:-latest}
     env_file: ./.env
     volumes:
       - /var/lib/buscasam/blobs:/var/lib/buscasam/blobs
@@ -76,9 +64,7 @@ services:
     logging: *default-logging
 
   backup:
-    image: buscasam-backend:${BUSCASAM_VERSION:-latest}
-    build:
-      context: ../backend
+    image: ${BUSCASAM_IMAGE_REPO}/backend:${BUSCASAM_VERSION:-latest}
     env_file: ./.env
     volumes:
       - /var/lib/buscasam/blobs:/var/lib/buscasam/blobs:ro
@@ -86,13 +72,11 @@ services:
     logging: *default-logging
 
   frontend:
-    image: buscasam-frontend:${BUSCASAM_VERSION:-latest}
-    build:
-      context: ../frontend
+    image: ${BUSCASAM_IMAGE_REPO}/frontend:${BUSCASAM_VERSION:-latest}
     logging: *default-logging
 
   nginx:
-    image: nginx:1.27-alpine@sha256:REPLACE_ME
+    image: nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
     ports:
       - "80:80"
       - "443:443"   # only served when TLS_MODE=self
@@ -106,13 +90,11 @@ services:
     logging: *default-logging
 
   migrate:
-    image: buscasam-backend:${BUSCASAM_VERSION:-latest}
-    build:
-      context: ../backend
+    image: ${BUSCASAM_IMAGE_REPO}/backend:${BUSCASAM_VERSION:-latest}
     env_file: ./.env
 
   certbot:
-    image: certbot/certbot@sha256:REPLACE_ME
+    image: certbot/certbot@sha256:0107d084c225631fc64a8313e19adb07275f7296fde338f7dfa93986c80b2e3e
     volumes:
       - /etc/letsencrypt:/etc/letsencrypt
       - /var/www/certbot:/var/www/certbot

@@ -1,3 +1,9 @@
 # Deployment secrets and runtime state (ADR-0009 §7,§8)
 .env
 .data/
+
+# Terraform (infra/terraform)
+**/.terraform/
+*.tfstate
+*.tfstate.*
+secrets.auto.tfvars

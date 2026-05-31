@@ -1,24 +1,20 @@
 #!/usr/bin/env bash
-# ADR-0009 §12 (as amended for the infra/ layout). Build on the host from an
-# explicit git commit/tag, migrate, then roll the stack. Rollback = re-run with
-# the previous commit/tag.
+# ADR-0013 (amends ADR-0009 §12). Pull pre-built images from Artifact Registry,
+# migrate, then roll the stack. Images + the infra config tree are produced by CI
+# per release ref; the VM already holds the config (startup.sh, or re-pulled from
+# the GCS config bucket). Rollback = re-run with the previous ref.
 #
-#   infra/scripts/deploy.sh <commit-or-tag>
+#   infra/scripts/deploy.sh <version-ref>
 set -euo pipefail
 
 test -n "${1:-}"
-ref="$1"
+export BUSCASAM_VERSION="$1"   # overrides .env; selects the image tag to pull
 
 infra_dir="$(cd "$(dirname "$0")/.." && pwd)"   # repo/infra
-repo_dir="$(cd "$infra_dir/.." && pwd)"
-
-git -C "$repo_dir" fetch --tags origin
-git -C "$repo_dir" checkout --detach "$ref"
-
 cd "$infra_dir"
 compose() { docker compose -f compose.yaml -f compose.prod.yaml "$@"; }
 
-compose build
+compose pull
 compose up -d db
 # A failed migrate exits non-zero here, before any app container is rolled.
 compose run --rm migrate

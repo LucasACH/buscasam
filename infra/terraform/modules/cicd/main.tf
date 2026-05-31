@@ -1,0 +1,47 @@
+data "google_project" "this" {}
+
+# Keyless GitHub Actions -> GCP trust (Workload Identity Federation). No JSON key.
+resource "google_iam_workload_identity_pool" "github" {
+  workload_identity_pool_id = "github"
+  display_name              = "GitHub Actions"
+}
+
+resource "google_iam_workload_identity_pool_provider" "github" {
+  workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
+  workload_identity_pool_provider_id = "github"
+
+  oidc {
+    issuer_uri = "https://token.actions.githubusercontent.com"
+  }
+  attribute_mapping = {
+    "google.subject"       = "assertion.sub"
+    "attribute.repository" = "assertion.repository"
+  }
+  # Only this repo may exchange a token. Required by GCP when mapping repository.
+  attribute_condition = "assertion.repository == \"${var.github_repo}\""
+}
+
+# Identity the workflow impersonates to push images + config.
+resource "google_service_account" "ci" {
+  account_id   = "buscasam-ci"
+  display_name = "BUSCASAM CI (GitHub Actions)"
+}
+
+# Let workflows from this repo impersonate the CI SA.
+resource "google_service_account_iam_member" "ci_wif" {
+  service_account_id = google_service_account.ci.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repo}"
+}
+
+resource "google_artifact_registry_repository_iam_member" "ci_writer" {
+  repository = var.ar_repo_id
+  role       = "roles/artifactregistry.writer"
+  member     = "serviceAccount:${google_service_account.ci.email}"
+}
+
+resource "google_storage_bucket_iam_member" "ci_config_writer" {
+  bucket = var.config_bucket_id
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.ci.email}"
+}

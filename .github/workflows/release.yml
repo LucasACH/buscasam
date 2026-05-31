@@ -1,0 +1,49 @@
+# ADR-0013. On a release tag, build backend+frontend images, push to Artifact
+# Registry, and upload the infra config tarball to the GCS config bucket — both
+# keyed by the tag. The app VM pulls this ref at boot / on deploy.sh.
+#
+# Repo variables (Settings > Variables) from `terraform output`:
+#   WORKLOAD_IDENTITY_PROVIDER, CI_SERVICE_ACCOUNT, IMAGE_REPO, CONFIG_BUCKET, GCP_REGION
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  id-token: write   # mint the OIDC token for Workload Identity Federation
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.ref_name }}
+      IMAGE_REPO: ${{ vars.IMAGE_REPO }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.CI_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
+
+      - name: Build & push backend
+        run: docker build -t "$IMAGE_REPO/backend:$TAG" --push backend
+
+      - name: Build & push frontend
+        run: docker build -t "$IMAGE_REPO/frontend:$TAG" --push frontend
+
+      - name: Package infra config
+        run: |
+          tar -czf config.tgz \
+            infra/compose.yaml infra/compose.prod.yaml \
+            infra/postgresql.conf infra/nginx infra/scripts
+
+      - name: Upload config to GCS
+        run: gcloud storage cp config.tgz "gs://${{ vars.CONFIG_BUCKET }}/$TAG/config.tgz"
