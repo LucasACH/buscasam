@@ -99,7 +99,7 @@ function BuscarPageInner() {
   if (orden === "relevancia") lastPage = Math.min(lastPage, RELEVANCE_PAGE_CAP);
 
   if (!showResults) {
-    return <SearchLanding onSearch={(next) => update({ q: next })} />;
+    return <SearchLanding onApply={update} />;
   }
 
   return (

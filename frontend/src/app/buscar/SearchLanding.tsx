@@ -5,13 +5,16 @@ import { ArrowUp } from "lucide-react";
 
 import { useUser } from "@/lib/useUser";
 
+import { TIPO_LABEL } from "./ResultCard";
+import type { FilterPatch } from "./SearchFilters";
+import type { Tipo } from "./useSearch";
 import { useMostRead } from "./useMostRead";
 
-const SUGGESTED = [
-  "visión por computadora",
-  "modelos de lenguaje",
-  "microplásticos",
-  "algoritmos genéticos",
+const QUICK_TIPOS: Tipo[] = [
+  "tesis",
+  "paper",
+  "trabajo_practico",
+  "monografia",
 ];
 
 function greetWord(): string {
@@ -34,14 +37,18 @@ function HomeMark() {
   );
 }
 
-export function SearchLanding({ onSearch }: { onSearch: (q: string) => void }) {
+export function SearchLanding({
+  onApply,
+}: {
+  onApply: (patch: FilterPatch & { q?: string }) => void;
+}) {
   const { user, isInvitado } = useUser();
   const { publicTotal } = useMostRead();
   const [q, setQ] = useState("");
 
   const first = user?.name ? user.name.split(" ")[0] : null;
   const title = first && !isInvitado ? `${greetWord()}, ${first}` : greetWord();
-  const submit = () => onSearch(q.trim());
+  const submit = () => onApply({ q: q.trim() });
 
   return (
     <main className="flex min-h-[calc(100dvh-61px)] items-center justify-center px-5 pt-10 pb-18">
@@ -105,19 +112,23 @@ export function SearchLanding({ onSearch }: { onSearch: (q: string) => void }) {
         </form>
 
         <div className="mt-[22px] flex flex-wrap justify-center gap-2">
-          {SUGGESTED.map((s) => (
+          {QUICK_TIPOS.map((t) => (
             <button
-              key={s}
+              key={t}
               type="button"
-              onClick={() => onSearch(s)}
-              className="border-input bg-card hover:border-border-strong inline-flex h-9 items-center gap-[7px] rounded-full border px-3.5 text-[13.5px] font-medium tracking-[-0.01em] whitespace-nowrap transition hover:bg-neutral-50"
+              onClick={() => onApply({ tipos: [t] })}
+              className="border-input bg-card inline-flex h-9 items-center rounded-full border px-3.5 text-[13.5px] font-medium tracking-[-0.01em] whitespace-nowrap transition hover:border-neutral-400 hover:bg-neutral-50"
             >
-              <span aria-hidden className="text-primary font-mono text-xs">
-                ↗
-              </span>
-              {s}
+              {TIPO_LABEL[t]}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => onApply({ orden: "recientes" })}
+            className="border-primary-tint-2 text-primary hover:bg-primary-tint bg-card inline-flex h-9 items-center rounded-full border px-3.5 text-[13.5px] font-medium tracking-[-0.01em] whitespace-nowrap transition"
+          >
+            Ver más recientes
+          </button>
         </div>
       </div>
     </main>
