@@ -112,9 +112,16 @@ function DetailView({
           </h1>
           <div className="text-muted-foreground mt-2.5 text-sm">{autores}</div>
 
-          <dl className="mt-6 grid grid-cols-[110px_1fr] gap-x-5 gap-y-2.5 text-sm">
+          <dl className="mt-6 grid grid-cols-[64px_1fr] gap-x-4 gap-y-2.5 text-sm">
             <dt className="text-muted-foreground">Área</dt>
-            <dd className="text-foreground">{areaName}</dd>
+            <dd className="text-foreground flex flex-wrap items-center gap-x-1.5">
+              {areaName.split(" › ").map((crumb, i) => (
+                <span key={i} className="flex items-center gap-x-1.5">
+                  {i > 0 && <span className="text-muted-foreground/60">›</span>}
+                  <span className="whitespace-nowrap">{crumb}</span>
+                </span>
+              ))}
+            </dd>
             <dt className="text-muted-foreground">Tipo</dt>
             <dd className="text-foreground">{tipo}</dd>
             {detail.fecha && (
@@ -239,7 +246,7 @@ function DetailView({
             canManage={detail.manageable}
           />
 
-          <ReportDialog docId={docId} />
+          {!detail.manageable && <ReportDialog docId={docId} />}
         </aside>
       </article>
     </main>

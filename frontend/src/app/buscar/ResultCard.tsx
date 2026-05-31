@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { TIPO_LABEL, VISIBILITY_LABEL } from "@/lib/labels";
+import { useAreaLabel } from "@/lib/useAreas";
 
 // Re-exported so existing search consumers keep importing it from here.
 export { TIPO_LABEL };
@@ -51,7 +52,8 @@ export function ResultCard({ result }: { result: ResultCardData }) {
       ? VISIBILITY_LABEL[result.visibility]
       : null;
   const autores = result.autores?.map((a) => a.display_name).join(", ");
-  const meta = [year, result.area_path, tipo].filter(Boolean) as string[];
+  const areaLabel = useAreaLabel(result.area_path, true);
+  const meta = [year, areaLabel, tipo].filter(Boolean) as string[];
   return (
     <article className="group border-border hover:border-border-strong relative rounded-lg border bg-card px-5 py-[18px] transition-all hover:shadow-[0_2px_8px_-2px_rgba(23,23,23,0.08)]">
       <h2 className="text-[17px] leading-[1.3] font-semibold tracking-tight">
