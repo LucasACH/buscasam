@@ -6,13 +6,19 @@ from buscasam.settings import Settings
 def test_min_semantic_similarity_calibrated_to_committed_value():
     s = Settings()
     assert 0.0 < s.min_semantic_similarity < 1.0
-    assert s.min_semantic_similarity == 0.78
+    assert s.min_semantic_similarity == 0.84
 
 
 def test_fuzzy_word_similarity_threshold_default():
     s = Settings()
     assert 0.0 < s.fuzzy_word_similarity_threshold < 1.0
     assert s.fuzzy_word_similarity_threshold == 0.3
+
+
+def test_semantic_only_trgm_threshold_default():
+    s = Settings()
+    assert 0.0 <= s.semantic_only_trgm_threshold < 1.0
+    assert s.semantic_only_trgm_threshold == 0.4
 
 
 def test_tei_url_default():

@@ -74,6 +74,7 @@ async def execute(
     user_ctx: UserCtx,
     min_semantic_similarity: float,
     fuzzy_word_similarity_threshold: float,
+    semantic_only_trgm_threshold: float,
 ) -> ExecuteResult:
     if filters.orden == "recientes":
         embedding: np.ndarray | None = None
@@ -91,12 +92,20 @@ async def execute(
         user_ctx=user_ctx,
         embedding=embedding,
         min_semantic_similarity=min_semantic_similarity,
+        semantic_only_trgm_threshold=semantic_only_trgm_threshold,
     )
 
     # Typo-tolerant fallback: only when exact retrieval found nothing for a
-    # relevance query. Replaces the empty result set if it surfaces anything.
+    # relevance query that carries at least one search lexeme. A stopword-only
+    # query has nothing to typo-correct, so it stays empty rather than
+    # trigram-matching content words.
     fuzzy_fallback = False
-    if result.total == 0 and filters.q and filters.orden == "relevancia":
+    if (
+        result.total == 0
+        and filters.q
+        and filters.orden == "relevancia"
+        and await search_query.has_lexemes(session, filters.q)
+    ):
         fuzzy = await search_query.run_fuzzy(
             session,
             filters=filters,
@@ -132,6 +141,7 @@ async def execute(
                 user_ctx=user_ctx,
                 embedding=embedding,
                 min_semantic_similarity=min_semantic_similarity,
+                semantic_only_trgm_threshold=semantic_only_trgm_threshold,
             )
 
     return ExecuteResult(
