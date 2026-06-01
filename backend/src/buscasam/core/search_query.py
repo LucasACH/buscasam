@@ -216,7 +216,8 @@ async def run(
     min_semantic_similarity: float = 0.84,
     semantic_only_trgm_threshold: float = 0.4,
 ) -> Results:
-    if filters.orden == "recientes":
+    # No query → nothing to rank; list filtered docs by date (browse-by-filter).
+    if filters.orden == "recientes" or not filters.q:
         return await _run_recientes(session, filters, user_ctx)
     if embedding is None:
         return await _run_lexical(session, filters, user_ctx)
@@ -241,7 +242,7 @@ async def run_count(
 ) -> int:
     """Count-only sibling of `run`: returns the same `total` the full query would,
     stopping at the candidate CTE (no ts_headline, document join, or paging)."""
-    if filters.orden == "recientes":
+    if filters.orden == "recientes" or not filters.q:
         return await _count_recientes(session, filters, user_ctx)
     if embedding is None:
         return await _count_lexical(session, filters, user_ctx)
