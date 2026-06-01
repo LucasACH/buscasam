@@ -78,15 +78,15 @@ export function AuthNav() {
   if (isInvitado) {
     return (
       <nav className="flex items-center gap-2">
-        <Link
-          href={`/login?next=${encodeURIComponent(pathname)}`}
+        <a
+          href={`/api/auth/login?next=${encodeURIComponent(pathname)}`}
           className="bg-primary text-primary-foreground hover:bg-primary-hover inline-flex h-[38px] shrink-0 items-center gap-2 rounded-lg px-4 text-sm font-medium tracking-tight whitespace-nowrap transition-colors"
         >
           <GoogleIcon size={17} variant="mono" />
           <span>
             Iniciar sesión <span className="hidden sm:inline">con UNSAM</span>
           </span>
-        </Link>
+        </a>
       </nav>
     );
   }
@@ -99,7 +99,7 @@ export function AuthNav() {
     // Drop the prior user's notifications so a next login can't flash them
     // (the count key is a prefix of NOTIFICATIONS_QUERY_KEY, removed too).
     qc.removeQueries({ queryKey: NOTIFICATIONS_QUERY_KEY });
-    router.replace("/");
+    router.replace("/buscar");
   }
 
   return (
