@@ -437,7 +437,7 @@ describe("editar page", () => {
     expect(screen.queryByTestId("restore-titulo")).not.toBeInTheDocument();
   });
 
-  it("Restaurar reverts the field to the generated value and PATCHes it", async () => {
+  it("Restaurar stages the generated value, persisted on save", async () => {
     useDraftStateMock.mockReturnValue(
       draft({
         staged_abstract: "resumen editado",
@@ -454,12 +454,17 @@ describe("editar page", () => {
         "resumen del extractor",
       ),
     );
+    // Restaurar only stages the value; nothing persists until Guardar.
+    expect(apiPatch).not.toHaveBeenCalled();
+
+    clickSave();
+    await waitFor(() => expect(apiPatch).toHaveBeenCalled());
     const opts = apiPatch.mock.calls[0]![1];
     expect(opts.body).toMatchObject({ abstract: "resumen del extractor" });
     await waitFor(() => expect(refreshDraft).toHaveBeenCalled());
   });
 
-  it("Restaurar for keywords PATCHes the generated array", async () => {
+  it("saves restored keywords as the generated array", async () => {
     useDraftStateMock.mockReturnValue(
       draft({
         staged_keywords: ["editado"],
@@ -468,17 +473,19 @@ describe("editar page", () => {
     );
     render(<EditarPage />);
     fireEvent.click(screen.getByTestId("restore-keywords"));
+    clickSave();
     await waitFor(() => expect(apiPatch).toHaveBeenCalled());
     const opts = apiPatch.mock.calls[0]![1];
     expect(opts.body).toMatchObject({ keywords: ["redes", "grafos"] });
   });
 
-  it("PATCHes title on blur", async () => {
+  it("PATCHes title on save", async () => {
     useDraftStateMock.mockReturnValue(draft({ title: "Viejo" }));
     render(<EditarPage />);
-    const input = screen.getByLabelText("Título");
-    fireEvent.change(input, { target: { value: "Nuevo título" } });
-    fireEvent.blur(input);
+    fireEvent.change(screen.getByLabelText("Título"), {
+      target: { value: "Nuevo título" },
+    });
+    clickSave();
     await waitFor(() => expect(apiPatch).toHaveBeenCalled());
     const opts = apiPatch.mock.calls[0]![1];
     expect(opts.body).toMatchObject({ title: "Nuevo título" });
@@ -498,13 +505,14 @@ describe("editar page", () => {
     expect(screen.getByLabelText("Resumen")).toHaveValue("resumen extraído");
   });
 
-  it("toasts when a save-on-blur PATCH fails", async () => {
+  it("toasts when the save PATCH fails", async () => {
     apiPatch.mockResolvedValue({ error: { detail: "boom" } });
     useDraftStateMock.mockReturnValue(draft({ title: "Mi tesis" }));
     render(<EditarPage />);
-    const input = screen.getByLabelText("Título");
-    fireEvent.change(input, { target: { value: "Nuevo" } });
-    fireEvent.blur(input);
+    fireEvent.change(screen.getByLabelText("Título"), {
+      target: { value: "Nuevo" },
+    });
+    clickSave();
     await waitFor(() => expect(toastError).toHaveBeenCalled());
     expect(refreshDraft).not.toHaveBeenCalled();
   });
@@ -512,37 +520,43 @@ describe("editar page", () => {
   it("refetches draft state after a successful save so a new gate is observed", async () => {
     useDraftStateMock.mockReturnValue(draft({ title: "Viejo" }));
     render(<EditarPage />);
-    const input = screen.getByLabelText("Título");
-    fireEvent.change(input, { target: { value: "Nuevo título" } });
-    fireEvent.blur(input);
+    fireEvent.change(screen.getByLabelText("Título"), {
+      target: { value: "Nuevo título" },
+    });
+    clickSave();
     await waitFor(() => expect(refreshDraft).toHaveBeenCalled());
   });
 
-  it("does not PATCH when a field is blurred without changes", async () => {
+  it("keeps Guardar disabled and does not PATCH without changes", async () => {
     useDraftStateMock.mockReturnValue(draft({}));
     render(<EditarPage />);
-    fireEvent.blur(screen.getByLabelText("Título"));
-    fireEvent.blur(screen.getByLabelText("Resumen"));
+    expect(
+      screen.getByRole("button", { name: /guardar cambios/i }),
+    ).toBeDisabled();
+    clickSave();
     await Promise.resolve();
     expect(apiPatch).not.toHaveBeenCalled();
   });
 
-  it("PATCHes keywords as an array on blur", async () => {
+  it("PATCHes keywords as an array on save", async () => {
     useDraftStateMock.mockReturnValue(draft({ staged_keywords: ["a"] }));
     render(<EditarPage />);
-    const input = screen.getByLabelText("Palabras clave");
-    fireEvent.change(input, { target: { value: "redes, grafos" } });
-    fireEvent.blur(input);
+    fireEvent.change(screen.getByLabelText("Palabras clave"), {
+      target: { value: "redes, grafos" },
+    });
+    clickSave();
     await waitFor(() => expect(apiPatch).toHaveBeenCalled());
     const opts = apiPatch.mock.calls[0]![1];
     expect(opts.body).toMatchObject({ keywords: ["redes", "grafos"] });
   });
 
-  it("PATCHes fecha when the DatePicker changes", async () => {
+  it("PATCHes fecha staged by the DatePicker on save", async () => {
     useDraftStateMock.mockReturnValue(draft({ staged_fecha: "2024-03-01" }));
     render(<EditarPage />);
-    const input = screen.getByLabelText("Fecha");
-    fireEvent.change(input, { target: { value: "2024-06-15" } });
+    fireEvent.change(screen.getByLabelText("Fecha"), {
+      target: { value: "2024-06-15" },
+    });
+    clickSave();
     await waitFor(() => expect(apiPatch).toHaveBeenCalled());
     const opts = apiPatch.mock.calls[0]![1];
     expect(opts.body).toMatchObject({ fecha: "2024-06-15" });
@@ -581,6 +595,10 @@ describe("editar page", () => {
     expect(push).not.toHaveBeenCalled();
   });
 });
+
+function clickSave() {
+  fireEvent.click(screen.getByRole("button", { name: /guardar cambios/i }));
+}
 
 // Eliminar lives behind an AlertDialog: open it, then click the confirm action.
 async function confirmDelete() {
