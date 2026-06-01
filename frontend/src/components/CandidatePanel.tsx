@@ -116,7 +116,7 @@ export function CandidatePanel({
               <div className="text-muted-foreground mb-2.5 text-[11px] font-semibold tracking-[0.05em] uppercase">
                 Metadatos detectados
               </div>
-              <dl className="grid grid-cols-[110px_1fr] gap-x-4 gap-y-2.5 text-sm">
+              <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-sm">
                 <Staged label="Resumen">
                   {candidate.stagedAbstract || "—"}
                 </Staged>
