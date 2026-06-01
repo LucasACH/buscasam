@@ -115,7 +115,7 @@ function DetailView({
           variant="banner"
         />
       )}
-      <article className="grid items-start gap-10 lg:grid-cols-[1fr_300px]">
+      <article className="grid grid-cols-1 items-start gap-10 lg:grid-cols-[minmax(0,1fr)_300px]">
         <header className="min-w-0">
           <BackButton />
           <h1 className="text-[28px] leading-[1.18] font-semibold tracking-tight">
@@ -123,13 +123,13 @@ function DetailView({
           </h1>
           <div className="text-muted-foreground mt-2.5 text-sm">{autores}</div>
 
-          <dl className="mt-6 grid grid-cols-[64px_1fr] gap-x-4 gap-y-2.5 text-sm">
+          <dl className="mt-6 grid grid-cols-[64px_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-sm">
             <dt className="text-muted-foreground">Área</dt>
             <dd className="text-foreground flex flex-wrap items-center gap-x-1.5">
               {areaName.split(" › ").map((crumb, i) => (
                 <span key={i} className="flex items-center gap-x-1.5">
                   {i > 0 && <span className="text-muted-foreground/60">›</span>}
-                  <span className="whitespace-nowrap">{crumb}</span>
+                  <span className="break-words">{crumb}</span>
                 </span>
               ))}
             </dd>
