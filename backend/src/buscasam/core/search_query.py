@@ -206,14 +206,20 @@ async def run(
     filters: Filters,
     user_ctx: UserCtx,
     embedding: np.ndarray | None = None,
-    min_semantic_similarity: float = 0.78,
+    min_semantic_similarity: float = 0.84,
+    semantic_only_trgm_threshold: float = 0.4,
 ) -> Results:
     if filters.orden == "recientes":
         return await _run_recientes(session, filters, user_ctx)
     if embedding is None:
         return await _run_lexical(session, filters, user_ctx)
     return await _run_hybrid(
-        session, filters, user_ctx, embedding, min_semantic_similarity
+        session,
+        filters,
+        user_ctx,
+        embedding,
+        min_semantic_similarity,
+        semantic_only_trgm_threshold,
     )
 
 
@@ -223,7 +229,8 @@ async def run_count(
     filters: Filters,
     user_ctx: UserCtx,
     embedding: np.ndarray | None = None,
-    min_semantic_similarity: float = 0.78,
+    min_semantic_similarity: float = 0.84,
+    semantic_only_trgm_threshold: float = 0.4,
 ) -> int:
     """Count-only sibling of `run`: returns the same `total` the full query would,
     stopping at the candidate CTE (no ts_headline, document join, or paging)."""
@@ -232,7 +239,12 @@ async def run_count(
     if embedding is None:
         return await _count_lexical(session, filters, user_ctx)
     return await _count_hybrid(
-        session, filters, user_ctx, embedding, min_semantic_similarity
+        session,
+        filters,
+        user_ctx,
+        embedding,
+        min_semantic_similarity,
+        semantic_only_trgm_threshold,
     )
 
 
@@ -332,6 +344,22 @@ async def _set_word_similarity_threshold(
     await session.execute(
         text("SELECT set_config('pg_trgm.word_similarity_threshold', :thr, true)"),
         {"thr": str(threshold)},
+    )
+
+
+async def has_lexemes(session: AsyncSession, q: str) -> bool:
+    """True if `q` yields ≥1 search lexeme (i.e. it is not all stopwords/punct).
+
+    Guards the fuzzy fallback: a stopword-only query has nothing to typo-correct,
+    so it must report "nothing found" rather than trigram-matching content words.
+    """
+    return bool(
+        (
+            await session.execute(
+                text("SELECT numnode(plainto_tsquery('es_unaccent', :q)) > 0"),
+                {"q": q},
+            )
+        ).scalar_one()
     )
 
 
@@ -490,6 +518,15 @@ def _hybrid_candidates_ctes(*, lex_ctes: str, where: str, filter_clauses: str) -
             FROM sem_best
             LIMIT :cap
         ),
+        trgm_ground AS (
+            SELECT DISTINCT c.doc_id
+            FROM chunks c
+            JOIN documents d ON d.id = c.doc_id
+            WHERE :q <% c.body_text
+              AND c.is_current
+              AND {where}
+              {filter_clauses}
+        ),
         fused AS (
             SELECT
                 COALESCE(l.doc_id, s.doc_id) AS doc_id,
@@ -505,7 +542,8 @@ def _hybrid_candidates_ctes(*, lex_ctes: str, where: str, filter_clauses: str) -
             SELECT *
             FROM fused
             WHERE lex_score IS NOT NULL
-               OR sem_sim >= :min_sim
+               OR (sem_sim >= :min_sim
+                   AND doc_id IN (SELECT doc_id FROM trgm_ground))
         ),
         capped AS (
             SELECT *
@@ -543,9 +581,11 @@ async def _run_hybrid(
     user_ctx: UserCtx,
     embedding: np.ndarray,
     min_semantic_similarity: float,
+    semantic_only_trgm_threshold: float,
 ) -> Results:
     await session.execute(text("SET LOCAL hnsw.iterative_scan = 'strict_order'"))
     await session.execute(text(f"SET LOCAL hnsw.ef_search = {HNSW_EF_SEARCH}"))
+    await _set_word_similarity_threshold(session, semantic_only_trgm_threshold)
 
     where, where_params = readable_where("d", user_ctx)
     filter_clauses = _filter_clauses(filters)
@@ -662,9 +702,11 @@ async def _count_hybrid(
     user_ctx: UserCtx,
     embedding: np.ndarray,
     min_semantic_similarity: float,
+    semantic_only_trgm_threshold: float,
 ) -> int:
     await session.execute(text("SET LOCAL hnsw.iterative_scan = 'strict_order'"))
     await session.execute(text(f"SET LOCAL hnsw.ef_search = {HNSW_EF_SEARCH}"))
+    await _set_word_similarity_threshold(session, semantic_only_trgm_threshold)
 
     where, where_params = readable_where("d", user_ctx)
     filter_clauses = _filter_clauses(filters)

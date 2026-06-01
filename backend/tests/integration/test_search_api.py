@@ -408,11 +408,12 @@ async def test_search_endpoint_hybrid_surfaces_pure_semantic_hit(
         session,
         sem_id,
         is_headline=True,
-        body_text="Sin coincidencia textual con la consulta.",
+        body_text="Apuntes de zorgblot experimental.",
         embedding=_unit(0),
     )
     await session.commit()
 
+    # "zorgblat" trigram-grounds to "zorgblot" without a full-text lexeme match.
     r = await hybrid_client.get("/api/search", params={"q": "zorgblat"})
 
     assert r.status_code == 200
@@ -491,6 +492,31 @@ async def test_search_endpoint_fuzzy_fallback_on_typo(client, session):
     data = r.json()
     assert data["fuzzy_fallback"] is True
     assert [row["doc_id"] for row in data["results"]] == [doc_id]
+
+
+async def test_search_endpoint_stopword_only_query_returns_empty(client, session):
+    """A query of only stopwords yields no lexeme → no results and no fuzzy
+    fallback, even though "los" trigram-overlaps "modelos" in the corpus."""
+    doc_id = await make_document(
+        session,
+        titulo="Modelos de datos",
+        abstract="Sobre modelos de datos.",
+    )
+    await make_chunk(
+        session,
+        doc_id,
+        is_headline=True,
+        body_text="Estudio de modelos de datos relacionales.",
+    )
+    await session.commit()
+
+    r = await client.get("/api/search", params={"q": "el la los"})
+
+    assert r.status_code == 200
+    data = r.json()
+    assert data["results"] == []
+    assert data["total"] == 0
+    assert data["fuzzy_fallback"] is False
 
 
 async def test_search_endpoint_recientes_orders_by_fecha_desc(client, session):

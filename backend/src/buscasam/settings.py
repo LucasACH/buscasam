@@ -41,10 +41,24 @@ class Settings(BaseSettings):
     tei_url: str = "http://localhost:8080"
     # ADR-0002 §5: single source for the HF model + vendored tokenizer revision.
     embedding_model_revision: str = Field(default_factory=_vendored_tokenizer_revision)
-    min_semantic_similarity: float = 0.78
+    # Semantic floor: a pure-semantic candidate (no lexical hit) is shown only if
+    # its best chunk cosine clears this (ADR-0001 §12). Lexical hits bypass it.
+    # Interim value pending calibration on a real corpus via
+    # `scripts/calibrate_floor.py`; the committed fixture sweep currently favors
+    # this. Override per-env with BUSCASAM_MIN_SEMANTIC_SIMILARITY.
+    min_semantic_similarity: float = 0.84
     # Trigram word_similarity floor for the fuzzy fallback (typo tolerance) that
     # runs only when exact retrieval returns 0 rows. Lower => more permissive.
+    # Kept permissive (0.3) so transposition typos still recover; stopword-only
+    # queries are handled by the lexeme guard in `core/search`, not this floor.
     fuzzy_word_similarity_threshold: float = 0.3
+    # Lexical grounding for pure-semantic hits: a candidate with NO full-text
+    # lexical match is shown only if it also shares trigram signal with the query
+    # above this floor. Guards against e5 short-query cosine inflation surfacing
+    # off-topic docs (e.g. "recetas"). 0 disables grounding (revert to floor-only,
+    # the original SPEC §Ranking behavior). Override with
+    # BUSCASAM_SEMANTIC_ONLY_TRGM_THRESHOLD. Interim value pending calibration.
+    semantic_only_trgm_threshold: float = 0.4
     embed_query_timeout_s: float = 0.5
     # ADR-0007 §12: per-row provenance stamp for the extraction pipeline.
     extract_pipeline_version: str = "extract-v2"
