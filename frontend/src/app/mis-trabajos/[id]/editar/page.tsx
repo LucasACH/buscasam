@@ -67,6 +67,7 @@ const formSchema = z.object({
   abstract: z.string(),
   keywords: z.string(),
   fecha: z.string(),
+  visibility: z.enum(["publico", "interno", "privado"]),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -174,7 +175,8 @@ function EditarForm({
 }) {
   const router = useRouter();
   const [publishPhase, setPublishPhase] = useState<PublishPhase>("idle");
-  const { register, getValues, setValue, control, formState } =
+  const [saving, setSaving] = useState(false);
+  const { register, getValues, setValue, reset, control, formState } =
     useForm<FormValues>({
       resolver: zodResolver(formSchema),
       mode: "onBlur",
@@ -183,76 +185,59 @@ function EditarForm({
         abstract: state.staged_abstract ?? "",
         keywords: (state.staged_keywords ?? []).join(", "),
         fecha: state.staged_fecha ?? "",
+        visibility: state.visibility,
       },
     });
-  const { dirtyFields } = formState;
+  const { dirtyFields, isDirty } = formState;
 
-  async function patchField(field: keyof FormValues, force = false) {
-    // Skip no-op blurs (e.g. tabbing through untouched fields). The DatePicker
-    // forces the save: it calls setValue + patchField in one tick, so the
-    // dirtyFields closure is still stale and would otherwise drop the change.
-    if (!force && !dirtyFields[field]) return;
+  // Persist every dirty field in one metadata PATCH. The Save button is only
+  // enabled while isDirty, so at least one field is sent. visibility is gated
+  // on isOwner (ADR-0010 §8); for coautores dirtyFields.visibility never sets.
+  async function saveAll() {
+    setSaving(true);
     const v = getValues();
     const body: Record<string, unknown> = {};
-    if (field === "titulo") body.title = v.titulo;
-    if (field === "abstract") body.abstract = v.abstract;
-    if (field === "keywords")
+    if (dirtyFields.titulo) body.title = v.titulo;
+    if (dirtyFields.abstract) body.abstract = v.abstract;
+    if (dirtyFields.keywords)
       body.keywords = v.keywords
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean);
-    if (field === "fecha") body.fecha = v.fecha || null;
+    if (dirtyFields.fecha) body.fecha = v.fecha || null;
+    if (dirtyFields.visibility) body.visibility = v.visibility;
     const { error } = await api.PATCH("/api/documents/{doc_id}", {
       params: { path: { doc_id: docId } },
       body,
     });
     if (error) {
-      toast.error("No se pudo guardar el cambio");
+      toast.error("No se pudieron guardar los cambios");
+      setSaving(false);
       return;
     }
+    // Clear dirty state without remounting (metadata edits don't re-seed).
+    reset(v);
     await refresh();
+    setSaving(false);
   }
 
-  // Revert a single generated field back to the extractor's immutable snapshot
-  // and persist it through the same metadata PATCH (issue #94). The form is not
+  // Stage a generated field's extractor snapshot (issue #94) back into the
+  // form; it persists on the next Save like any other edit. The form is not
   // re-seeded on metadata edits, so setValue keeps the visible input in sync.
-  async function restoreField(field: "abstract" | "keywords" | "fecha") {
-    const body: Record<string, unknown> = {};
+  function restoreField(field: "abstract" | "keywords" | "fecha") {
     if (field === "abstract") {
-      const value = state.generated_abstract ?? "";
-      setValue("abstract", value, { shouldDirty: true });
-      body.abstract = value;
+      setValue("abstract", state.generated_abstract ?? "", {
+        shouldDirty: true,
+      });
     }
     if (field === "keywords") {
-      const value = state.generated_keywords ?? [];
-      setValue("keywords", value.join(", "), { shouldDirty: true });
-      body.keywords = value;
+      setValue("keywords", (state.generated_keywords ?? []).join(", "), {
+        shouldDirty: true,
+      });
     }
     if (field === "fecha") {
       setValue("fecha", state.generated_fecha ?? "", { shouldDirty: true });
-      body.fecha = state.generated_fecha ?? null;
     }
-    const { error } = await api.PATCH("/api/documents/{doc_id}", {
-      params: { path: { doc_id: docId } },
-      body,
-    });
-    if (error) {
-      toast.error("No se pudo restaurar el valor del extractor");
-      return;
-    }
-    await refresh();
-  }
-
-  async function patchVisibility(visibility: string) {
-    const { error } = await api.PATCH("/api/documents/{doc_id}", {
-      params: { path: { doc_id: docId } },
-      body: { visibility: visibility as DraftState["visibility"] },
-    });
-    if (error) {
-      toast.error("No se pudo cambiar la visibilidad");
-      return;
-    }
-    await refresh();
   }
 
   async function onPublish() {
@@ -308,11 +293,7 @@ function EditarForm({
 
       <form className="space-y-6">
         <Field label="Título" htmlFor="titulo">
-          <input
-            id="titulo"
-            className={INPUT_CLASS}
-            {...register("titulo", { onBlur: () => patchField("titulo") })}
-          />
+          <input id="titulo" className={INPUT_CLASS} {...register("titulo")} />
         </Field>
         <AreaField areaPath={state.area_path} />
         <Field
@@ -331,9 +312,7 @@ function EditarForm({
             id="abstract"
             className="border-border-strong bg-card focus:border-primary focus:ring-primary-tint min-h-24 w-full rounded-lg border px-3 py-[11px] text-sm leading-relaxed transition outline-none focus:ring-[3px]"
             rows={5}
-            {...register("abstract", {
-              onBlur: () => patchField("abstract"),
-            })}
+            {...register("abstract")}
           />
         </Field>
         <Field
@@ -352,9 +331,7 @@ function EditarForm({
             id="keywords"
             className={INPUT_CLASS}
             placeholder="separadas por comas"
-            {...register("keywords", {
-              onBlur: () => patchField("keywords"),
-            })}
+            {...register("keywords")}
           />
         </Field>
         <Field
@@ -373,10 +350,7 @@ function EditarForm({
             <DatePicker
               id="fecha"
               value={watched.fecha ?? ""}
-              onChange={(v) => {
-                setValue("fecha", v, { shouldDirty: true });
-                patchField("fecha", true);
-              }}
+              onChange={(v) => setValue("fecha", v, { shouldDirty: true })}
             />
           </div>
         </Field>
@@ -388,8 +362,7 @@ function EditarForm({
               <select
                 id="visibility"
                 className={`${INPUT_CLASS} appearance-none pr-9`}
-                defaultValue={state.visibility}
-                onChange={(e) => patchVisibility(e.target.value)}
+                {...register("visibility")}
               >
                 {VISIBILITIES.map((v) => (
                   <option key={v.value} value={v.value}>
@@ -401,6 +374,13 @@ function EditarForm({
             </div>
           </Field>
         )}
+
+        <div className="mt-2 flex items-center gap-3">
+          <Button type="button" disabled={!isDirty || saving} onClick={saveAll}>
+            {saving && <Loader2 className="size-4 animate-spin" />}
+            Guardar cambios
+          </Button>
+        </div>
       </form>
 
       {/* Pre-publish, the initial version matches the candidate predicate and

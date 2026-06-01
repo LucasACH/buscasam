@@ -87,6 +87,9 @@ test("publish happy path: upload → edit → publish → visible to invitado in
           index_error: null,
           publish_gate_reason: "processing",
           is_owner: true,
+          visibility: "publico",
+          versions: [],
+          attachments: [],
         }),
       );
     }
@@ -100,6 +103,9 @@ test("publish happy path: upload → edit → publish → visible to invitado in
         index_error: null,
         publish_gate_reason: null,
         is_owner: true,
+        visibility: "publico",
+        versions: [],
+        attachments: [],
       }),
     );
   });
@@ -154,7 +160,7 @@ test("publish happy path: upload → edit → publish → visible to invitado in
   await expect(publishBtn).toBeEnabled();
   const abstract = page.getByLabel(/Resumen/i);
   await abstract.fill("Resumen editado por la autora");
-  await abstract.blur();
+  await page.getByRole("button", { name: /Guardar cambios/i }).click();
 
   // 4. Publish → progress overlay holds ~2s + confetti ~1.6s before redirecting
   //    to /mis-trabajos, doc now under Publicados.

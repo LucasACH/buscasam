@@ -48,6 +48,10 @@ test("editar título: reindexing_headline gate appears, then clears", async ({
           staged_fecha: "2024-03-01",
           index_error: null,
           publish_gate_reason: "reindexing_headline",
+          is_owner: true,
+          visibility: "publico",
+          versions: [],
+          attachments: [],
         }),
       );
     }
@@ -60,6 +64,10 @@ test("editar título: reindexing_headline gate appears, then clears", async ({
         staged_fecha: "2024-03-01",
         index_error: null,
         publish_gate_reason: null,
+        is_owner: true,
+        visibility: "publico",
+        versions: [],
+        attachments: [],
       }),
     );
   });
@@ -80,10 +88,10 @@ test("editar título: reindexing_headline gate appears, then clears", async ({
   );
   await expect(page.getByTestId("gate-reason")).toHaveCount(0);
 
-  // 2. Edit título and blur.
+  // 2. Edit título and save.
   const titulo = page.getByLabel("Título");
   await titulo.fill("Mi tesis BD (editada)");
-  await titulo.blur();
+  await page.getByRole("button", { name: /Guardar cambios/i }).click();
 
   // 3. Reindexando título… gate appears.
   await expect(page.getByTestId("gate-reason")).toHaveText(
