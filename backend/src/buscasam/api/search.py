@@ -66,8 +66,7 @@ async def search_endpoint(
     tei: httpx.AsyncClient = Depends(get_tei_client),
     user_ctx: auth.UserCtx = Depends(auth.current_user),
 ) -> SearchResponse:
-    has_filters = bool(area or tipo or desde is not None or hasta is not None)
-    if orden == "relevancia" and not q and not has_filters:
+    if orden == "relevancia" and not q:
         raise HTTPException(
             status_code=422, detail="q is required when orden=relevancia"
         )

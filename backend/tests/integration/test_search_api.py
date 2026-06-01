@@ -576,46 +576,12 @@ async def test_search_endpoint_recientes_allows_empty_q_browse(client, session):
 
 
 async def test_search_endpoint_rejects_empty_q_under_relevancia(client):
-    """Empty q with orden=relevancia (or default) and no filters is rejected."""
+    """Empty q with orden=relevancia (or default) is rejected with 422."""
     r_default = await client.get("/api/search")
     assert r_default.status_code == 422
 
     r_explicit = await client.get("/api/search", params={"orden": "relevancia"})
     assert r_explicit.status_code == 422
-
-
-async def test_search_endpoint_empty_q_with_filter_browses(client, session):
-    """Empty q + a deterministic filter lists matching docs by fecha desc."""
-    tp_old = await make_document(
-        session,
-        titulo="TP viejo",
-        abstract="A",
-        tipo="trabajo_practico",
-        fecha=date(2020, 1, 1),
-    )
-    await make_chunk(session, tp_old, is_headline=True, body_text="TP viejo cuerpo.")
-    tp_new = await make_document(
-        session,
-        titulo="TP nuevo",
-        abstract="B",
-        tipo="trabajo_practico",
-        fecha=date(2023, 1, 1),
-    )
-    await make_chunk(session, tp_new, is_headline=True, body_text="TP nuevo cuerpo.")
-    paper = await make_document(
-        session,
-        titulo="Paper",
-        abstract="C",
-        tipo="paper",
-    )
-    await make_chunk(session, paper, is_headline=True, body_text="Paper cuerpo.")
-    await session.commit()
-
-    r = await client.get("/api/search", params=[("tipo", "trabajo_practico")])
-    assert r.status_code == 200
-    data = r.json()
-    assert [row["doc_id"] for row in data["results"]] == [tp_new, tp_old]
-    assert data["total"] == 2
 
 
 async def test_search_endpoint_recientes_accepts_pagina_over_20(client, session):
