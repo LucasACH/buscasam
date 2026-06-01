@@ -165,9 +165,7 @@ test("happy path: invitado → login → chip + bandeja loop → logout", async 
   await expect(page.getByText(/Compiladores/)).toBeVisible();
   await expect(page.getByText(/revisado y restaurado/)).toBeVisible();
   await expect(page.getByText(/Álgebra lineal/)).toBeVisible();
-  await page
-    .getByRole("button", { name: /Marcar todas como leídas/i })
-    .click();
+  await page.getByRole("button", { name: /Marcar todas como leídas/i }).click();
   await expect(bell).not.toContainText(String(SEEDED.length));
 
   // 6. Logout (inside the user menu) returns to the invitado view.
