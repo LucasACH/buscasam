@@ -62,12 +62,12 @@ describe("NotificationItem per-kind renderers", () => {
     expect(screen.getByText(/contenido duplicado/)).toBeInTheDocument();
   });
 
-  it("document_unhidden: shows title + note", () => {
+  it("document_unhidden: shows title + reason", () => {
     render(
       <NotificationItem
         item={item({
           kind: "document_unhidden",
-          payload: { doc_title: "Compiladores", note: "revisado y restaurado" },
+          payload: { doc_title: "Compiladores", reason: "revisado y restaurado" },
         })}
       />,
     );

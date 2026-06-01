@@ -55,7 +55,7 @@ const SEEDED = [
     payload: {
       doc_id: 13,
       doc_title: "Compiladores",
-      note: "revisado y restaurado",
+      reason: "revisado y restaurado",
     },
     read_at: null,
     created_at: "2026-01-02T00:00:00Z",
@@ -134,14 +134,9 @@ test("happy path: invitado → login → chip + bandeja loop → logout", async 
   await expect(page.getByText("Interno", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Privado", { exact: true })).toHaveCount(0);
 
-  // 2. Log in through the (mocked) UNSAM flow. The header link lands on /login;
-  // the page CTA initiates the (mocked) OIDC round-trip back to /buscar.
+  // 2. Log in: the header link initiates the (mocked) OIDC round-trip directly
+  // and lands back on the validated `next` (/buscar) with the session on.
   await page.getByRole("link", { name: /Iniciar sesión con UNSAM/i }).click();
-  await expect(page).toHaveURL(/\/login/);
-  await page
-    .locator("main")
-    .getByRole("link", { name: /Iniciar sesión con UNSAM/i })
-    .click();
   await expect(page).toHaveURL(/\/buscar/);
 
   // 3. Post-login: the Interno chip surfaces on the same query.
