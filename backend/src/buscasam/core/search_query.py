@@ -558,6 +558,7 @@ def _hybrid_params(
     filters: Filters,
     embedding: np.ndarray,
     min_semantic_similarity: float,
+    semantic_only_trgm_threshold: float,
     lex_params: dict[str, object],
     where_params: dict[str, object],
 ) -> dict[str, object]:
@@ -565,6 +566,7 @@ def _hybrid_params(
         "q": filters.q,
         "embedding": halfvec_literal(embedding),
         "min_sim": min_semantic_similarity,
+        "trgm_threshold": semantic_only_trgm_threshold,
         "rrf_k": RRF_K,
         "cap": RELEVANCE_CAP,
         "sem_chunk_cap": RELEVANCE_CAP * SEMANTIC_CHUNK_OVERFETCH,
@@ -584,7 +586,6 @@ async def _run_hybrid(
 ) -> Results:
     await session.execute(text("SET LOCAL hnsw.iterative_scan = 'strict_order'"))
     await session.execute(text(f"SET LOCAL hnsw.ef_search = {HNSW_EF_SEARCH}"))
-    await _set_word_similarity_threshold(session, semantic_only_trgm_threshold)
 
     where, where_params = readable_where("d", user_ctx)
     filter_clauses = _filter_clauses(filters)
@@ -623,6 +624,7 @@ async def _run_hybrid(
             filters=filters,
             embedding=embedding,
             min_semantic_similarity=min_semantic_similarity,
+            semantic_only_trgm_threshold=semantic_only_trgm_threshold,
             lex_params=lex_params,
             where_params=where_params,
         ),
@@ -705,7 +707,6 @@ async def _count_hybrid(
 ) -> int:
     await session.execute(text("SET LOCAL hnsw.iterative_scan = 'strict_order'"))
     await session.execute(text(f"SET LOCAL hnsw.ef_search = {HNSW_EF_SEARCH}"))
-    await _set_word_similarity_threshold(session, semantic_only_trgm_threshold)
 
     where, where_params = readable_where("d", user_ctx)
     filter_clauses = _filter_clauses(filters)
@@ -720,6 +721,7 @@ async def _count_hybrid(
         filters=filters,
         embedding=embedding,
         min_semantic_similarity=min_semantic_similarity,
+        semantic_only_trgm_threshold=semantic_only_trgm_threshold,
         lex_params=lex_params,
         where_params=where_params,
     )
