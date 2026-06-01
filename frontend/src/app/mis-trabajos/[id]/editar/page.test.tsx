@@ -36,6 +36,19 @@ vi.mock("@/components/CoauthorsPanel", () => ({
 vi.mock("@/components/AreaField", () => ({
   AreaField: () => null,
 }));
+vi.mock("@/components/DatePicker", () => ({
+  DatePicker: ({
+    id,
+    value,
+    onChange,
+  }: {
+    id?: string;
+    value: string;
+    onChange: (v: string) => void;
+  }) => (
+    <input id={id} value={value} onChange={(e) => onChange(e.target.value)} />
+  ),
+}));
 const { attachmentsPanelMock, candidatePanelMock, versionsPanelMock } =
   vi.hoisted(() => ({
     attachmentsPanelMock: vi.fn<(props: unknown) => null>(() => null),
@@ -523,6 +536,16 @@ describe("editar page", () => {
     await waitFor(() => expect(apiPatch).toHaveBeenCalled());
     const opts = apiPatch.mock.calls[0]![1];
     expect(opts.body).toMatchObject({ keywords: ["redes", "grafos"] });
+  });
+
+  it("PATCHes fecha when the DatePicker changes", async () => {
+    useDraftStateMock.mockReturnValue(draft({ staged_fecha: "2024-03-01" }));
+    render(<EditarPage />);
+    const input = screen.getByLabelText("Fecha");
+    fireEvent.change(input, { target: { value: "2024-06-15" } });
+    await waitFor(() => expect(apiPatch).toHaveBeenCalled());
+    const opts = apiPatch.mock.calls[0]![1];
+    expect(opts.body).toMatchObject({ fecha: "2024-06-15" });
   });
 
   it("shows the Eliminar affordance to the owner", () => {

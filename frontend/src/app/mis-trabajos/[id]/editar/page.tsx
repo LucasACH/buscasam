@@ -187,9 +187,11 @@ function EditarForm({
     });
   const { dirtyFields } = formState;
 
-  async function patchField(field: keyof FormValues) {
-    // Skip no-op blurs (e.g. tabbing through untouched fields).
-    if (!dirtyFields[field]) return;
+  async function patchField(field: keyof FormValues, force = false) {
+    // Skip no-op blurs (e.g. tabbing through untouched fields). The DatePicker
+    // forces the save: it calls setValue + patchField in one tick, so the
+    // dirtyFields closure is still stale and would otherwise drop the change.
+    if (!force && !dirtyFields[field]) return;
     const v = getValues();
     const body: Record<string, unknown> = {};
     if (field === "titulo") body.title = v.titulo;
@@ -373,7 +375,7 @@ function EditarForm({
               value={watched.fecha ?? ""}
               onChange={(v) => {
                 setValue("fecha", v, { shouldDirty: true });
-                patchField("fecha");
+                patchField("fecha", true);
               }}
             />
           </div>
