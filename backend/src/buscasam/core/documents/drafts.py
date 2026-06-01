@@ -258,6 +258,16 @@ async def update_draft_metadata(
     if title is not None:
         doc_sets.append("titulo = :titulo")
         doc_params["titulo"] = title
+    # abstract/keywords are reader-facing on the published row (detail reads
+    # d.abstract/d.keywords), so write them straight through alongside titulo
+    # instead of waiting for a publish. Search stays in sync separately: the
+    # per-version refresh_headline enqueued below re-embeds from staged_abstract.
+    if abstract is not None:
+        doc_sets.append("abstract = :abstract")
+        doc_params["abstract"] = abstract
+    if keywords is not None:
+        doc_sets.append("keywords = :keywords")
+        doc_params["keywords"] = keywords
     if visibility is not None:
         doc_sets.append("visibility = :visibility")
         doc_params["visibility"] = visibility
@@ -267,6 +277,14 @@ async def update_draft_metadata(
     if document_type is not None:
         doc_sets.append("tipo = :tipo")
         doc_params["tipo"] = document_type
+    # fecha is not a headline input and not embedded, so it needs no reindex: write
+    # it straight through to the reader-facing documents row (detail + deterministic
+    # filter both read d.fecha). COALESCE mirrors publish() — a null clear leaves the
+    # NOT NULL column untouched. staged_fecha is still set per-version below so the
+    # editar form and any later candidate publish stay consistent.
+    if not isinstance(fecha, _Unset):
+        doc_sets.append("fecha = COALESCE(:fecha, fecha)")
+        doc_params["fecha"] = fecha
     if doc_sets:
         await session.execute(
             text(f"UPDATE documents SET {', '.join(doc_sets)} WHERE id = :doc_id"),

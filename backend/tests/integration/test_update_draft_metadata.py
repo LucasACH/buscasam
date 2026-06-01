@@ -170,12 +170,27 @@ async def test_abstract_edit_fans_to_both_versions(session):
     )
 
     await documents.update_draft_metadata(
-        session, _ctx(uid), doc_id, abstract="resumen unificado"
+        session,
+        _ctx(uid),
+        doc_id,
+        abstract="resumen unificado",
+        keywords=["redes", "grafos"],
     )
 
     assert await _staged_abstract(session, published_id) == "resumen unificado"
     assert await _staged_abstract(session, candidate_id) == "resumen unificado"
     assert {published_id, candidate_id} <= await _enqueued_refresh_version_ids(session)
+
+    # abstract/keywords write straight through to the reader-facing documents row
+    # (detail reads d.abstract/d.keywords) — no publish needed.
+    doc_row = (
+        await session.execute(
+            text("SELECT abstract, keywords FROM documents WHERE id = :id"),
+            {"id": doc_id},
+        )
+    ).one()
+    assert doc_row.abstract == "resumen unificado"
+    assert doc_row.keywords == ["redes", "grafos"]
 
 
 async def test_processing_candidate_staged_but_not_reindexed(session):
@@ -296,3 +311,31 @@ async def test_keywords_and_fecha_fan_to_both_versions(session):
     for version_id in (published_id, candidate_id):
         assert await _staged_keywords(session, version_id) == ["redes", "grafos"]
         assert await _staged_fecha(session, version_id) == date(2025, 6, 1)
+
+    # fecha writes straight through to the reader-facing documents row (no publish
+    # needed): detail and the deterministic filter both read d.fecha.
+    documents_fecha = (
+        await session.execute(
+            text("SELECT fecha FROM documents WHERE id = :id"), {"id": doc_id}
+        )
+    ).scalar_one()
+    assert documents_fecha == date(2025, 6, 1)
+
+
+async def test_fecha_null_clear_leaves_documents_fecha(session):
+    uid, doc_id, published_id, _ = await _seed_published_with_candidate(session)
+    before = (
+        await session.execute(
+            text("SELECT fecha FROM documents WHERE id = :id"), {"id": doc_id}
+        )
+    ).scalar_one()
+
+    await documents.update_draft_metadata(session, _ctx(uid), doc_id, fecha=None)
+
+    after = (
+        await session.execute(
+            text("SELECT fecha FROM documents WHERE id = :id"), {"id": doc_id}
+        )
+    ).scalar_one()
+    assert after == before
+    assert await _staged_fecha(session, published_id) is None
