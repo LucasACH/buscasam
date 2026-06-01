@@ -302,14 +302,18 @@ def _set_rid_cookie(resp: Response, anon_id: str) -> None:
 def reader_key(user_ctx: UserCtx, request: Request, response: Response) -> str:
     """Resolve the lectura dedup identity (module map §core/auth).
 
-    Authenticated → `u:{user_id}` (no cookie). Invitado → the `rid` cookie,
-    minting an opaque random one onto `response` when absent → `a:{anon_id}`.
+    Authenticated → `u:{user_id}` (no cookie). Invitado → the `rid` cookie;
+    when absent, derive a stable id from the real client IP (`X-Real-IP`, set
+    by nginx) + User-Agent so cookie-less readers still dedup, then mint it onto
+    `response` for next time → `a:{anon_id}`.
     """
     if user_ctx.user_id is not None:
         return f"u:{user_ctx.user_id}"
     anon_id = request.cookies.get(RID_COOKIE)
     if anon_id is None:
-        anon_id = secrets.token_urlsafe(16)
+        ip = request.headers.get("x-real-ip", "")
+        ua = request.headers.get("user-agent", "")
+        anon_id = hashlib.sha256(f"{ip}|{ua}".encode()).hexdigest()[:22]
         _set_rid_cookie(response, anon_id)
     return f"a:{anon_id}"
 
