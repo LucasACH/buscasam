@@ -26,7 +26,7 @@ test("invitado: AuthNav renders the login link with encoded next", async ({
   await expect(link).toBeVisible();
   await expect(link).toHaveAttribute(
     "href",
-    "/login?next=" + encodeURIComponent("/buscar"),
+    "/api/auth/login?next=" + encodeURIComponent("/buscar"),
   );
 });
 
@@ -83,7 +83,7 @@ test("authenticated: avatar + role label + logout returns to invitado", async ({
   await expect(logoutBtn).toBeVisible();
   await logoutBtn.click();
 
-  // Logout does router.replace("/"), and "/" redirects to /buscar (next.config.ts).
+  // Logout does router.replace("/buscar").
   await expect(page).toHaveURL(/\/buscar$/);
   await expect(
     page.getByRole("link", { name: /Iniciar sesión con UNSAM/i }),

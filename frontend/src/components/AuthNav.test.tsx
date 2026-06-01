@@ -93,7 +93,7 @@ describe("AuthNav", () => {
       name: /Iniciar sesión con UNSAM/i,
     });
     expect(link.getAttribute("href")).toBe(
-      "/login?next=" + encodeURIComponent("/buscar"),
+      "/api/auth/login?next=" + encodeURIComponent("/buscar"),
     );
   });
 
@@ -150,7 +150,7 @@ describe("AuthNav", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("logout POSTs /api/auth/logout then router.replace('/')", async () => {
+  it("logout POSTs /api/auth/logout then router.replace('/buscar')", async () => {
     asAuthenticated({
       user_id: 7,
       role: "estudiante",
@@ -168,7 +168,7 @@ describe("AuthNav", () => {
 
     expect(apiPost).toHaveBeenCalledTimes(1);
     expect(apiPost).toHaveBeenCalledWith("/api/auth/logout");
-    expect(replace).toHaveBeenCalledWith("/");
+    expect(replace).toHaveBeenCalledWith("/buscar");
   });
 
   it("logout evicts the notifications cache", async () => {

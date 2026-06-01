@@ -8,8 +8,6 @@ import { AlertTriangle, Search } from "lucide-react";
 import { GoogleIcon } from "@/components/GoogleIcon";
 import { Wordmark } from "@/components/Wordmark";
 
-const LOGIN_HREF = `/api/auth/login?next=${encodeURIComponent("/buscar")}`;
-
 export default function LoginPage() {
   return (
     <Suspense fallback={null}>
@@ -21,13 +19,20 @@ export default function LoginPage() {
 function LoginPageInner() {
   const params = useSearchParams();
   const isNotUnsam = params.get("error") === "not_unsam";
+  const rawNext = params.get("next");
+  const next =
+    rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//")
+      ? rawNext
+      : "/buscar";
+  const loginHref = `/api/auth/login?next=${encodeURIComponent(next)}`;
 
   return (
     <main className="grid min-h-[100dvh] place-items-center px-5 py-8">
       <div className="flex w-full max-w-[400px] flex-col items-center gap-5 text-center">
         <Wordmark size="lg" />
         <p className="text-muted-foreground max-w-[320px] text-base leading-snug">
-          Búsqueda de trabajos académicos de la comunidad UNSAM.
+          Necesitás iniciar sesión con tu cuenta UNSAM para acceder a esta
+          sección.
         </p>
 
         {isNotUnsam && (
@@ -46,7 +51,7 @@ function LoginPageInner() {
         )}
 
         <a
-          href={LOGIN_HREF}
+          href={loginHref}
           className="bg-primary text-primary-foreground hover:bg-primary-hover mt-1 inline-flex h-[46px] w-full items-center justify-center gap-2.5 rounded-lg text-base font-medium transition-colors"
         >
           <GoogleIcon size={20} variant="mono" />
