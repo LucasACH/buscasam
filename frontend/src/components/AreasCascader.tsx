@@ -1,7 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Check, ChevronLeft, ChevronRight, MapPin, X } from "lucide-react";
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  MapPin,
+  Search,
+  X,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useAreas } from "@/lib/useAreas";
@@ -14,6 +21,13 @@ function parentOf(area_path: string): string {
   const parts = area_path.split(".");
   parts.pop();
   return parts.join(".");
+}
+
+function normalize(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
 }
 
 export type AreasCascaderProps = {
@@ -30,21 +44,63 @@ export function AreasCascader({ onChange, value }: AreasCascaderProps) {
 
   // `nav` is the parent path whose children are listed; "" lists the escuelas.
   const [nav, setNav] = useState<string>(() => (value ? parentOf(value) : ""));
+  const [query, setQuery] = useState("");
 
-  const children = rows.filter((a) => parentOf(a.area_path) === nav);
   const isLeaf = (path: string) =>
     !rows.some((a) => parentOf(a.area_path) === path);
 
+  const q = normalize(query.trim());
+  const searching = q.length > 0;
+  // Search filters only the current level's options, not the whole tree.
+  const children = rows.filter((a) => parentOf(a.area_path) === nav);
+  const listed = searching
+    ? children.filter((a) => normalize(a.display_name).includes(q))
+    : children;
+
   const depth = nav ? levelOf(nav) : 0;
+
+  function goTo(path: string) {
+    setNav(path);
+    setQuery("");
+  }
+
+  function pick(path: string) {
+    if (isLeaf(path)) {
+      onChange(path);
+    } else {
+      goTo(path);
+    }
+  }
 
   return (
     <div className="flex flex-col">
+      <div className="border-border flex items-center gap-2 border-b px-3 py-2">
+        <Search className="text-muted-foreground size-4 flex-none" />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Buscar área…"
+          className="placeholder:text-muted-foreground flex-1 bg-transparent text-sm outline-none"
+        />
+        {query && (
+          <button
+            type="button"
+            aria-label="Limpiar búsqueda"
+            onClick={() => setQuery("")}
+            className="text-muted-foreground grid size-[22px] flex-none place-items-center rounded-md hover:bg-neutral-100"
+          >
+            <X className="size-3.5" />
+          </button>
+        )}
+      </div>
+
       <div className="border-border flex min-h-[42px] items-center gap-2 border-b px-3 py-2.5">
         {nav && (
           <button
             type="button"
             aria-label="Volver"
-            onClick={() => setNav(parentOf(nav))}
+            onClick={() => goTo(parentOf(nav))}
             className="text-muted-foreground grid size-[26px] place-items-center rounded-md hover:bg-neutral-100"
           >
             <ChevronLeft className="size-4" />
@@ -60,16 +116,19 @@ export function AreasCascader({ onChange, value }: AreasCascaderProps) {
       </div>
 
       <div className="max-h-[280px] overflow-y-auto p-1.5">
-        {children.map((a) => {
+        {searching && listed.length === 0 && (
+          <div className="text-muted-foreground px-2.5 py-6 text-center text-sm">
+            Sin resultados
+          </div>
+        )}
+        {listed.map((a) => {
           const leaf = isLeaf(a.area_path);
           const selected = leaf && value === a.area_path;
           return (
             <button
               key={a.area_path}
               type="button"
-              onClick={() =>
-                leaf ? onChange(a.area_path) : setNav(a.area_path)
-              }
+              onClick={() => pick(a.area_path)}
               className={cn(
                 "text-foreground flex w-full items-center gap-2 rounded-md px-2.5 py-2.5 text-left text-sm",
                 selected ? "bg-primary-tint" : "hover:bg-neutral-100",
