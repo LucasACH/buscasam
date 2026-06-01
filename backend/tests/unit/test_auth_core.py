@@ -303,10 +303,17 @@ def test_require_docente_returns_docente():
     assert auth.require_docente(uc) is uc
 
 
-def _request(cookies: dict[str, str] | None = None) -> Request:
+def _request(
+    cookies: dict[str, str] | None = None,
+    headers: dict[str, str] | None = None,
+) -> Request:
+    raw: list[tuple[bytes, bytes]] = []
     header = "; ".join(f"{k}={v}" for k, v in (cookies or {}).items())
-    headers = [(b"cookie", header.encode())] if header else []
-    return Request({"type": "http", "headers": headers})
+    if header:
+        raw.append((b"cookie", header.encode()))
+    for k, v in (headers or {}).items():
+        raw.append((k.lower().encode(), v.encode()))
+    return Request({"type": "http", "headers": raw})
 
 
 def test_reader_key_authenticated_is_user_scoped_no_cookie():
@@ -341,3 +348,19 @@ def test_reader_key_invitado_reuses_existing_rid_without_minting():
 
     assert key == "a:existing-anon"
     assert "set-cookie" not in {k.lower() for k, _ in resp.raw_headers}
+
+
+def test_reader_key_cookieless_invitado_is_stable_per_ip_and_ua():
+    headers = {"x-real-ip": "203.0.113.7", "user-agent": "Mozilla/5.0"}
+
+    first = auth.reader_key(auth.GUEST, _request(headers=headers), Response())
+    again = auth.reader_key(auth.GUEST, _request(headers=headers), Response())
+    other_ip = auth.reader_key(
+        auth.GUEST,
+        _request(headers={**headers, "x-real-ip": "203.0.113.8"}),
+        Response(),
+    )
+
+    assert first.startswith("a:")
+    assert first == again  # same IP + UA → same dedup id
+    assert first != other_ip  # different IP → distinct id
