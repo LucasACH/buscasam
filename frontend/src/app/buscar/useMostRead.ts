@@ -11,6 +11,7 @@ type PopularResponse = components["schemas"]["PopularResponse"];
 export function useMostRead() {
   const query = useQuery<PopularResponse>({
     queryKey: ["popular"],
+    staleTime: 5 * 60_000,
     queryFn: async () => {
       const { data, error } = await api.GET("/api/docs/popular", {
         params: { query: { limit: 3 } },

@@ -12,6 +12,9 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${backendUrl}/api/:path*` }];
   },
+  async redirects() {
+    return [{ source: "/", destination: "/buscar", permanent: false }];
+  },
 };
 
 export default nextConfig;
