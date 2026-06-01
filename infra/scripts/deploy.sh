@@ -14,6 +14,16 @@ infra_dir="$(cd "$(dirname "$0")/.." && pwd)"   # repo/infra
 cd "$infra_dir"
 compose() { docker compose -f compose.yaml -f compose.prod.yaml "$@"; }
 
+# Persist the deployed ref into .env. `export` above only pins the version for
+# THIS process; a later *manual* `docker compose up -d` (e.g. tuning an env knob)
+# reads .env directly and would otherwise recreate containers on a stale
+# BUSCASAM_VERSION, silently reverting the running image.
+if grep -qE '^BUSCASAM_VERSION=' .env; then
+  sed -i "s|^BUSCASAM_VERSION=.*|BUSCASAM_VERSION=$BUSCASAM_VERSION|" .env
+else
+  printf 'BUSCASAM_VERSION=%s\n' "$BUSCASAM_VERSION" >> .env
+fi
+
 # Refresh Artifact Registry auth before pulling. The docker login done at VM boot
 # (startup.sh) uses a short-lived (~1h) access token, so a manual deploy run later
 # fails with "authentication failed". Re-login with a fresh metadata-server token.
