@@ -106,6 +106,7 @@ async def test_login_redirect_sets_state_cookie(client, issuer):
     assert "nonce" in qs
     assert "state" in qs
     assert qs["hd"] == ["*"]
+    assert qs["prompt"] == ["select_account"]
 
     cookie_header = r.headers["set-cookie"].lower()
     assert "oauth_state=" in cookie_header

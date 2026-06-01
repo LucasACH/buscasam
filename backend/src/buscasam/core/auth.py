@@ -59,7 +59,7 @@ ROLE_BY_HD: Mapping[str, Role] = MappingProxyType(
     {
         "estudiantes.unsam.edu.ar": "estudiante",
         "unsam.edu.ar": "docente",
-        "unsam-bue.edu.ar": "docente",
+        "unsam-bue.edu.ar": "estudiante",
     }
 )
 
@@ -185,19 +185,19 @@ def role_from_claims(claims: Mapping[str, object]) -> Role | None:
     """Return the mapped role iff the claim set is acceptable, else None.
 
     Always rejects (returns None) when `email_verified` is not literally True.
-    A known `hd` maps to its role. An unknown/missing `hd` is rejected in prod
-    but logs in as `estudiante` outside prod (508cf8c, local testing). The
-    cookie / DB / redirect machinery is the caller's job; this is the pure
-    decision.
+    In prod a known `hd` maps to its role and an unknown/missing `hd` is
+    rejected. Outside prod (508cf8c, local testing) `estudiantes.unsam.edu.ar`
+    stays `estudiante` and every other verified account logs in as `docente`
+    so any test account can moderate. The cookie / DB / redirect machinery is
+    the caller's job; this is the pure decision.
     """
     if claims.get("email_verified") is not True:
         return None
     hd = claims.get("hd")
+    if settings.env != "prod":
+        return "estudiante" if hd == "estudiantes.unsam.edu.ar" else "docente"
     if isinstance(hd, str) and hd in ROLE_BY_HD:
         return ROLE_BY_HD[hd]
-    # Local testing: any verified non-UNSAM email logs in as a student.
-    if settings.env != "prod":
-        return "estudiante"
     return None
 
 
@@ -362,6 +362,7 @@ async def begin_login(next_path: str | None) -> RedirectResponse:
                 "code_challenge": challenge,
                 "code_challenge_method": "S256",
                 "hd": "*",
+                "prompt": "select_account",
             }
         )
     )
