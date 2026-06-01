@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { cleanup, render } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import BuscarPage from "./page";
+import { BuscarClient } from "./BuscarClient";
 
 const replace = vi.fn();
 const searchParams = new URLSearchParams();
@@ -18,7 +18,7 @@ function renderPage() {
   });
   return render(
     <QueryClientProvider client={client}>
-      <BuscarPage />
+      <BuscarClient />
     </QueryClientProvider>,
   );
 }

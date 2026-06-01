@@ -188,18 +188,19 @@ async def _act(
     """Shared resolve-all-open + audit-append. Sole writer of
     `documents.moderation_hidden_at` (arch test); touches no other `documents`
     column."""
-    doc_id = (
+    row = (
         await session.execute(
             text(
-                "SELECT r.doc_id FROM document_reports r "
+                "SELECT r.doc_id, d.moderation_hidden_at FROM document_reports r "
                 "JOIN documents d ON d.id = r.doc_id "
                 "WHERE r.id = :rid AND d.soft_deleted_at IS NULL"
             ),
             {"rid": report_id},
         )
-    ).scalar_one_or_none()
-    if doc_id is None:
+    ).first()
+    if row is None:
         return None
+    doc_id, was_hidden = row[0], row[1] is not None
 
     if action == "hide":
         await session.execute(
@@ -236,8 +237,15 @@ async def _act(
         {"d": doc_id},
     )
 
+    # Notify only when the action actually changed visibility: hiding an already-
+    # hidden doc or "showing" one that was never hidden is a no-op the author
+    # shouldn't hear about (e.g. resolving a report by "Mostrar" on a visible doc
+    # must not claim it was restored). dismiss never notifies.
     kind = _NOTIFY_KIND.get(action)
-    if kind is not None:
+    state_changed = (action == "hide" and not was_hidden) or (
+        action == "unhide" and was_hidden
+    )
+    if kind is not None and state_changed:
         await _notify_authors(
             session, action_id=action_id, doc_id=doc_id, kind=kind, reason=reason
         )

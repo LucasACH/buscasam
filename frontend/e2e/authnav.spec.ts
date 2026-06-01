@@ -83,7 +83,7 @@ test("authenticated: avatar + role label + logout returns to invitado", async ({
   await expect(logoutBtn).toBeVisible();
   await logoutBtn.click();
 
-  // Logout does router.replace("/"), and "/" redirects to /buscar (app/page.tsx).
+  // Logout does router.replace("/"), and "/" redirects to /buscar (next.config.ts).
   await expect(page).toHaveURL(/\/buscar$/);
   await expect(
     page.getByRole("link", { name: /Iniciar sesión con UNSAM/i }),

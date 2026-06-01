@@ -44,6 +44,7 @@ const META = {
   tipo: "tesis",
   area_path: "ingenieria.sistemas",
   report_reasons: ["spam", "plagio"],
+  hidden: false,
 };
 
 function docente() {
@@ -128,22 +129,39 @@ describe("/moderacion/[reportId] inspect view", () => {
     await waitFor(() => expect(push).toHaveBeenCalledWith("/moderacion"));
   });
 
-  it.each([
-    ["mostrar", () => unhide],
-    ["descartar", () => dismiss],
-  ] as const)(
-    "%s acts with an empty reason and returns to the queue",
-    async (name, getFn) => {
-      render(<InspectPage />);
+  it("descartar acts with an empty reason and returns to the queue", async () => {
+    render(<InspectPage />);
 
-      const btn = screen.getByRole("button", { name: new RegExp(name, "i") });
-      expect(btn).toBeEnabled();
-      fireEvent.click(btn);
+    const btn = screen.getByRole("button", { name: /descartar/i });
+    expect(btn).toBeEnabled();
+    fireEvent.click(btn);
 
-      await waitFor(() => expect(getFn()).toHaveBeenCalledWith(""));
-      await waitFor(() => expect(push).toHaveBeenCalledWith("/moderacion"));
-    },
-  );
+    await waitFor(() => expect(dismiss).toHaveBeenCalledWith(""));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/moderacion"));
+  });
+
+  it("offers only Ocultar when the document is visible", () => {
+    render(<InspectPage />);
+
+    expect(screen.getByRole("button", { name: /ocultar/i })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /mostrar/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers only Mostrar when the document is hidden", async () => {
+    inspect({ metadata: { ...META, hidden: true } });
+    render(<InspectPage />);
+
+    expect(
+      screen.queryByRole("button", { name: /ocultar/i }),
+    ).not.toBeInTheDocument();
+    const btn = screen.getByRole("button", { name: /mostrar/i });
+    fireEvent.click(btn);
+
+    await waitFor(() => expect(unhide).toHaveBeenCalledWith(""));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/moderacion"));
+  });
 
   it("toasts and stays on the page when hiding fails", async () => {
     hide.mockResolvedValue("action_failed");

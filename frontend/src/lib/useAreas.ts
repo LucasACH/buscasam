@@ -14,7 +14,12 @@ async function fetchAreas(): Promise<Area[]> {
 }
 
 export function useAreas() {
-  return useQuery({ queryKey: ["areas"], queryFn: fetchAreas });
+  return useQuery({
+    queryKey: ["areas"],
+    queryFn: fetchAreas,
+    staleTime: 60 * 60_000,
+    gcTime: 60 * 60_000,
+  });
 }
 
 // Resolve an ltree leaf path (e.g. "escuela.carrera.materia") to an

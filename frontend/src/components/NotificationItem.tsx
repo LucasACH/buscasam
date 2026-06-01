@@ -14,7 +14,7 @@ import { useNotifications, type NotificationDTO } from "@/lib/useNotifications";
 
 type CoauthorInvite = { doc_title?: string; inviter?: string; doc_id?: number };
 type DocumentHidden = { doc_title?: string; reason?: string };
-type DocumentUnhidden = { doc_title?: string; note?: string };
+type DocumentUnhidden = { doc_title?: string; reason?: string };
 type ProcessingFailed = { doc_title?: string };
 
 // Payloads come from out-of-scope producer PRDs (#3/#5/#8); degrade gracefully
@@ -89,8 +89,8 @@ function DocumentUnhiddenItem({ payload }: { payload: DocumentUnhidden }) {
     <p className="text-foreground text-[13px] leading-snug">
       Tu documento <Title>{payload.doc_title ?? FALLBACK_TITLE}</Title> fue
       restaurado.
-      {payload.note ? (
-        <span className="text-muted-foreground"> {payload.note}</span>
+      {payload.reason ? (
+        <span className="text-muted-foreground"> Motivo: {payload.reason}</span>
       ) : (
         ""
       )}
