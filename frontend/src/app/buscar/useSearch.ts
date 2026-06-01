@@ -24,7 +24,13 @@ export type SearchParams = {
 export type SearchResponse = components["schemas"]["SearchResponse"];
 
 export function useSearch(params: SearchParams) {
-  const enabled = params.q.length > 0 || params.orden === "recientes";
+  const hasFilters =
+    params.tipos.length > 0 ||
+    params.area !== null ||
+    params.desde !== null ||
+    params.hasta !== null;
+  const enabled =
+    params.q.length > 0 || params.orden === "recientes" || hasFilters;
   const query = useQuery<SearchResponse>({
     queryKey: [
       "search",
