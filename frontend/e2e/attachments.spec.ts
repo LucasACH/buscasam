@@ -35,6 +35,8 @@ function draftBody(attachments: Attachment[]) {
     index_error: null,
     publish_gate_reason: null,
     is_owner: true,
+    visibility: "publico",
+    versions: [],
     attachments,
   };
 }

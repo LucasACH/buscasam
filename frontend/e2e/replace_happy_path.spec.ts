@@ -198,7 +198,7 @@ test("replace → processing → ready → publish, reader stays on old bytes un
   });
 
   // 3. Procesando… → Listo para publicar.
-  await expect(panel.getByTestId("candidate-status-pill")).toHaveText(
+  await expect(panel.getByTestId("processing-steps")).toContainText(
     "Procesando…",
     { timeout: 10_000 },
   );

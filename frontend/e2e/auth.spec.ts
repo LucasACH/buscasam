@@ -155,7 +155,8 @@ test("happy path: invitado → login → chip + bandeja loop → logout", async 
   const bell = page.getByRole("button", { name: /Notificaciones/i });
   await expect(bell).toContainText(String(SEEDED.length));
 
-  // 5. Opening the popover renders all four per-kind renderers and clears the badge.
+  // 5. Opening the popover renders all four per-kind renderers; marking all read
+  //    clears the badge.
   await bell.click();
   await expect(page.getByText(/Redes neuronales/)).toBeVisible();
   await expect(page.getByText(/Bob/)).toBeVisible();
@@ -164,12 +165,16 @@ test("happy path: invitado → login → chip + bandeja loop → logout", async 
   await expect(page.getByText(/Compiladores/)).toBeVisible();
   await expect(page.getByText(/revisado y restaurado/)).toBeVisible();
   await expect(page.getByText(/Álgebra lineal/)).toBeVisible();
+  await page
+    .getByRole("button", { name: /Marcar todas como leídas/i })
+    .click();
   await expect(bell).not.toContainText(String(SEEDED.length));
 
   // 6. Logout (inside the user menu) returns to the invitado view.
   await page.getByRole("button", { name: /Ada Lovelace/i }).click();
   await page.getByRole("button", { name: /Cerrar sesión/i }).click();
-  await expect(page).toHaveURL("/");
+  // Logout does router.replace("/"), and "/" redirects to /buscar (app/page.tsx).
+  await expect(page).toHaveURL(/\/buscar$/);
   await expect(
     page.getByRole("link", { name: /Iniciar sesión con UNSAM/i }),
   ).toBeVisible();

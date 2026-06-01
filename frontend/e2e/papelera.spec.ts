@@ -162,6 +162,10 @@ test("delete → Papelera countdown → Restaurar returns to Mis trabajos + deta
   // 1. Owner deletes from the editar page → routed back to Mis trabajos, gone.
   await page.goto(`/mis-trabajos/${DOC_ID}/editar`);
   await page.getByRole("button", { name: "Eliminar" }).click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Eliminar" })
+    .click();
   await page.waitForURL("**/mis-trabajos");
   expect(deleted).toBe(true);
   await expect(page.getByText(TITULO)).toHaveCount(0);

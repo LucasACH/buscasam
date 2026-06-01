@@ -109,8 +109,12 @@ test("owner deletes from editar → routed away, gone from Mis trabajos, detalle
   const eliminar = page.getByRole("button", { name: "Eliminar" });
   await expect(eliminar).toBeVisible();
 
-  // 2. Delete and get routed back to Mis trabajos.
+  // 2. Delete (confirm in the dialog) and get routed back to Mis trabajos.
   await eliminar.click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Eliminar" })
+    .click();
   await page.waitForURL("**/mis-trabajos");
   expect(deleted).toBe(true);
 
