@@ -4,7 +4,7 @@ Idempotent. Mirrors the áreas portion of `buscasam.fixtures.seed.seed`
 (reconcile managed escuela roots, then upsert) without touching the fixture
 documents/chunks. Run inside the api container:
 
-    docker exec -i api python - < infra/scripts/seed_areas.py
+    docker exec -i infra-api-1 python - < infra/scripts/seed_areas.py
 """
 
 from __future__ import annotations
