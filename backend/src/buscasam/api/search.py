@@ -93,6 +93,7 @@ async def search_endpoint(
         user_ctx=user_ctx,
         min_semantic_similarity=settings.min_semantic_similarity,
         fuzzy_word_similarity_threshold=settings.fuzzy_word_similarity_threshold,
+        semantic_only_trgm_threshold=settings.semantic_only_trgm_threshold,
     )
     return SearchResponse(
         results=[ResultDTO(**asdict(r)) for r in result.rows],

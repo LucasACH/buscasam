@@ -15,32 +15,67 @@ def _unit(dim: int) -> np.ndarray:
     return v
 
 
-async def test_search_hybrid_returns_pure_semantic_hit(session):
-    """Query embedding aligned to doc A surfaces A even with zero lexical overlap."""
-    a_id = await make_document(
+async def test_search_hybrid_pure_semantic_requires_trigram_grounding(session):
+    """Two docs tie on cosine; only the one sharing trigram signal with the query
+    (a typo of a body word) survives — the ungrounded one is dropped despite the
+    identical embedding. Guards against e5 short-query cosine inflation."""
+    grounded = await make_document(
         session,
         titulo="Documento sobre física cuántica",
         abstract="Estudio sobre partículas subatómicas y su comportamiento.",
     )
     await make_chunk(
         session,
-        a_id,
+        grounded,
         is_headline=True,
-        body_text="Documento sobre física cuántica.",
+        body_text="Apuntes de zorgblot experimental.",
         embedding=_unit(0),
     )
 
-    b_id = await make_document(
+    ungrounded = await make_document(
         session,
         titulo="Documento sobre literatura",
         abstract="Estudio sobre novelas argentinas del siglo XX.",
     )
     await make_chunk(
         session,
-        b_id,
+        ungrounded,
         is_headline=True,
-        body_text="Documento sobre literatura.",
-        embedding=_unit(1),
+        body_text="Tratado de literatura clásica argentina.",
+        embedding=_unit(0),
+    )
+    await session.commit()
+
+    # "zorgblat" trigram-matches "zorgblot" (grounded) but no full-text lexeme.
+    result = await search_query.run(
+        session,
+        filters=search_query.Filters(q="zorgblat"),
+        user_ctx=auth.GUEST,
+        embedding=_unit(0),
+        semantic_only_trgm_threshold=0.3,
+    )
+
+    assert [r.doc_id for r in result.rows] == [grounded]
+    assert result.total == 1
+    assert result.rows[0].snippet == (
+        "Estudio sobre partículas subatómicas y su comportamiento."
+    )
+
+
+async def test_search_hybrid_grounding_disabled_at_zero_threshold(session):
+    """semantic_only_trgm_threshold=0 reverts to floor-only (original SPEC behavior):
+    a pure-semantic hit with no trigram traction is admitted."""
+    doc_id = await make_document(
+        session,
+        titulo="Documento sobre literatura",
+        abstract="Estudio sobre novelas argentinas del siglo XX.",
+    )
+    await make_chunk(
+        session,
+        doc_id,
+        is_headline=True,
+        body_text="Tratado de literatura clásica argentina.",
+        embedding=_unit(0),
     )
     await session.commit()
 
@@ -49,12 +84,10 @@ async def test_search_hybrid_returns_pure_semantic_hit(session):
         filters=search_query.Filters(q="zorgblat"),
         user_ctx=auth.GUEST,
         embedding=_unit(0),
+        semantic_only_trgm_threshold=0.0,
     )
 
-    assert [r.doc_id for r in result.rows] == [a_id]
-    assert result.rows[0].snippet == (
-        "Estudio sobre partículas subatómicas y su comportamiento."
-    )
+    assert [r.doc_id for r in result.rows] == [doc_id]
 
 
 async def test_search_excludes_below_floor(session):
@@ -162,16 +195,18 @@ async def test_search_snippet_rule_splits_by_row_source(session):
         session,
         sem_id,
         is_headline=True,
-        body_text="Sin coincidencia textual con la consulta.",
+        body_text="Resumen sobre alphabavo y temas afines.",
         embedding=_unit(0),
     )
     await session.commit()
 
+    # "alphabravo" lexically matches lex_id and trigram-grounds to "alphabavo".
     result = await search_query.run(
         session,
         filters=search_query.Filters(q="alphabravo"),
         user_ctx=auth.GUEST,
         embedding=_unit(0),
+        semantic_only_trgm_threshold=0.3,
     )
 
     rows_by_id = {r.doc_id: r for r in result.rows}

@@ -37,7 +37,8 @@ Queda fuera del MVP:
 - Híbrido: embeddings multilingües + ranking full-text de PostgreSQL en español.
 - Fusión por Reciprocal Rank Fusion; sin boost por popularidad o recencia.
 - **Más leídos** es una superficie de visualización separada, no una señal de ranking: las lecturas nunca alteran el orden de búsqueda (ver `docs/adr/0014-most-read-display-only.md`).
-- Se muestra un resultado si hay match léxico o si supera el piso semántico calibrado antes del lanzamiento.
+- Se muestra un resultado si hay match léxico, o si supera el piso semántico calibrado **y además comparte señal léxica (trigramas) con la consulta**. Este anclaje léxico evita que consultas muy cortas o fuera de tema aparezcan por inflación de similitud del modelo de embeddings.
+- Una consulta compuesta solo por palabras vacías (stopwords) no dispara la corrección de tipeos y se informa como "sin resultados".
 - Si no hay resultados sobre el piso, se informa claramente y se sugieren cambios de consulta/filtros.
 - Con filtros activos, se puede consultar el conteo sin filtros aplicando la misma visibilidad.
 
