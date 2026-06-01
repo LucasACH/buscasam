@@ -14,6 +14,17 @@ infra_dir="$(cd "$(dirname "$0")/.." && pwd)"   # repo/infra
 cd "$infra_dir"
 compose() { docker compose -f compose.yaml -f compose.prod.yaml "$@"; }
 
+# Refresh Artifact Registry auth before pulling. The docker login done at VM boot
+# (startup.sh) uses a short-lived (~1h) access token, so a manual deploy run later
+# fails with "authentication failed". Re-login with a fresh metadata-server token.
+registry_host="$(grep -E '^BUSCASAM_IMAGE_REPO=' .env | head -1 | cut -d= -f2- | cut -d/ -f1)"
+if [[ "$registry_host" == *-docker.pkg.dev ]]; then
+  token="$(curl -fsS -H 'Metadata-Flavor: Google' \
+    'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token' \
+    | jq -r .access_token)"
+  echo "$token" | docker login -u oauth2accesstoken --password-stdin "https://$registry_host"
+fi
+
 compose pull
 compose up -d db
 # A failed migrate exits non-zero here, before any app container is rolled.
