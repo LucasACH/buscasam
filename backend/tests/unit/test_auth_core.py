@@ -36,7 +36,7 @@ def test_hd_to_role_mapping():
     assert auth.ROLE_BY_HD == {
         "estudiantes.unsam.edu.ar": "estudiante",
         "unsam.edu.ar": "docente",
-        "unsam-bue.edu.ar": "docente",
+        "unsam-bue.edu.ar": "estudiante",
     }
 
     with pytest.raises(KeyError):
@@ -81,10 +81,18 @@ def test_claim_acceptance_matrix_rejects(claims, monkeypatch):
     [
         {"email_verified": True, "sub": "x"},  # no hd
         {"email_verified": True, "sub": "x", "hd": "gmail.com"},  # non-unsam hd
+        {"email_verified": True, "sub": "x", "hd": "unsam.edu.ar"},
+        {"email_verified": True, "sub": "x", "hd": "unsam-bue.edu.ar"},
     ],
 )
-def test_non_prod_treats_non_unsam_as_estudiante(claims, monkeypatch):
+def test_non_prod_treats_non_estudiantes_as_docente(claims, monkeypatch):
     monkeypatch.setattr(auth.settings, "env", "dev")
+    assert auth.role_from_claims(claims) == "docente"
+
+
+def test_non_prod_keeps_estudiantes_as_estudiante(monkeypatch):
+    monkeypatch.setattr(auth.settings, "env", "dev")
+    claims = {"email_verified": True, "sub": "x", "hd": "estudiantes.unsam.edu.ar"}
     assert auth.role_from_claims(claims) == "estudiante"
 
 

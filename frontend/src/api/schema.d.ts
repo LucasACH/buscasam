@@ -1010,6 +1010,8 @@ export interface components {
             area_path: string;
             /** Report Reasons */
             report_reasons: string[];
+            /** Hidden */
+            hidden: boolean;
         };
         /** InvitationBannerDTO */
         InvitationBannerDTO: {

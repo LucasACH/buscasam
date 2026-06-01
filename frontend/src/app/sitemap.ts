@@ -22,7 +22,9 @@ function publicBase(): string {
 type SitemapEntry = { id: number; lastmod: string | null };
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const r = await fetch(`${internalApiBase()}/sitemap`, { cache: "no-store" });
+  const r = await fetch(`${internalApiBase()}/sitemap`, {
+    next: { revalidate: 3600 },
+  });
   if (!r.ok) return [];
   const entries = (await r.json()) as SitemapEntry[];
   const base = publicBase();

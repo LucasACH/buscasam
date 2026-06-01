@@ -193,21 +193,24 @@ function InspectView({
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
-          <Button
-            variant="destructive"
-            disabled={pending}
-            onClick={() => run(hide)}
-            className="bg-destructive border-transparent text-white hover:bg-[#b91c1c]"
-          >
-            <EyeOff size={14} strokeWidth={1.9} /> Ocultar
-          </Button>
-          <Button
-            variant="outline"
-            disabled={pending}
-            onClick={() => run(unhide)}
-          >
-            <Eye size={14} strokeWidth={1.9} /> Mostrar
-          </Button>
+          {metadata.hidden ? (
+            <Button
+              variant="outline"
+              disabled={pending}
+              onClick={() => run(unhide)}
+            >
+              <Eye size={14} strokeWidth={1.9} /> Mostrar
+            </Button>
+          ) : (
+            <Button
+              variant="destructive"
+              disabled={pending}
+              onClick={() => run(hide)}
+              className="bg-destructive border-transparent text-white hover:bg-[#b91c1c]"
+            >
+              <EyeOff size={14} strokeWidth={1.9} /> Ocultar
+            </Button>
+          )}
           <Button
             variant="ghost"
             disabled={pending}

@@ -171,7 +171,7 @@ test("happy path: invitado → login → chip + bandeja loop → logout", async 
   // 6. Logout (inside the user menu) returns to the invitado view.
   await page.getByRole("button", { name: /Ada Lovelace/i }).click();
   await page.getByRole("button", { name: /Cerrar sesión/i }).click();
-  // Logout does router.replace("/"), and "/" redirects to /buscar (app/page.tsx).
+  // Logout does router.replace("/"), and "/" redirects to /buscar (next.config.ts).
   await expect(page).toHaveURL(/\/buscar$/);
   await expect(
     page.getByRole("link", { name: /Iniciar sesión con UNSAM/i }),

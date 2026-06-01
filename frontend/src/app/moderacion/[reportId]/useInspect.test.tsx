@@ -34,6 +34,7 @@ const META: InspectMetadataDTO = {
   tipo: "tesis",
   area_path: "ing.sistemas",
   report_reasons: ["spam"],
+  hidden: false,
 };
 
 describe("useInspect", () => {
