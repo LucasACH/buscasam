@@ -141,9 +141,16 @@ def _fuzzy_candidates_ctes(
 ) -> tuple[str, dict[str, object]]:
     """Trigram sibling of `_lexical_candidates_ctes`, exposing `fz_ranked
     (doc_id, body_text, score, rank)` — readable docs whose body has a word
-    similar to `:q`. Caller must bind `:q` and `set_config` the
-    `pg_trgm.word_similarity_threshold` GUC; when `cap` is not None the params
-    dict adds `:fz_cap`."""
+    similar to `:q`. Caller must bind `:q` and `:fz_threshold`; when `cap` is not
+    None the params dict adds `:fz_cap`.
+
+    Uses an explicit `word_similarity(...) >= :fz_threshold` comparison rather than
+    the `<%` operator + `pg_trgm.word_similarity_threshold` GUC: the GUC must be
+    set transaction-locally, but the request session executes each statement in
+    its own transaction, so a `set_config(..., true)` is reset before this query
+    runs (the threshold silently degrades to match-all). The bound param is
+    deterministic regardless of session/pooling; it forgoes GIN-index
+    acceleration, acceptable until the corpus is large."""
     cap_clause = "ORDER BY score DESC LIMIT :fz_cap" if cap is not None else ""
     ctes = f"""
         fz_scored AS (
@@ -152,7 +159,7 @@ def _fuzzy_candidates_ctes(
                    word_similarity(:q, c.body_text) AS score
             FROM chunks c
             JOIN documents d ON d.id = c.doc_id
-            WHERE :q <% c.body_text
+            WHERE word_similarity(:q, c.body_text) >= :fz_threshold
               AND c.is_current
               AND {where}
               {filter_clauses}
@@ -209,7 +216,8 @@ async def run(
     min_semantic_similarity: float = 0.84,
     semantic_only_trgm_threshold: float = 0.4,
 ) -> Results:
-    if filters.orden == "recientes":
+    # No query → nothing to rank; list filtered docs by date (browse-by-filter).
+    if filters.orden == "recientes" or not filters.q:
         return await _run_recientes(session, filters, user_ctx)
     if embedding is None:
         return await _run_lexical(session, filters, user_ctx)
@@ -234,7 +242,7 @@ async def run_count(
 ) -> int:
     """Count-only sibling of `run`: returns the same `total` the full query would,
     stopping at the candidate CTE (no ts_headline, document join, or paging)."""
-    if filters.orden == "recientes":
+    if filters.orden == "recientes" or not filters.q:
         return await _count_recientes(session, filters, user_ctx)
     if embedding is None:
         return await _count_lexical(session, filters, user_ctx)
@@ -263,7 +271,6 @@ async def run_fuzzy(
         where=where, filter_clauses=filter_clauses, cap=RELEVANCE_CAP
     )
     offset = (filters.pagina - 1) * PAGE_SIZE
-    await _set_word_similarity_threshold(session, threshold)
     sql = text(
         f"""
         WITH {fz_ctes}
@@ -285,6 +292,7 @@ async def run_fuzzy(
     )
     params: dict[str, object] = {
         "q": filters.q,
+        "fz_threshold": threshold,
         "headline_opts": TS_HEADLINE_OPTS,
         "limit": PAGE_SIZE,
         "offset": offset,
@@ -327,24 +335,15 @@ async def run_fuzzy_count(
     fz_ctes, fz_params = _fuzzy_candidates_ctes(
         where=where, filter_clauses=filter_clauses, cap=RELEVANCE_CAP
     )
-    await _set_word_similarity_threshold(session, threshold)
     sql = text(f"WITH {fz_ctes} SELECT count(*) AS total FROM fz_ranked")
     params: dict[str, object] = {
         "q": filters.q,
+        "fz_threshold": threshold,
         **fz_params,
         **where_params,
         **_filter_params(filters),
     }
     return (await session.execute(sql, params)).scalar_one()
-
-
-async def _set_word_similarity_threshold(
-    session: AsyncSession, threshold: float
-) -> None:
-    await session.execute(
-        text("SELECT set_config('pg_trgm.word_similarity_threshold', :thr, true)"),
-        {"thr": str(threshold)},
-    )
 
 
 async def has_lexemes(session: AsyncSession, q: str) -> bool:
@@ -522,7 +521,7 @@ def _hybrid_candidates_ctes(*, lex_ctes: str, where: str, filter_clauses: str) -
             SELECT DISTINCT c.doc_id
             FROM chunks c
             JOIN documents d ON d.id = c.doc_id
-            WHERE :q <% c.body_text
+            WHERE word_similarity(:q, c.body_text) >= :trgm_threshold
               AND c.is_current
               AND {where}
               {filter_clauses}
