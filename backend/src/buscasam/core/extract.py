@@ -228,8 +228,7 @@ _VERTEX_RESPONSE_SCHEMA = {
 }
 _PORTUGUESE_MARKERS = re.compile(
     r"\b(este documento descreve|previs[aã]o|s[eé]ries temporais|redes neurais|"
-    r"m[eé]dia|avalia[cç][aã]o|utilizando|t[eé]cnicas estoc[aá]sticas|"
-    r"j[aá]|por outro lado|informa[cç][oõ]es|aprendizagem)\b",
+    r"avalia[cç][aã]o|j[aá]|por outro lado|informa[cç][oõ]es|aprendizagem)\b",
     re.IGNORECASE,
 )
 
@@ -379,6 +378,12 @@ class _LlmMetadata:
     keywords: list[str]
 
 
+_SPANISH_SYSTEM_INSTRUCTION = (
+    "Respondé siempre en español, sin excepción. Nunca uses portugués ni inglés. "
+    "Traducí al español cualquier término del texto fuente que esté en otro idioma."
+)
+
+
 def _metadata_prompt(doc: ExtractedDoc, fallback: IndexableMetadata) -> str:
     return (
         "Sos un asistente que resume documentos académicos.\n"
@@ -470,6 +475,8 @@ async def _call_vertex(
             config={
                 "response_mime_type": "application/json",
                 "response_schema": _VERTEX_RESPONSE_SCHEMA,
+                "temperature": 0,
+                "system_instruction": _SPANISH_SYSTEM_INSTRUCTION,
             },
         )
     except Exception as e:  # SDK raises its own error types; any failure -> fallback.
