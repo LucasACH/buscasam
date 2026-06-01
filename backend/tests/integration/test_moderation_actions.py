@@ -247,6 +247,37 @@ async def test_unhide_notifies_with_unhidden_kind(session):
     assert row["event_key"] == f"document_unhidden:{outcome.action_id}"
 
 
+async def test_unhide_of_never_hidden_doc_notifies_no_one(session):
+    docente = await make_user(session, role="docente")
+    doc_id = await make_document(session)
+    owner = await make_user(session)
+    await make_document_author(session, doc_id, user_id=owner, status="owner")
+    report_id = await _file_report(session, doc_id, await make_user(session))
+
+    await unhide(session, _docente_ctx(docente), report_id)
+
+    assert await _report_status(session, report_id) == "resolved"
+    count = (
+        await session.execute(text("SELECT count(*) FROM notifications"))
+    ).scalar_one()
+    assert count == 0
+
+
+async def test_hide_of_already_hidden_doc_notifies_no_one(session):
+    docente = await make_user(session, role="docente")
+    doc_id = await make_document(session, moderation_hidden=True)
+    owner = await make_user(session)
+    await make_document_author(session, doc_id, user_id=owner, status="owner")
+    report_id = await _file_report(session, doc_id, await make_user(session))
+
+    await hide(session, _docente_ctx(docente), report_id, "spam")
+
+    count = (
+        await session.execute(text("SELECT count(*) FROM notifications"))
+    ).scalar_one()
+    assert count == 0
+
+
 async def test_notify_is_idempotent_on_event_key(session):
     """A retry of the same action's fan-out inserts no duplicate
     (ON CONFLICT (user_id, event_key) DO NOTHING)."""

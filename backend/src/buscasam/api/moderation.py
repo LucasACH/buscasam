@@ -62,6 +62,9 @@ class InspectMetadataDTO(BaseModel):
     # chose), so the moderator can see why it was reported before acting. Sorted,
     # matching the queue's aggregation.
     report_reasons: list[str]
+    # Current moderation visibility, so the UI offers only the action that
+    # changes state: "Mostrar" for a hidden doc, "Ocultar" for a visible one.
+    hidden: bool
 
 
 @router.post("/reports", status_code=204)
@@ -117,7 +120,8 @@ async def inspect_document(
             await session.execute(
                 text(
                     "SELECT d.id, d.titulo, d.tipo, d.area_path::text AS area_path, "
-                    "       d.abstract, COALESCE(d.keywords, ARRAY[]::text[]) AS keywords "
+                    "       d.abstract, d.moderation_hidden_at, "
+                    "       COALESCE(d.keywords, ARRAY[]::text[]) AS keywords "
                     f"FROM documents d WHERE {where}"
                 ),
                 params,
@@ -165,6 +169,7 @@ async def inspect_document(
         tipo=row["tipo"],
         area_path=row["area_path"],
         report_reasons=list(reasons),
+        hidden=row["moderation_hidden_at"] is not None,
     )
 
 

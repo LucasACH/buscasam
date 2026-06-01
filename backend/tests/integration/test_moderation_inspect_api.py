@@ -131,6 +131,25 @@ async def test_document_returns_metadata_for_privado_reported_doc(client, sessio
     assert body["palabras_clave"] == ["algebra", "topologia"]
     assert body["autores"] == [{"display_name": "Ana", "user_id": author_user_id}]
     assert body["report_reasons"] == ["spam"]
+    assert body["hidden"] is False
+
+
+@pytest.mark.parametrize("moderation_hidden", [False, True])
+async def test_document_reports_current_hidden_state(
+    client, session, moderation_hidden
+):
+    doc_id = await make_document(session, moderation_hidden=moderation_hidden)
+    report_id = await _file_report(
+        session, doc_id, reporter=await make_user(session)
+    )
+    cookie = await _docente_cookie(session)
+
+    r = await client.get(
+        f"/api/moderation/reports/{report_id}/document", headers=_headers(cookie)
+    )
+
+    assert r.status_code == 200
+    assert r.json()["hidden"] is moderation_hidden
 
 
 @pytest.mark.parametrize("status", ["open", "resolved"])
