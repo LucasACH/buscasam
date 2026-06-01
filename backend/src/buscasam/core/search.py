@@ -76,7 +76,7 @@ async def execute(
     fuzzy_word_similarity_threshold: float,
     semantic_only_trgm_threshold: float,
 ) -> ExecuteResult:
-    if filters.orden == "recientes" or not filters.q:
+    if filters.orden == "recientes":
         embedding: np.ndarray | None = None
         lexical_fallback = False
     else:
