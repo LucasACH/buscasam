@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
+import posthog from "posthog-js";
 import {
   ChevronLeft,
   Download,
@@ -90,7 +91,10 @@ function InspectView({
   const [reason, setReason] = useState("");
   const [pending, setPending] = useState(false);
 
-  async function run(action: Action) {
+  async function run(
+    action: Action,
+    actionName: "hide" | "unhide" | "dismiss",
+  ) {
     setPending(true);
     // finally re-enables the buttons (their disabled state doubles as the
     // double-click guard) so a thrown action never leaves the user stuck.
@@ -100,6 +104,10 @@ function InspectView({
         toast.error("No se pudo aplicar la acción");
         return;
       }
+      posthog.capture("moderation_action_applied", {
+        report_id: reportId,
+        action: actionName,
+      });
       router.push("/moderacion");
     } catch {
       toast.error("No se pudo aplicar la acción");
@@ -197,7 +205,7 @@ function InspectView({
             <Button
               variant="outline"
               disabled={pending}
-              onClick={() => run(unhide)}
+              onClick={() => run(unhide, "unhide")}
             >
               <Eye size={14} strokeWidth={1.9} /> Mostrar
             </Button>
@@ -205,7 +213,7 @@ function InspectView({
             <Button
               variant="destructive"
               disabled={pending}
-              onClick={() => run(hide)}
+              onClick={() => run(hide, "hide")}
               className="bg-destructive border-transparent text-white hover:bg-[#b91c1c]"
             >
               <EyeOff size={14} strokeWidth={1.9} /> Ocultar
@@ -214,7 +222,7 @@ function InspectView({
           <Button
             variant="ghost"
             disabled={pending}
-            onClick={() => run(dismiss)}
+            onClick={() => run(dismiss, "dismiss")}
           >
             Descartar
           </Button>

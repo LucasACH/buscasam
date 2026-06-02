@@ -19,6 +19,8 @@ import {
   Trash2,
 } from "lucide-react";
 
+import posthog from "posthog-js";
+
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { TONE_CLASSES, type BadgeTone } from "@/components/StatusBadge";
@@ -247,6 +249,10 @@ function EditarForm({
       // rather than a flash before the redirect.
       const [result] = await Promise.all([actions.publish(), sleep(2000)]);
       if (result === "published") {
+        posthog.capture("document_published", {
+          doc_id: docId,
+          visibility: state.visibility,
+        });
         setPublishPhase("done");
         fireConfetti();
         await sleep(1600);
@@ -545,6 +551,7 @@ function DeleteTrabajo({
         toast.error("No se pudo eliminar");
         return;
       }
+      posthog.capture("document_deleted");
       router.push("/mis-trabajos");
     } catch {
       toast.error("No se pudo eliminar");

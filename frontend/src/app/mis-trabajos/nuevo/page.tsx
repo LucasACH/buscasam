@@ -7,6 +7,8 @@ import { useForm, useFieldArray, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
+import posthog from "posthog-js";
+
 import { api } from "@/api/client";
 import { useUser } from "@/lib/useUser";
 import { AreasCascader } from "@/components/AreasCascader";
@@ -160,6 +162,13 @@ function NuevoForm() {
         body: form,
       });
       if (uploadResp.status === 202) {
+        posthog.capture("document_created", {
+          doc_id: id,
+          tipo: values.tipo,
+          visibilidad: values.visibilidad,
+          has_external_authors: values.external_authors.length > 0,
+          has_coauthors: values.coauthor_user_ids.length > 0,
+        });
         router.replace(`/mis-trabajos/${id}/editar`);
         return;
       }

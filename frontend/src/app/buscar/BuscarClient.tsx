@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import posthog from "posthog-js";
 
 import { Button } from "@/components/ui/button";
 
@@ -111,7 +112,13 @@ function BuscarPageInner() {
             className="relative flex items-center"
             onSubmit={(e) => {
               e.preventDefault();
-              update({ q: qInput.trim() });
+              const trimmed = qInput.trim();
+              posthog.capture("search_submitted", {
+                query: trimmed,
+                has_filters: hasFilters,
+                orden,
+              });
+              update({ q: trimmed });
             }}
           >
             <label htmlFor="q" className="sr-only">
@@ -261,7 +268,12 @@ function EmptyResults({ onClear }: { onClear?: () => void }) {
         búsqueda.
       </div>
       {onClear && (
-        <Button variant="outline" size="sm" className="mt-1.5" onClick={onClear}>
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-1.5"
+          onClick={onClear}
+        >
           Limpiar filtros
         </Button>
       )}
