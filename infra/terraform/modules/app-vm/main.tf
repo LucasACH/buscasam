@@ -76,6 +76,9 @@ resource "google_compute_instance" "app" {
   }
 
   metadata = {
+    # OS Login lets the deploy job SSH in as the IAM-granted deploy SA (ADR-0013),
+    # no per-VM SSH keys to manage.
+    enable-oslogin = "TRUE"
     startup-script = templatefile("${path.module}/startup.sh", {
       project_id               = var.project_id
       region                   = var.region
@@ -95,6 +98,25 @@ resource "google_compute_instance" "app" {
   }
 
   allow_stopping_for_update = true
+}
+
+# Deploy job (ADR-0013): instance-scoped least privilege. osAdminLogin = sudo on
+# this VM only (deploy.sh needs root/docker); IAP tunnel = reach :22 with no
+# public IP. Nothing project-wide.
+resource "google_compute_instance_iam_member" "deploy_oslogin" {
+  project       = var.project_id
+  zone          = var.zone
+  instance_name = google_compute_instance.app.name
+  role          = "roles/compute.osAdminLogin"
+  member        = var.deploy_sa_member
+}
+
+resource "google_iap_tunnel_instance_iam_member" "deploy_tunnel" {
+  project  = var.project_id
+  zone     = var.zone
+  instance = google_compute_instance.app.name
+  role     = "roles/iap.tunnelResourceAccessor"
+  member   = var.deploy_sa_member
 }
 
 # Unmanaged instance group: the LB backend wrapping the single stateful VM.

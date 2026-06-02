@@ -70,6 +70,11 @@ variable "secret_ids" {
   description = "Secret Manager IDs (== .env var names) the VM fetches at boot."
 }
 
+variable "deploy_sa_member" {
+  type        = string
+  description = "IAM member (serviceAccount:...) the deploy job uses; granted instance-scoped osAdminLogin + IAP tunnel."
+}
+
 variable "metadata_llm_enabled" {
   type    = bool
   default = false

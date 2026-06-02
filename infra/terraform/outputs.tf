@@ -25,3 +25,8 @@ output "workload_identity_provider" {
 output "ci_service_account_email" {
   value = module.cicd.ci_service_account_email
 }
+
+output "deploy_service_account_email" {
+  description = "Set as the DEPLOY_SERVICE_ACCOUNT repo variable for the deploy job."
+  value       = module.cicd.deploy_service_account_email
+}

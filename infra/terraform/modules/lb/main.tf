@@ -1,5 +1,5 @@
-# Global external HTTPS LB -> single app VM. TLS terminates here
-# (TLS_MODE=upstream); nginx on the VM trusts the Google front-end CIDRs.
+# Global external HTTPS LB -> single app VM. TLS terminates here; nginx on the VM
+# serves :80 and trusts the Google front-end CIDRs for X-Forwarded-*.
 resource "google_compute_global_address" "lb" {
   name = "buscasam-lb"
 }
