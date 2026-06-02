@@ -213,7 +213,7 @@ jobs:
         run: docker build -t "$IMAGE_REPO/backend:$TAG" --metadata-file /tmp/backend-meta.json --push backend
 
       - name: Build & push frontend
-        run: docker build -t "$IMAGE_REPO/frontend:$TAG" --metadata-file /tmp/frontend-meta.json --build-arg NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN="$PH_TOKEN" --push frontend
+        run: docker build -t "$IMAGE_REPO/frontend:$TAG" --metadata-file /tmp/frontend-meta.json --build-arg NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN="$PH_TOKEN" --build-arg NEXT_PUBLIC_APP_VERSION="$TAG" --push frontend
         env:
           PH_TOKEN: ${{ vars.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN }}
 
