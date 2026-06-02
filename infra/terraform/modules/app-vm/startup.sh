@@ -31,7 +31,9 @@ curl -fsSL https://get.docker.com | sh
 # --- Cloud Logging via Ops Agent: ship container logs (json-file driver stays,
 # `docker compose logs` keeps working). The exclude_logs processor drops nginx
 # access-log lines before ingestion so they never count toward the 50 GiB/mo
-# free tier; nginx error_log (plain text) and every other service still ship. ---
+# free tier (uvicorn access logs are kept, so per-API calls are visible; nginx
+# fronts the same requests, so dropping its access log avoids double-logging).
+# nginx error_log (plain text) and every other service still ship. ---
 curl -sSO https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh
 bash add-google-cloud-ops-agent-repo.sh --also-install
 mkdir -p /etc/google-cloud-ops-agent
@@ -45,16 +47,15 @@ logging:
   processors:
     parse_docker_json:
       type: parse_json
-    drop_access_logs:
+    drop_nginx_access:
       type: exclude_logs
       match_any:
         - 'jsonPayload.log =~ "\"method\":\"[A-Z]+\",\"uri\":"'
-        - 'jsonPayload.log =~ "INFO:.* - \"[A-Z]+ .* HTTP/1.1\""'
   service:
     pipelines:
       docker:
         receivers: [docker_containers]
-        processors: [parse_docker_json, drop_access_logs]
+        processors: [parse_docker_json, drop_nginx_access]
 # Logs only: the VM SA has logging.logWriter but not monitoring.metricWriter, so
 # disable host-metric collection (otherwise the metrics exporter spams
 # PermissionDenied and drops data every ~20s).
