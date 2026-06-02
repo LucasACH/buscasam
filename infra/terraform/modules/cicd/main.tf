@@ -45,3 +45,18 @@ resource "google_storage_bucket_iam_member" "ci_config_writer" {
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${google_service_account.ci.email}"
 }
+
+# Identity the `deploy` job impersonates to roll the app VM via IAP SSH (ADR-0013).
+# Separate from the CI SA so prod-access blast radius stays off the build identity;
+# its only powers are instance-scoped (osAdminLogin + IAP tunnel), granted in
+# app-vm against the single VM.
+resource "google_service_account" "deploy" {
+  account_id   = "buscasam-deploy"
+  display_name = "BUSCASAM deploy (GitHub Actions)"
+}
+
+resource "google_service_account_iam_member" "deploy_wif" {
+  service_account_id = google_service_account.deploy.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repo}"
+}

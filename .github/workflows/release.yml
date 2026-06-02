@@ -1,15 +1,30 @@
-# ADR-0013. On a release tag, validate the production tree, build
-# backend+frontend images, push to Artifact Registry, and upload the infra
-# config tarball to the GCS config bucket — both keyed by the tag. The app VM
-# pulls this ref at boot / on deploy.sh.
+# ADR-0013. On a release tag: validate the production tree, build backend+frontend
+# images and push to Artifact Registry, upload the infra config tarball to GCS,
+# cut a GitHub Release (notes + image digests), then auto-deploy the app VM over
+# IAP SSH and health-check it. No manual deploy.sh.
+#
+# Rollback / redeploy a prior ref without rebuilding: run this workflow manually
+# (Actions > release > Run workflow) with `ref` = the tag to redeploy. Its images
+# and config already live in AR/GCS, so it skips validate+build and only deploys.
 #
 # Repo variables (Settings > Variables) from `terraform output`:
-#   WORKLOAD_IDENTITY_PROVIDER, CI_SERVICE_ACCOUNT, IMAGE_REPO, CONFIG_BUCKET, GCP_REGION
+#   WORKLOAD_IDENTITY_PROVIDER, CI_SERVICE_ACCOUNT, DEPLOY_SERVICE_ACCOUNT,
+#   IMAGE_REPO, CONFIG_BUCKET, GCP_REGION, GCP_ZONE, SERVER_NAME
 name: release
 
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Existing tag to redeploy (rollback). Images/config must already be published."
+        required: true
+
+# One release/deploy at a time; never interrupt an in-flight deploy.
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -19,6 +34,7 @@ env:
 
 jobs:
   validate:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -35,13 +51,13 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         with:
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
@@ -84,11 +100,11 @@ jobs:
             > /tmp/backend-requirements.txt
           uv tool run pip-audit --requirement /tmp/backend-requirements.txt
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 10.28.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
           cache: pnpm
@@ -133,7 +149,7 @@ jobs:
             /tmp/openapi.json -o /tmp/schema.d.ts
           diff -u ../frontend/src/api/schema.d.ts /tmp/schema.d.ts
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
 
       - name: Check Terraform
         working-directory: infra/terraform
@@ -171,32 +187,33 @@ jobs:
         run: docker build frontend
 
   release:
+    if: github.event_name == 'push'
     needs: validate
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write   # cut the GitHub Release
       id-token: write   # mint the OIDC token for Workload Identity Federation
     env:
       TAG: ${{ github.ref_name }}
       IMAGE_REPO: ${{ vars.IMAGE_REPO }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
-      - uses: google-github-actions/auth@v3
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
           workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.CI_SERVICE_ACCOUNT }}
 
-      - uses: google-github-actions/setup-gcloud@v3
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
 
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
 
       - name: Build & push backend
-        run: docker build -t "$IMAGE_REPO/backend:$TAG" --push backend
+        run: docker build -t "$IMAGE_REPO/backend:$TAG" --metadata-file /tmp/backend-meta.json --push backend
 
       - name: Build & push frontend
-        run: docker build -t "$IMAGE_REPO/frontend:$TAG" --build-arg NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN="$PH_TOKEN" --push frontend
+        run: docker build -t "$IMAGE_REPO/frontend:$TAG" --metadata-file /tmp/frontend-meta.json --build-arg NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN="$PH_TOKEN" --push frontend
         env:
           PH_TOKEN: ${{ vars.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN }}
 
@@ -208,3 +225,64 @@ jobs:
 
       - name: Upload config to GCS
         run: gcloud storage cp config.tgz "gs://${{ vars.CONFIG_BUCKET }}/$TAG/config.tgz"
+
+      - name: Cut GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          be="$(jq -r '."containerimage.digest"' /tmp/backend-meta.json)"
+          fe="$(jq -r '."containerimage.digest"' /tmp/frontend-meta.json)"
+          gh release create "$TAG" --title "$TAG" --verify-tag --generate-notes \
+            --notes "## Images (\`$IMAGE_REPO\`)
+          - backend \`$TAG\` @ \`$be\`
+          - frontend \`$TAG\` @ \`$fe\`"
+
+  deploy:
+    needs: release
+    # Runs after a successful release, or standalone for a manual rollback.
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || needs.release.result == 'success') }}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      TAG: ${{ github.event.inputs.ref || github.ref_name }}
+    steps:
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.DEPLOY_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      - name: Deploy to app VM over IAP
+        env:
+          CONFIG_BUCKET: ${{ vars.CONFIG_BUCKET }}
+          GCP_ZONE: ${{ vars.GCP_ZONE }}
+        run: |
+          # Remote vars expand on the VM (single-quoted heredoc); TAG/CONFIG_BUCKET
+          # are injected via `sudo env`. Pull this ref's config, then deploy.sh
+          # (compose pull -> migrate -> up).
+          cat > /tmp/remote-deploy.sh <<'REMOTE'
+          set -euo pipefail
+          TOKEN="$(curl -fsS -H 'Metadata-Flavor: Google' \
+            http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token \
+            | jq -r .access_token)"
+          curl -fsS -H "Authorization: Bearer $TOKEN" \
+            "https://storage.googleapis.com/storage/v1/b/$CONFIG_BUCKET/o/$TAG%2Fconfig.tgz?alt=media" \
+            -o /tmp/config.tgz
+          tar -xzf /tmp/config.tgz -C /opt/buscasam
+          bash /opt/buscasam/infra/scripts/deploy.sh "$TAG"
+          REMOTE
+          gcloud compute ssh buscasam-app \
+            --zone "$GCP_ZONE" --tunnel-through-iap --quiet \
+            --command "sudo env TAG='$TAG' CONFIG_BUCKET='$CONFIG_BUCKET' bash -s" \
+            < /tmp/remote-deploy.sh
+
+      - name: Post-deploy health check
+        env:
+          SERVER_NAME: ${{ vars.SERVER_NAME }}
+        run: |
+          curl --fail --silent --show-error \
+            --retry 18 --retry-all-errors --retry-delay 10 \
+            "https://$SERVER_NAME/" -o /dev/null
+          echo "https://$SERVER_NAME healthy after deploying $TAG"

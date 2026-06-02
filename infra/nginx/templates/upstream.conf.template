@@ -1,6 +1,5 @@
-# TLS_MODE=upstream (ADR-0009 §9): a load balancer terminates TLS ahead of us
-# (GCP HTTPS LB at MVP). Serve the app on :80, trusting X-Forwarded-* only from
-# the configured upstream CIDRs.
+# ADR-0009 §9: a load balancer terminates TLS ahead of us (GCP HTTPS LB). Serve
+# the app on :80, trusting X-Forwarded-* only from the configured upstream CIDRs.
 
 server {
     listen 80 default_server;

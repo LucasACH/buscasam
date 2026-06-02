@@ -7,3 +7,11 @@ output "workload_identity_provider" {
 output "ci_service_account_email" {
   value = google_service_account.ci.email
 }
+
+output "deploy_service_account_email" {
+  value = google_service_account.deploy.email
+}
+
+output "deploy_service_account_member" {
+  value = "serviceAccount:${google_service_account.deploy.email}"
+}
