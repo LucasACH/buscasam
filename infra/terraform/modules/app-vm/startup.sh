@@ -28,6 +28,36 @@ apt-get update -y
 apt-get install -y jq ca-certificates curl
 curl -fsSL https://get.docker.com | sh
 
+# --- Cloud Logging via Ops Agent: ship container logs (json-file driver stays,
+# `docker compose logs` keeps working). The exclude_logs processor drops nginx
+# access-log lines before ingestion so they never count toward the 50 GiB/mo
+# free tier; nginx error_log (plain text) and every other service still ship. ---
+curl -sSO https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh
+bash add-google-cloud-ops-agent-repo.sh --also-install
+mkdir -p /etc/google-cloud-ops-agent
+cat > /etc/google-cloud-ops-agent/config.yaml <<'YAML'
+logging:
+  receivers:
+    docker_containers:
+      type: files
+      include_paths:
+        - /var/lib/docker/containers/*/*-json.log
+  processors:
+    parse_docker_json:
+      type: parse_json
+    drop_access_logs:
+      type: exclude_logs
+      match_any:
+        - 'jsonPayload.log =~ "\"method\":\"[A-Z]+\",\"uri\":"'
+        - 'jsonPayload.log =~ "INFO:.* - \"[A-Z]+ .* HTTP/1.1\""'
+  service:
+    pipelines:
+      docker:
+        receivers: [docker_containers]
+        processors: [parse_docker_json, drop_access_logs]
+YAML
+systemctl restart google-cloud-ops-agent
+
 # --- host user + state dirs (ADR-0009 §7) ---
 id buscasam >/dev/null 2>&1 || useradd --system --uid 1000 --user-group --shell /usr/sbin/nologin buscasam
 usermod -aG docker buscasam || true
