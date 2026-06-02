@@ -24,7 +24,10 @@ const USER = {
 };
 
 const AREAS = [
-  { area_path: "escuela_ciencia", display_name: "Escuela de Ciencia y Tecnología" },
+  {
+    area_path: "escuela_ciencia",
+    display_name: "Escuela de Ciencia y Tecnología",
+  },
   { area_path: "escuela_ciencia.cyt", display_name: "Ciencia y Tecnología" },
   {
     area_path: "escuela_ciencia.cyt.ciencia_datos",
@@ -114,7 +117,8 @@ const DOC_DETAIL = {
   // Long unbreakable strings (filename, email) are the other half of the
   // overflow class — they must truncate, not push the grid track wide.
   archivo_principal: {
-    original_filename: "informe-final-analisis-multivariable-version-definitiva.pdf",
+    original_filename:
+      "informe-final-analisis-multivariable-version-definitiva.pdf",
     size_bytes: 2048,
     mime: "application/pdf",
   },
@@ -149,11 +153,15 @@ async function installApiMocks(page: Page, authed: boolean) {
         ? route.fulfill(json(USER))
         : route.fulfill({ status: 401, body: "" });
     }
-    if (path.includes("/api/notifications")) return route.fulfill(json({ items: [], count: 0 }));
+    if (path.includes("/api/notifications"))
+      return route.fulfill(json({ items: [], count: 0 }));
     if (path.includes("/api/search")) return route.fulfill(json(RESULTS));
-    if (path.includes("/api/me/documents/deleted")) return route.fulfill(json(DELETED_DOCS));
-    if (path.endsWith("/api/me/documents")) return route.fulfill(json(OWN_DOCS));
-    if (path.includes("/api/moderation/queue")) return route.fulfill(json({ items: QUEUE }));
+    if (path.includes("/api/me/documents/deleted"))
+      return route.fulfill(json(DELETED_DOCS));
+    if (path.endsWith("/api/me/documents"))
+      return route.fulfill(json(OWN_DOCS));
+    if (path.includes("/api/moderation/queue"))
+      return route.fulfill(json({ items: QUEUE }));
     if (path.includes("/api/areas")) return route.fulfill(json(AREAS));
     if (path.includes("/api/users/search")) return route.fulfill(json([]));
     if (path.includes("/related")) return route.fulfill(json([]));
@@ -195,7 +203,11 @@ const CASES: Case[] = [
     name: "buscar-guest-results",
     path: "/buscar?q=fisica",
     authed: false,
-    ready: (p) => p.getByText(/resultado/i).first().waitFor(),
+    ready: (p) =>
+      p
+        .getByText(/resultado/i)
+        .first()
+        .waitFor(),
   },
   {
     name: "buscar-authed",
@@ -209,7 +221,11 @@ const CASES: Case[] = [
     authed: false,
     ssr: async () => {
       await setMockRoute({ path: "/api/areas", status: 200, body: AREAS });
-      await setMockRoute({ path: `/api/docs/${DOC_ID}`, status: 200, body: DOC_DETAIL });
+      await setMockRoute({
+        path: `/api/docs/${DOC_ID}`,
+        status: 200,
+        body: DOC_DETAIL,
+      });
     },
     ready: (p) => p.getByText(DOC_DETAIL.titulo).waitFor(),
   },
