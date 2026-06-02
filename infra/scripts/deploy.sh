@@ -43,4 +43,10 @@ compose up -d
 # Recreated api/frontend get new IPs; nginx caches upstream IPs at start, so
 # re-resolve them to avoid stale-upstream 502s after a deploy.
 compose restart nginx
-docker image prune -f
+# Reclaim disk from superseded releases. `-a` (not just dangling) is required:
+# prior versions stay tagged (backend:v1.1.0, frontend:v1.1.1, …) and would
+# otherwise accumulate until the 20G disk fills and the next `compose pull`
+# fails with "no space left on device". Only the now-running version's images
+# are in use, so this keeps current + base images and drops the rest. AR still
+# holds every tag, so rollback (re-pull a prior ref) is unaffected.
+docker image prune -af
