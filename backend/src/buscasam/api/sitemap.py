@@ -32,7 +32,7 @@ async def list_sitemap(
     rows = (
         await session.execute(
             text(
-                "SELECT d.id, COALESCE(d.published_at, d.created_at) AS lastmod "
+                "SELECT d.id, COALESCE(d.published_at, d.fecha) AS lastmod "
                 f"FROM documents d WHERE {invitado_where('d')} "
                 "ORDER BY d.id"
             )
