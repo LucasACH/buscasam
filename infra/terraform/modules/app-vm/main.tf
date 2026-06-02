@@ -18,6 +18,13 @@ resource "google_project_iam_member" "log_writer" {
   member  = "serviceAccount:${google_service_account.app.email}"
 }
 
+# Ops Agent ships host metrics (CPU/mem/disk) to Cloud Monitoring.
+resource "google_project_iam_member" "metric_writer" {
+  project = var.project_id
+  role    = "roles/monitoring.metricWriter"
+  member  = "serviceAccount:${google_service_account.app.email}"
+}
+
 resource "google_artifact_registry_repository_iam_member" "app_reader" {
   repository = var.ar_repo_id
   role       = "roles/artifactregistry.reader"
