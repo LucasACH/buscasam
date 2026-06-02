@@ -26,7 +26,7 @@ Indexable text is extracted from PDF/DOCX/ODT via per-format libraries (`pdfmine
    class IndexableMetadata:
        abstract: str                  # may be empty when extraction yielded near-zero text
        keywords: list[str]            # 0..n; n ≤ 10
-       fecha: date | None             # None → caller falls back to upload date
+       fecha: date                    # always set; today() when nothing extractable
 
    async def extract(sha256: str, mime: str) -> ExtractedDoc
    def derive_metadata(doc: ExtractedDoc) -> IndexableMetadata
@@ -51,8 +51,7 @@ Indexable text is extracted from PDF/DOCX/ODT via per-format libraries (`pdfmine
 
 8. Fecha: best-effort heuristic, author-authoritative:
    1. Scan first two pages for `\b(19|20)\d{2}\b` near cover-page tokens (`tesis|trabajo|presentado|defendido|publicado|tesina`); pick most-recent plausible match in `[1970, current_year + 1]`.
-   2. Fallback: PDF `/CreationDate` if plausible.
-   3. Else `None` (caller writes upload date from `document_versions.uploaded_at`).
+   2. Else `today()`. The PDF `/CreationDate` is not used: a freshly exported file carries the current year, so it produced a misleading suggestion rather than a real publication date.
 
    Stored as a suggestion for the staged publication form; author-editable before publish.
 

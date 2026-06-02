@@ -227,11 +227,13 @@ def test_derive_metadata_falls_back_to_first_paragraphs_when_no_heading():
 
 def test_derive_metadata_empty_doc_yields_empty_abstract():
     """ADR-0007 §9: empty extraction is not a failure."""
+    from datetime import date
+
     doc = ExtractedDoc(text="", paragraph_breaks=[], page_breaks=[], raw_metadata={})
     meta = derive_metadata(doc)
     assert meta.abstract == ""
     assert meta.keywords == []
-    assert meta.fecha is None
+    assert meta.fecha == date.today()
 
 
 def test_derive_metadata_picks_recent_plausible_year_near_cover_tokens():
