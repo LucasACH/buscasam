@@ -22,7 +22,9 @@ from buscasam.core.extract import (
     ExtractedDoc,
     OCRRequired,
     PDFEncryptionError,
+    _LLM_TEXT_CHAR_CAP,
     _clean_keywords,
+    _select_llm_text,
     derive_metadata,
     extract,
     probe_encrypted,
@@ -177,6 +179,28 @@ def _doc(text: str) -> ExtractedDoc:
     return ExtractedDoc(
         text=text, paragraph_breaks=breaks, page_breaks=[], raw_metadata={}
     )
+
+
+def test_select_llm_text_returns_short_text_whole():
+    text = "Resumen\n\nUn documento corto.\n\nConclusiones\n\nCierre."
+    assert _select_llm_text(text) == text
+
+
+def test_select_llm_text_drops_front_matter_on_long_doc():
+    cover = "Universidad Nacional\n\n" + ("portada relleno. " * 600)
+    body = "Introducción\n\n" + ("contenido real. " * 1000)
+    out = _select_llm_text(cover + "\n\n" + body)
+    assert "portada relleno" not in out
+    assert out.startswith("Introducción")
+
+
+def test_select_llm_text_pairs_head_with_conclusion_tail():
+    head = "Introducción\n\n" + ("desarrollo central. " * 1200)
+    conclusion = "Conclusiones\n\nEl aporte principal es el hallazgo final clave."
+    out = _select_llm_text(head + "\n\n" + conclusion + "\n\n" + ("anexo. " * 500))
+    assert len(out) <= _LLM_TEXT_CHAR_CAP + 10
+    assert "El aporte principal es el hallazgo final clave." in out
+    assert "[…]" in out
 
 
 def test_derive_metadata_extracts_abstract_after_resumen_heading():

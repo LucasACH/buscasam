@@ -180,8 +180,34 @@ _NEXT_HEADING = re.compile(
     r"Conclusiones|Referencias|Bibliograf[ií]a|Index|Contenidos?)\b",
     re.IGNORECASE | re.MULTILINE,
 )
+# First real content heading — everything before it is cover/index/acknowledgements.
+_FRONT_MATTER_END = re.compile(
+    r"^(?:Resumen|Abstract|Summary|Sinopsis|Introducci[oó]n)\b",
+    re.IGNORECASE | re.MULTILINE,
+)
+# Closing section that carries the findings (results/conclusions/discussion).
+_CONCLUSION_HEADING = re.compile(
+    r"^(?:Conclusi[oó]n(?:es)?|Resultados|Discusi[oó]n|Recomendaciones)\b",
+    re.IGNORECASE | re.MULTILINE,
+)
+# Any section heading — used to bound a section's body at the next heading.
+_ANY_HEADING = re.compile(
+    r"^(?:Resumen|Abstract|Summary|Sinopsis|Introducci[oó]n|Cap[ií]tulo|"
+    r"Objetivos|Marco te[oó]rico|Metodolog[ií]a|Materiales|M[eé]todos|"
+    r"Resultados|Discusi[oó]n|Conclusi[oó]n(?:es)?|Recomendaciones|"
+    r"Referencias|Bibliograf[ií]a|Anexos?|Ap[eé]ndices?|Index|Contenidos?)\b",
+    re.IGNORECASE | re.MULTILINE,
+)
 _ABSTRACT_WORD_CAP = 300
 _LLM_TEXT_CHAR_CAP = 12000
+# Budget reserved for the closing section (conclusions/results) when the body is
+# too long to send whole: the contribution lives at the end, which a head-only
+# slice never reaches.
+_LLM_CONCLUSION_CHAR_CAP = 5000
+# Don't strip "front matter" if the first content heading appears only deep into
+# the document — past this point a missing heading means odd formatting, not a
+# real cover/index to drop.
+_FRONT_MATTER_MAX_SKIP = 20000
 _KEYWORD_CAP = 10
 _KEYWORD_BLOCKLIST = {
     "este trabajo",
@@ -384,6 +410,50 @@ _SPANISH_SYSTEM_INSTRUCTION = (
 )
 
 
+def _strip_front_matter(text: str) -> str:
+    m = _FRONT_MATTER_END.search(text)
+    if m and m.start() <= _FRONT_MATTER_MAX_SKIP:
+        return text[m.start() :]
+    return text
+
+
+def _section_after(text: str, start: int) -> str:
+    """Body of the section whose heading starts at `start`, up to the next heading."""
+    body = text[start:]
+    nl = body.find("\n")
+    rest = body[nl + 1 :] if nl != -1 else ""
+    nxt = _ANY_HEADING.search(rest)
+    return (rest[: nxt.start()] if nxt else rest).strip()
+
+
+def _last_conclusion_match(text: str) -> re.Match[str] | None:
+    m = None
+    for m in _CONCLUSION_HEADING.finditer(text):
+        pass
+    return m
+
+
+def _select_llm_text(text: str) -> str:
+    """Pick the most summary-relevant slice within `_LLM_TEXT_CHAR_CAP`.
+
+    Short docs go whole. For long ones we drop front matter and pair the
+    intro-ward head with the closing section (results/conclusions), which a
+    plain head slice never reaches.
+    """
+    if len(text) <= _LLM_TEXT_CHAR_CAP:
+        return text
+    body = _strip_front_matter(text)
+    if len(body) <= _LLM_TEXT_CHAR_CAP:
+        return body
+    cm = _last_conclusion_match(body)
+    if cm:
+        conclusion = _section_after(body, cm.start())[:_LLM_CONCLUSION_CHAR_CAP]
+        head_budget = _LLM_TEXT_CHAR_CAP - len(conclusion)
+        if conclusion and cm.start() > head_budget:
+            return f"{body[:head_budget].rstrip()}\n\n[…]\n\n{conclusion.strip()}"
+    return body[:_LLM_TEXT_CHAR_CAP]
+
+
 def _metadata_prompt(doc: ExtractedDoc, fallback: IndexableMetadata) -> str:
     return (
         "Sos un asistente que resume documentos académicos.\n"
@@ -405,10 +475,12 @@ def _metadata_prompt(doc: ExtractedDoc, fallback: IndexableMetadata) -> str:
         f"Pistas (no las copies literalmente):\n"
         f"- Resumen heurístico: {fallback.abstract}\n"
         f"- Keywords candidatas: {', '.join(fallback.keywords)}\n\n"
-        "Resumí a partir del texto entre delimitadores. No copies JSON, código "
-        "ni tablas desde el texto fuente.\n"
+        "Resumí a partir del texto entre delimitadores. Puede ser un extracto "
+        "(inicio y conclusiones) de un documento más largo: resumí la obra "
+        "completa, no solo el comienzo. No copies JSON, código ni tablas desde "
+        "el texto fuente.\n"
         "<texto>\n"
-        f"{doc.text[:_LLM_TEXT_CHAR_CAP]}\n"
+        f"{_select_llm_text(doc.text)}\n"
         "</texto>"
     )
 

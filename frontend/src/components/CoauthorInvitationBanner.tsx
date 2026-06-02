@@ -3,6 +3,7 @@
 import { UserPlus } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import posthog from "posthog-js";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -34,6 +35,7 @@ export function CoauthorInvitationBanner({
 
   async function run(
     action: (id: number) => Promise<InvitationMutationError | undefined>,
+    eventName: "coauthor_invitation_accepted" | "coauthor_invitation_declined",
   ) {
     setBusy(true);
     setFailed(false);
@@ -43,6 +45,7 @@ export function CoauthorInvitationBanner({
     // truth moved: re-run the SSR fetch (accept widens to the reader view,
     // decline drops to the 404 empty state). Only a network error stays put.
     if (!err || err.kind === "gone") {
+      posthog.capture(eventName, { doc_id: docId });
       router.refresh();
       return;
     }
@@ -70,7 +73,7 @@ export function CoauthorInvitationBanner({
           <Button
             type="button"
             disabled={busy}
-            onClick={() => run(accept)}
+            onClick={() => run(accept, "coauthor_invitation_accepted")}
             className="min-w-[118px]"
           >
             Aceptar
@@ -79,7 +82,7 @@ export function CoauthorInvitationBanner({
             type="button"
             variant="ghost"
             disabled={busy}
-            onClick={() => run(decline)}
+            onClick={() => run(decline, "coauthor_invitation_declined")}
           >
             Rechazar
           </Button>
@@ -113,7 +116,7 @@ export function CoauthorInvitationBanner({
           type="button"
           size="sm"
           disabled={busy}
-          onClick={() => run(accept)}
+          onClick={() => run(accept, "coauthor_invitation_accepted")}
         >
           Aceptar
         </Button>
@@ -122,7 +125,7 @@ export function CoauthorInvitationBanner({
           size="sm"
           variant="ghost"
           disabled={busy}
-          onClick={() => run(decline)}
+          onClick={() => run(decline, "coauthor_invitation_declined")}
         >
           Rechazar
         </Button>

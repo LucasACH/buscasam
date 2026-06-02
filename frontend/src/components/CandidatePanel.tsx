@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
+import posthog from "posthog-js";
 
 import { Button } from "@/components/ui/button";
 import { ProcessingSteps } from "@/components/ProcessingSteps";
@@ -51,7 +52,11 @@ export function CandidatePanel({
     if (!file) return;
     setError(null);
     const err = await actions.replace(file);
-    if (err) setError(REPLACE_ERROR_COPY[err]);
+    if (err) {
+      setError(REPLACE_ERROR_COPY[err]);
+      return;
+    }
+    posthog.capture("document_version_replaced");
   }
 
   async function onPublish() {
@@ -60,6 +65,8 @@ export function CandidatePanel({
       const result = await actions.publish();
       if (result === "publish_failed") {
         toast.error("No se pudo publicar");
+      } else {
+        posthog.capture("document_version_published");
       }
     } catch {
       toast.error("No se pudo publicar");

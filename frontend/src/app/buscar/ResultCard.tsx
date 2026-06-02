@@ -1,4 +1,5 @@
 import Link from "next/link";
+import posthog from "posthog-js";
 
 import { TIPO_LABEL, VISIBILITY_LABEL } from "@/lib/labels";
 import { useAreaLabel } from "@/lib/useAreas";
@@ -61,6 +62,13 @@ export function ResultCard({ result }: { result: ResultCardData }) {
       <h2 className="text-[17px] leading-[1.3] font-semibold tracking-tight">
         <Link
           href={`/docs/${result.doc_id}`}
+          onClick={() =>
+            posthog.capture("search_result_clicked", {
+              doc_id: result.doc_id,
+              tipo: result.tipo,
+              area_path: result.area_path,
+            })
+          }
           className="text-foreground group-hover:text-primary underline-offset-2 transition-colors group-hover:underline after:absolute after:inset-0 after:content-['']"
         >
           {result.titulo}
