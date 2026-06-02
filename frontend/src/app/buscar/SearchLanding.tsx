@@ -116,7 +116,7 @@ export function SearchLanding({
   const submit = () => onApply({ q: q.trim() });
 
   return (
-    <main className="flex min-h-[calc(100dvh-61px)] items-center justify-center px-5 pt-10 pb-18">
+    <main className="flex min-h-[calc(100dvh-101px)] items-center justify-center px-5 pt-10 pb-18">
       <div className="flex w-full max-w-[660px] flex-col items-center">
         <div className="flex flex-col items-center text-center">
           <HomeMark />
