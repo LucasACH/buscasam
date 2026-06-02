@@ -10,6 +10,7 @@ const { apiDelete, apiGet, apiPost } = vi.hoisted(() => ({
 vi.mock("@/api/client", () => ({
   api: { DELETE: apiDelete, GET: apiGet, POST: apiPost },
 }));
+vi.mock("@/app/buscar/actions", () => ({ revalidateBuscar: vi.fn() }));
 
 import type { components } from "@/api/schema";
 import { useDraftState } from "./useDraftState";

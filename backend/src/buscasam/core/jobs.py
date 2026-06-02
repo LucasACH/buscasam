@@ -108,7 +108,7 @@ async def _complete_indexing(
 
     await _set_stage(sm, cv.version_id, "indexing")
     texts = [c.body_text for c in [headline, *body]]
-    embeds = [await embedmod.embed(tei, t, kind="passage") for t in texts]
+    embeds = await embedmod.embed_batch(tei, texts, kind="passage")
 
     async with sm() as session:
         await documents.write_indexed_candidate(

@@ -18,6 +18,11 @@ from buscasam.settings import settings
 
 INDEX_TIMEOUT_S = 30.0
 
+# TEI's max_client_batch_size (router startup arg). Posting more inputs than this
+# in one /embed call is rejected, so passage indexing slices into batches of this
+# size to collapse N serial round-trips into ceil(N/32) and let TEI batch on-CPU.
+_MAX_CLIENT_BATCH_SIZE = 32
+
 # Query-embedding cache: assumes a pinned model revision for the process
 # lifetime (assert_model_revision_pinned), so identical query text always maps
 # to the same vector. A revision change requires a process restart (acceptable).
@@ -83,3 +88,35 @@ async def embed(
         if len(_query_cache) > _QUERY_CACHE_MAX:
             _query_cache.popitem(last=False)
     return vec
+
+
+async def embed_batch(
+    client: httpx.AsyncClient,
+    texts: list[str],
+    *,
+    kind: Literal["passage"],
+) -> list[np.ndarray]:
+    """Embed many passages, slicing into TEI client-batch-sized requests.
+
+    Passage-only (no query cache): indexing embeds each chunk exactly once.
+    Same degrade contract as `embed` — EmbedUnavailable on TEI 5xx/timeout so the
+    job retries (ADR-0002 §8). Returns vectors aligned 1:1 with `texts`."""
+    out: list[np.ndarray] = []
+    for start in range(0, len(texts), _MAX_CLIENT_BATCH_SIZE):
+        batch = texts[start : start + _MAX_CLIENT_BATCH_SIZE]
+        payload = {
+            "inputs": [f"{kind}: {t}" for t in batch],
+            "truncate": True,
+            "normalize": True,
+        }
+        try:
+            r = await client.post("/embed", json=payload, timeout=INDEX_TIMEOUT_S)
+            r.raise_for_status()
+        except httpx.RequestError as e:
+            raise EmbedUnavailable from e
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code >= 500:
+                raise EmbedUnavailable from e
+            raise
+        out.extend(np.asarray(v, dtype=np.float16) for v in r.json())
+    return out

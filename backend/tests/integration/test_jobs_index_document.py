@@ -167,15 +167,15 @@ async def test_index_document_writes_progress_stages(
         observed["at_metadata"] = await read_stage()
         return await real_suggest(*a, **k)
 
-    real_embed = jobs.embedmod.embed
+    real_embed_batch = jobs.embedmod.embed_batch
 
-    async def spy_embed(*a, **k):
+    async def spy_embed_batch(*a, **k):
         observed.setdefault("at_embed", await read_stage())
-        return await real_embed(*a, **k)
+        return await real_embed_batch(*a, **k)
 
     monkeypatch.setattr(jobs.extractmod, "extract", spy_extract)
     monkeypatch.setattr(jobs.extractmod, "suggest_metadata", spy_suggest)
-    monkeypatch.setattr(jobs.embedmod, "embed", spy_embed)
+    monkeypatch.setattr(jobs.embedmod, "embed_batch", spy_embed_batch)
 
     await jobs._run_index_document(worker_sm, tei, version_id)
     await tei.aclose()

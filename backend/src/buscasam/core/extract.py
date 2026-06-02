@@ -339,9 +339,6 @@ def _derive_keywords(text: str) -> list[str]:
         return []
 
 
-_PDF_CREATION_DATE_RE = re.compile(r"^D:(\d{4})")
-
-
 def _derive_fecha_from_text(text: str) -> date | None:
     head = text[:8000]
     current_year = date.today().year
@@ -358,36 +355,11 @@ def _derive_fecha_from_text(text: str) -> date | None:
     return date(best, 1, 1) if best else None
 
 
-def _derive_fecha_from_metadata(raw_metadata: dict) -> date | None:
-    """ADR-0007 §8 step 2: fall back to PDF `/CreationDate` if plausible.
-
-    PDF dates use `D:YYYYMMDDHHmmSS+TZ`; values may be `str` or `bytes`.
-    """
-    if not raw_metadata:
-        return None
-    raw = raw_metadata.get("CreationDate") or raw_metadata.get(b"CreationDate")
-    if raw is None:
-        return None
-    if isinstance(raw, bytes):
-        try:
-            raw = raw.decode("ascii", errors="ignore")
-        except Exception:
-            return None
-    m = _PDF_CREATION_DATE_RE.match(raw)
-    if not m:
-        return None
-    year = int(m.group(1))
-    current_year = date.today().year
-    if not (1970 <= year <= current_year + 1):
-        return None
-    return date(year, 1, 1)
-
-
-def _derive_fecha(doc: ExtractedDoc) -> date | None:
+def _derive_fecha(doc: ExtractedDoc) -> date:
     from_text = _derive_fecha_from_text(doc.text)
     if from_text is not None:
         return from_text
-    return _derive_fecha_from_metadata(doc.raw_metadata)
+    return date.today()
 
 
 def derive_metadata(doc: ExtractedDoc) -> IndexableMetadata:
