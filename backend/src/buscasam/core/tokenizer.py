@@ -8,6 +8,7 @@ served model; `manifest.json` records that SHA so startup can verify the pin.
 
 from __future__ import annotations
 
+import gzip
 import json
 from functools import lru_cache
 from pathlib import Path
@@ -25,7 +26,8 @@ _PASSAGE_PREFIX = "passage: "
 
 @lru_cache(maxsize=1)
 def _tokenizer() -> Tokenizer:
-    return Tokenizer.from_file(str(_VENDOR_DIR / "tokenizer.json"))
+    raw = gzip.decompress((_VENDOR_DIR / "tokenizer.json.gz").read_bytes())
+    return Tokenizer.from_str(raw.decode("utf-8"))
 
 
 def vendored_revision() -> str:
