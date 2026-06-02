@@ -83,7 +83,7 @@ test("authenticated: avatar + role label + logout returns to invitado", async ({
   await expect(logoutBtn).toBeVisible();
   await logoutBtn.click();
 
-  // Logout does router.replace("/buscar").
+  // Logout hard-navigates to /buscar (window.location.assign).
   await expect(page).toHaveURL(/\/buscar$/);
   await expect(
     page.getByRole("link", { name: /Iniciar sesión con UNSAM/i }),

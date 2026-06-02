@@ -95,6 +95,16 @@ export function AuthNav() {
 
   async function onLogout() {
     await api.POST("/api/auth/logout");
+    // Protected pages guard on `isInvitado` and redirect to /login; an SPA logout
+    // there loses that race (the guard's redirect overrides ours), so hard-navigate
+    // away. Everywhere else, log out instantly without a reload.
+    if (
+      pathname.startsWith("/mis-trabajos") ||
+      pathname.startsWith("/moderacion")
+    ) {
+      window.location.assign("/buscar");
+      return;
+    }
     qc.setQueryData(ME_QUERY_KEY, null);
     // Drop the prior user's notifications so a next login can't flash them
     // (the count key is a prefix of NOTIFICATIONS_QUERY_KEY, removed too).
