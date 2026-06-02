@@ -139,9 +139,7 @@ async def test_document_reports_current_hidden_state(
     client, session, moderation_hidden
 ):
     doc_id = await make_document(session, moderation_hidden=moderation_hidden)
-    report_id = await _file_report(
-        session, doc_id, reporter=await make_user(session)
-    )
+    report_id = await _file_report(session, doc_id, reporter=await make_user(session))
     cookie = await _docente_cookie(session)
 
     r = await client.get(
