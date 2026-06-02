@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/api/client";
 import type { components } from "@/api/schema";
+import { revalidateBuscar } from "@/app/buscar/actions";
 
 type DraftStateDTO = components["schemas"]["DraftStateDTO"];
 export type DraftAttachment = DraftStateDTO["attachments"][number];
@@ -218,6 +219,8 @@ export function useDraftState(docId: number) {
       // The publish flow routes to Mis trabajos; invalidate the list so the
       // freshly published doc shows without a manual refresh.
       await queryClient.invalidateQueries({ queryKey: ["me", "documents"] });
+      // Refresh the /buscar landing count + most-read now, not in ~5 min.
+      await revalidateBuscar();
       return "published";
     } catch {
       return "publish_failed";
