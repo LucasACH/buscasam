@@ -6,6 +6,8 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { ChevronLeft, Clock, RotateCcw, Trash2 } from "lucide-react";
 
+import posthog from "posthog-js";
+
 import { useUser } from "@/lib/useUser";
 import { Button } from "@/components/ui/button";
 import { useDeletedDocuments, type DeletedDoc } from "./useDeletedDocuments";
@@ -30,6 +32,7 @@ export default function PapeleraPage() {
       toast.error("No se pudo restaurar");
       return;
     }
+    posthog.capture("document_restored", { doc_id: id });
     toast.success("Trabajo restaurado");
   }
 

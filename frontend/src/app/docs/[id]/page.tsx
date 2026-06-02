@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { TIPO_LABEL, VISIBILITY_LABEL } from "@/lib/labels";
 
 import { fetchAreas, fetchDocDetail, type Area } from "./fetchDetail";
+import { DownloadButton } from "./DownloadButton";
 import { RelatedRail } from "./RelatedRail";
 import type {
   DetailDoc,
@@ -204,15 +205,12 @@ function DetailView({
                 <span className="min-w-0 flex-1 truncate text-sm font-medium">
                   {detail.archivo_principal.original_filename}
                 </span>
-                <Button asChild size="sm">
-                  <a
-                    href={`/api/docs/${docId}/download`}
-                    download
-                    aria-label="Descargar archivo principal"
-                  >
-                    Descargar
-                  </a>
-                </Button>
+                <DownloadButton
+                  docId={docId}
+                  label="Descargar archivo principal"
+                  href={`/api/docs/${docId}/download`}
+                  eventProperties={{ tipo: detail.tipo, file_type: "main" }}
+                />
               </div>
             </div>
           </section>
@@ -236,15 +234,17 @@ function DetailView({
                     <span className="min-w-0 flex-1 truncate text-sm font-medium">
                       {att.original_filename}
                     </span>
-                    <Button asChild size="sm" variant="outline">
-                      <a
-                        href={`/api/docs/${docId}/attachments/${att.id}`}
-                        download
-                        aria-label={`Descargar ${att.original_filename}`}
-                      >
-                        Descargar
-                      </a>
-                    </Button>
+                    <DownloadButton
+                      docId={docId}
+                      label={`Descargar ${att.original_filename}`}
+                      href={`/api/docs/${docId}/attachments/${att.id}`}
+                      variant="outline"
+                      eventProperties={{
+                        tipo: detail.tipo,
+                        file_type: "attachment",
+                        attachment_id: att.id,
+                      }}
+                    />
                   </li>
                 ))}
               </ul>

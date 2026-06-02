@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, LogOut } from "lucide-react";
+import posthog from "posthog-js";
 
 import { api } from "@/api/client";
 import { cn } from "@/lib/utils";
@@ -59,6 +60,16 @@ export function AuthNav() {
   const qc = useQueryClient();
   const [menuOpen, setMenuOpen] = useState(false);
 
+  useEffect(() => {
+    if (user) {
+      posthog.identify(user.email, {
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      });
+    }
+  }, [user]);
+
   if (isLoading) {
     return (
       <div className="flex items-center gap-3 sm:gap-5" aria-hidden>
@@ -94,6 +105,8 @@ export function AuthNav() {
   if (!user) return null;
 
   async function onLogout() {
+    posthog.capture("user_logged_out");
+    posthog.reset();
     await api.POST("/api/auth/logout");
     // Protected pages guard on `isInvitado` and redirect to /login; an SPA logout
     // there loses that race (the guard's redirect overrides ours), so hard-navigate

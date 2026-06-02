@@ -3,6 +3,7 @@
 import { AlertTriangle } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import posthog from "posthog-js";
 
 import { api } from "@/api/client";
 import type { components } from "@/api/schema";
@@ -44,6 +45,7 @@ export function ReportDialog({ docId }: { docId: number }) {
       setFailed(true);
       return;
     }
+    posthog.capture("document_reported", { doc_id: docId, reason });
     setOpen(false);
     setReason(null);
     toast.success("Recibimos tu reporte. Gracias.");
