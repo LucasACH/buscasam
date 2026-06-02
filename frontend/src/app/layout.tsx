@@ -18,9 +18,27 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const siteUrl = process.env.BUSCASAM_BASE_URL ?? "http://localhost:3000";
+
 export const metadata: Metadata = {
-  title: "BUSCASAM — Búsqueda de trabajos académicos de la UNSAM",
-  description: "Búsqueda de trabajos académicos de la UNSAM.",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "BUSCASAM — Trabajos académicos de la UNSAM",
+    template: "%s — BUSCASAM",
+  },
+  description:
+    "Buscador de trabajos académicos de la UNSAM: tesis, papers, monografías, trabajos prácticos y más, de la comunidad de la Universidad Nacional de San Martín.",
+  applicationName: "BUSCASAM",
+  openGraph: {
+    type: "website",
+    siteName: "BUSCASAM",
+    locale: "es_AR",
+    url: "/buscar",
+    title: "BUSCASAM — Trabajos académicos de la UNSAM",
+    description:
+      "Buscador de trabajos académicos de la UNSAM: tesis, papers, monografías y más.",
+  },
+  twitter: { card: "summary_large_image" },
 };
 
 export default function RootLayout({

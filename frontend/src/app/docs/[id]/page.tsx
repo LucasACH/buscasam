@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { FileText, Mail } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -27,12 +28,46 @@ function parseDocId(raw: string): number | null {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
-export async function generateMetadata({ params }: PageProps) {
+function truncate(s: string, n: number): string {
+  const t = s.replace(/\s+/g, " ").trim();
+  return t.length <= n ? t : `${t.slice(0, n - 1).trimEnd()}…`;
+}
+
+function metaDescription(detail: DetailDoc | DetailWithInvitationDoc): string {
+  if (detail.abstract) return truncate(detail.abstract, 155);
+  const tipo = TIPO_LABEL[detail.tipo] ?? detail.tipo;
+  const autores = detail.autores.map((a) => a.display_name).join(", ");
+  return truncate(
+    [tipo, autores && `por ${autores}`, "UNSAM"].filter(Boolean).join(" · "),
+    155,
+  );
+}
+
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
   const docId = parseDocId((await params).id);
   if (docId === null) return {};
   const detail = await fetchDocDetail(docId);
-  if (!detail) return {};
-  return { title: detail.titulo };
+  // Pending-invitation minimal blocks are private by construction — keep them
+  // out of the index even if a crawler somehow reaches one.
+  if (!detail || detail.view === "minimal") return { robots: { index: false } };
+  const description = metaDescription(detail);
+  return {
+    title: detail.titulo,
+    description,
+    keywords: detail.palabras_clave.length ? detail.palabras_clave : undefined,
+    authors: detail.autores.map((a) => ({ name: a.display_name })),
+    alternates: { canonical: `/docs/${docId}` },
+    robots: detail.visibility === "publico" ? undefined : { index: false },
+    openGraph: {
+      type: "article",
+      url: `/docs/${docId}`,
+      title: detail.titulo,
+      description,
+      images: ["/opengraph-image"],
+    },
+  };
 }
 
 export default async function DocDetailPage({ params }: PageProps) {
@@ -90,6 +125,61 @@ function MinimalInviteView({
   );
 }
 
+const UNSAM = "Universidad Nacional de San Martín (UNSAM)";
+
+function publicBase(): string {
+  return (process.env.BUSCASAM_BASE_URL ?? "http://localhost:3000").replace(
+    /\/$/,
+    "",
+  );
+}
+
+// ScholarlyArticle + BreadcrumbList for the public doc page. JSON.stringify
+// drops undefined keys, so optional fields fall away cleanly when absent.
+function docJsonLd(
+  detail: DetailDoc | DetailWithInvitationDoc,
+  docId: number,
+  areaName: string,
+) {
+  const base = publicBase();
+  const url = `${base}/docs/${docId}`;
+  const article = {
+    "@context": "https://schema.org",
+    "@type": "ScholarlyArticle",
+    headline: detail.titulo,
+    name: detail.titulo,
+    inLanguage: "es",
+    url,
+    author: detail.autores.map((a) => ({
+      "@type": "Person",
+      name: a.display_name,
+    })),
+    abstract: detail.abstract || undefined,
+    keywords: detail.palabras_clave.length
+      ? detail.palabras_clave.join(", ")
+      : undefined,
+    datePublished: detail.fecha || undefined,
+    genre: TIPO_LABEL[detail.tipo] ?? detail.tipo,
+    publisher: { "@type": "Organization", name: UNSAM },
+    isPartOf: { "@type": "Organization", name: UNSAM },
+  };
+  const breadcrumb = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Inicio", item: `${base}/buscar` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: areaName,
+        item: `${base}/buscar?area=${encodeURIComponent(detail.area_path)}`,
+      },
+      { "@type": "ListItem", position: 3, name: detail.titulo, item: url },
+    ],
+  };
+  return [article, breadcrumb];
+}
+
 function DetailView({
   detail,
   docId,
@@ -108,6 +198,12 @@ function DetailView({
 
   return (
     <main className="mx-auto w-full max-w-[1120px] px-6 py-8">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(docJsonLd(detail, docId, areaName)),
+        }}
+      />
       {detail.view === "detail_with_invitation" && (
         <CoauthorInvitationBanner
           docId={docId}

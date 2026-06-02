@@ -28,7 +28,7 @@ const nextConfig: NextConfig = {
   },
   skipTrailingSlashRedirect: true,
   async redirects() {
-    return [{ source: "/", destination: "/buscar", permanent: false }];
+    return [{ source: "/", destination: "/buscar", permanent: true }];
   },
 };
 

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import {
   HydrationBoundary,
   QueryClient,
@@ -6,6 +7,16 @@ import {
 
 import { BuscarClient } from "./BuscarClient";
 import { fetchAreas, fetchPopular } from "./fetchLanding";
+
+// Canonical strips query params (q/area/tipo/pagina) so filtered/search states
+// don't fragment into thousands of near-duplicate indexable URLs.
+export const metadata: Metadata = {
+  title: "Trabajos académicos de la UNSAM",
+  description:
+    "Buscá tesis, papers, monografías, trabajos prácticos y proyectos de investigación de la comunidad de la Universidad Nacional de San Martín (UNSAM).",
+  alternates: { canonical: "/buscar" },
+  openGraph: { url: "/buscar", images: ["/opengraph-image"] },
+};
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
