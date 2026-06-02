@@ -167,7 +167,12 @@ function docJsonLd(
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
     itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Inicio", item: `${base}/buscar` },
+      {
+        "@type": "ListItem",
+        position: 1,
+        name: "Inicio",
+        item: `${base}/buscar`,
+      },
       {
         "@type": "ListItem",
         position: 2,
