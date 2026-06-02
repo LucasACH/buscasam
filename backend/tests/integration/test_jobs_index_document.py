@@ -8,6 +8,7 @@ without spinning a worker.
 from __future__ import annotations
 
 import hashlib
+from datetime import date
 from io import BytesIO
 from pathlib import Path
 
@@ -359,7 +360,7 @@ async def test_index_document_empty_extraction_docx_indexes_with_empty_abstract(
     assert row["index_status"] == "indexed"
     assert row["staged_abstract"] == ""
     assert row["staged_keywords"] == []
-    assert row["staged_fecha"] is None
+    assert row["staged_fecha"] == date.today()
 
 
 async def test_index_document_happy_path_indexes_docx(session, blob_root, worker_sm):
