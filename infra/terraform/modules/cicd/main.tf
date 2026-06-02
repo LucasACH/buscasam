@@ -60,3 +60,22 @@ resource "google_service_account_iam_member" "deploy_wif" {
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repo}"
 }
+
+# Read-only lookups `gcloud compute ssh` makes before tunnelling (project SSH/OS
+# Login config + instance details). Scoped to exactly those gets, not compute.viewer.
+resource "google_project_iam_custom_role" "deploy_ssh" {
+  role_id     = "buscasamDeploySsh"
+  title       = "BUSCASAM deploy SSH"
+  description = "Minimal read perms gcloud compute ssh needs to resolve the app VM."
+  permissions = [
+    "compute.projects.get",
+    "compute.instances.get",
+    "compute.instances.list",
+  ]
+}
+
+resource "google_project_iam_member" "deploy_ssh" {
+  project = data.google_project.this.project_id
+  role    = google_project_iam_custom_role.deploy_ssh.id
+  member  = "serviceAccount:${google_service_account.deploy.email}"
+}
