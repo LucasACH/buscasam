@@ -40,8 +40,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     return [];
   }
   const base = publicBase();
-  return entries.map((e) => ({
-    url: `${base}/docs/${e.id}`,
-    lastModified: e.lastmod ? new Date(e.lastmod) : undefined,
-  }));
+  return [
+    { url: `${base}/buscar`, changeFrequency: "daily", priority: 1 },
+    ...entries.map((e) => ({
+      url: `${base}/docs/${e.id}`,
+      lastModified: e.lastmod ? new Date(e.lastmod) : undefined,
+    })),
+  ];
 }
