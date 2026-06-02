@@ -56,14 +56,6 @@ logging:
       docker:
         receivers: [docker_containers]
         processors: [parse_docker_json, drop_nginx_access]
-# Logs only: the VM SA has logging.logWriter but not monitoring.metricWriter, so
-# disable host-metric collection (otherwise the metrics exporter spams
-# PermissionDenied and drops data every ~20s).
-metrics:
-  service:
-    pipelines:
-      default_pipeline:
-        receivers: []
 YAML
 systemctl restart google-cloud-ops-agent
 
