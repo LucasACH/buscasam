@@ -34,7 +34,10 @@ export default async function BuscarPage({
   await Promise.all([
     queryClient.prefetchQuery({ queryKey: ["areas"], queryFn: fetchAreas }),
     isLanding
-      ? queryClient.prefetchQuery({ queryKey: ["popular"], queryFn: fetchPopular })
+      ? queryClient.prefetchQuery({
+          queryKey: ["popular"],
+          queryFn: fetchPopular,
+        })
       : Promise.resolve(),
   ]);
 

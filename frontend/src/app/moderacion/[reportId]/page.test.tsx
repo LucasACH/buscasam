@@ -143,7 +143,9 @@ describe("/moderacion/[reportId] inspect view", () => {
   it("offers only Ocultar when the document is visible", () => {
     render(<InspectPage />);
 
-    expect(screen.getByRole("button", { name: /ocultar/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /ocultar/i }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /mostrar/i }),
     ).not.toBeInTheDocument();

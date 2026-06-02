@@ -67,7 +67,10 @@ describe("NotificationItem per-kind renderers", () => {
       <NotificationItem
         item={item({
           kind: "document_unhidden",
-          payload: { doc_title: "Compiladores", reason: "revisado y restaurado" },
+          payload: {
+            doc_title: "Compiladores",
+            reason: "revisado y restaurado",
+          },
         })}
       />,
     );
