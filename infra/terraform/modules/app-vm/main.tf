@@ -119,6 +119,14 @@ resource "google_iap_tunnel_instance_iam_member" "deploy_tunnel" {
   member   = var.deploy_sa_member
 }
 
+# OS Login into a VM that runs as a service account = "acting as" that SA, so the
+# deploy identity needs serviceAccountUser on the app VM's SA (this one only).
+resource "google_service_account_iam_member" "deploy_actas_app" {
+  service_account_id = google_service_account.app.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = var.deploy_sa_member
+}
+
 # Unmanaged instance group: the LB backend wrapping the single stateful VM.
 resource "google_compute_instance_group" "app" {
   name      = "buscasam-app"
