@@ -13,18 +13,29 @@ function internalApiBase(): string {
   return `${fallback.replace(/\/$/, "")}/api`;
 }
 
+// Both fetches degrade to empty on any failure (including a backend that is
+// unreachable at build time): the page prerenders empty and ISR (revalidate:300)
+// repopulates from the live API at runtime, so the build stays hermetic.
 export async function fetchPopular(): Promise<PopularResponse> {
-  const r = await fetch(`${internalApiBase()}/docs/popular?limit=3`, {
-    next: { revalidate: 300 },
-  });
-  if (!r.ok) throw new Error(`popular fetch failed: ${r.status}`);
-  return (await r.json()) as PopularResponse;
+  try {
+    const r = await fetch(`${internalApiBase()}/docs/popular?limit=3`, {
+      next: { revalidate: 300 },
+    });
+    if (!r.ok) return { results: [], public_total: 0 };
+    return (await r.json()) as PopularResponse;
+  } catch {
+    return { results: [], public_total: 0 };
+  }
 }
 
 export async function fetchAreas(): Promise<Area[]> {
-  const r = await fetch(`${internalApiBase()}/areas`, {
-    next: { revalidate: 300 },
-  });
-  if (!r.ok) return [];
-  return (await r.json()) as Area[];
+  try {
+    const r = await fetch(`${internalApiBase()}/areas`, {
+      next: { revalidate: 300 },
+    });
+    if (!r.ok) return [];
+    return (await r.json()) as Area[];
+  } catch {
+    return [];
+  }
 }
