@@ -11,6 +11,12 @@ vi.mock("next/navigation", () => ({
   usePathname: () => pathname(),
 }));
 
+const assign = vi.fn();
+Object.defineProperty(window, "location", {
+  configurable: true,
+  value: { assign },
+});
+
 const { useUserMock, apiPost } = vi.hoisted(() => ({
   useUserMock: vi.fn(),
   apiPost: vi.fn(),
@@ -75,6 +81,7 @@ function asAuthenticated(user: {
 describe("AuthNav", () => {
   beforeEach(() => {
     replace.mockReset();
+    assign.mockReset();
     pathname.mockReturnValue("/buscar");
     useUserMock.mockReset();
     apiPost.mockReset();
@@ -150,7 +157,7 @@ describe("AuthNav", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("logout POSTs /api/auth/logout then router.replace('/buscar')", async () => {
+  it("logout POSTs /api/auth/logout then SPA-replaces to /buscar", async () => {
     asAuthenticated({
       user_id: 7,
       role: "estudiante",
@@ -169,6 +176,28 @@ describe("AuthNav", () => {
     expect(apiPost).toHaveBeenCalledTimes(1);
     expect(apiPost).toHaveBeenCalledWith("/api/auth/logout");
     expect(replace).toHaveBeenCalledWith("/buscar");
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it("logout from a protected page hard-navigates to /buscar", async () => {
+    pathname.mockReturnValue("/mis-trabajos");
+    asAuthenticated({
+      user_id: 7,
+      role: "estudiante",
+      name: "Ada Lovelace",
+      picture_url: null,
+      hd: "estudiantes.unsam.edu.ar",
+    });
+    renderAuthNav();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Ada Lovelace/i }),
+    );
+    const btn = await screen.findByRole("button", { name: /Cerrar sesión/i });
+    await userEvent.click(btn);
+
+    expect(assign).toHaveBeenCalledWith("/buscar");
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it("logout evicts the notifications cache", async () => {
