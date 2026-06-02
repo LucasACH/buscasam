@@ -34,3 +34,9 @@ MVP en desarrollo. El repositorio contiene backend, frontend, infraestructura co
 ## Contribuir
 
 Leer [CONTRIBUTING.md](CONTRIBUTING.md) antes de abrir issues o PRs.
+
+---
+
+## Licencia
+
+[MIT](LICENSE) © 2026 Lucas Achaval
