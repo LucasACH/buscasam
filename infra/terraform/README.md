@@ -25,9 +25,11 @@ terraform init
    terraform output workload_identity_provider ci_service_account_email image_repo_path config_bucket
    ```
 2. **Wire GitHub repo variables** from those outputs:
-   `WORKLOAD_IDENTITY_PROVIDER`, `CI_SERVICE_ACCOUNT`, `IMAGE_REPO`,
-   `CONFIG_BUCKET`, `GCP_REGION`. Then push a `v*` tag → images land in Artifact
-   Registry and `config.tgz` in the bucket.
+   `WORKLOAD_IDENTITY_PROVIDER`, `CI_SERVICE_ACCOUNT`, `DEPLOY_SERVICE_ACCOUNT`,
+   `IMAGE_REPO`, `CONFIG_BUCKET`, `GCP_REGION`, `GCP_ZONE`, `SERVER_NAME`. Then
+   push a `v*` tag → images land in Artifact Registry and `config.tgz` in the
+   bucket. (`DEPLOY_SERVICE_ACCOUNT`/`GCP_ZONE`/`SERVER_NAME` are only needed once
+   the app VM exists, for the deploy job.)
 3. **Apply the rest:** set `embedding_model_revision` in tfvars, then
    `terraform apply` → note `terraform output lb_ip`.
 4. **Watch first-boot deploy** via IAP:
@@ -40,8 +42,13 @@ terraform init
 
 ## Day-2
 
-- **Redeploy / rollback:** push a new tag (CI publishes it), then on the VM
-  re-pull config for that ref and run `infra/scripts/deploy.sh <ref>`.
+- **Deploy:** push a `v*` tag. CI validates, builds+pushes images, publishes
+  config, cuts a GitHub Release, then auto-deploys the VM over IAP SSH and
+  health-checks `https://$SERVER_NAME/`. No manual `deploy.sh`.
+- **Rollback / redeploy:** Actions → *release* → *Run workflow* with `ref` set to
+  a previously published tag. Skips build; re-runs the deploy job for that ref.
+  (Manual fallback if CI is down: SSH via IAP, re-pull that ref's `config.tgz`,
+  run `infra/scripts/deploy.sh <ref>`.)
 - **Rotate a secret:** update the value in `secrets.auto.tfvars`, `terraform
   apply`, reboot the VM (or re-run startup) to regenerate `.env`.
 - **GPU on/off:** `terraform apply -var metadata_llm_running=true|false`.

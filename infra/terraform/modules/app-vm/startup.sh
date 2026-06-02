@@ -95,7 +95,6 @@ BUSCASAM_VERTEX_LOCATION=${vertex_location}
 
 BACKUP_RETENTION_DAYS=14
 
-TLS_MODE=upstream
 SERVER_NAME=${server_name}
 TRUSTED_PROXY_CIDR=${trusted_proxy_cidr}
 EOF

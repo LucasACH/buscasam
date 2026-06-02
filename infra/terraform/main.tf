@@ -56,6 +56,7 @@ module "app_vm" {
   vertex_project           = var.vertex_project
   vertex_location          = var.vertex_location
   secret_ids               = module.secrets.secret_ids
+  deploy_sa_member         = module.cicd.deploy_service_account_member
 }
 
 module "lb" {
