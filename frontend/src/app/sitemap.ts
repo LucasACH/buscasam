@@ -2,6 +2,11 @@ import "server-only";
 
 import type { MetadataRoute } from "next";
 
+// Never prerender at build time: the backend is unreachable during the image
+// build, which would bake an empty sitemap and cache it. Query live like
+// robots.ts (the fetch below keeps its own 1h ISR cache).
+export const dynamic = "force-dynamic";
+
 // ADR-0004 §3–4: SSR sitemap from a public-only FastAPI endpoint; never queries
 // Postgres directly. The backend applies `invitado_where`, so only `publico`
 // documents appear.
