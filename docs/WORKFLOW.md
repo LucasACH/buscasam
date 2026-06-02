@@ -2,6 +2,8 @@
 
 The *why* behind the workflow. The *how* lives in [CONTRIBUTING.md](../CONTRIBUTING.md); each skill documents itself in `.claude/skills/`.
 
+Inspired by Matt Pocock's AI workshop: [AI-assisted development](https://www.youtube.com/watch?v=-QFHIoCo-Ko).
+
 ---
 
 ## 1. Context is the scarce resource
