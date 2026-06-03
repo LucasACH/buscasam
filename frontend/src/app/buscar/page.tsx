@@ -18,38 +18,16 @@ export const metadata: Metadata = {
   openGraph: { url: "/buscar", images: ["/opengraph-image"] },
 };
 
-type SearchParams = Record<string, string | string[] | undefined>;
-
-function has(sp: SearchParams, key: string): boolean {
-  const v = sp[key];
-  return Array.isArray(v) ? v.length > 0 : v != null && v !== "";
-}
-
-export default async function BuscarPage({
-  searchParams,
-}: {
-  searchParams: Promise<SearchParams>;
-}) {
-  const sp = await searchParams;
-  const isLanding =
-    !has(sp, "q") &&
-    sp.orden !== "recientes" &&
-    !has(sp, "area") &&
-    !has(sp, "tipo") &&
-    !has(sp, "desde") &&
-    !has(sp, "hasta");
-
+export default async function BuscarPage() {
   const queryClient = new QueryClient();
-  // Areas back both the filter tree and the breadcrumb labels in either view;
-  // the most-read ranking only renders on the landing.
+  // Areas back both the filter tree and the breadcrumb labels; the most-read
+  // ranking only renders on the landing. Both are prefetched unconditionally so
+  // the route stays static (reading searchParams would force dynamic rendering
+  // and a no-store header, which disables bfcache); the popular query is
+  // ISR-cached, so prefetching it on the results view is cheap and unused.
   await Promise.all([
     queryClient.prefetchQuery({ queryKey: ["areas"], queryFn: fetchAreas }),
-    isLanding
-      ? queryClient.prefetchQuery({
-          queryKey: ["popular"],
-          queryFn: fetchPopular,
-        })
-      : Promise.resolve(),
+    queryClient.prefetchQuery({ queryKey: ["popular"], queryFn: fetchPopular }),
   ]);
 
   return (

@@ -228,7 +228,9 @@ export function SearchLanding({
             ) : (
               <ol className="flex flex-col">
                 {results.map((doc, i) => (
-                  <MostReadRow key={doc.doc_id} doc={doc} rank={i + 1} />
+                  <li key={doc.doc_id}>
+                    <MostReadRow doc={doc} rank={i + 1} />
+                  </li>
                 ))}
               </ol>
             )}
