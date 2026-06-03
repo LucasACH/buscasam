@@ -61,6 +61,7 @@ function returns(state: Partial<DraftStateDTO>) {
     is_owner: true,
     visibility: "publico",
     area_path: "escuela.carrera.materia",
+    published_at: null,
     attachments: [],
     coauthors: [],
     versions: [],
@@ -127,6 +128,7 @@ describe("useDraftState", () => {
       gateMessage: null,
       canPublish: true,
       initialPhase: "ready",
+      publishedAt: null,
     });
   });
 

@@ -117,6 +117,7 @@ class DraftStateDTO(BaseModel):
     is_owner: bool
     visibility: Visibility
     area_path: str
+    published_at: str | None  # ISO datetime; None until the work is published.
     attachments: list[AttachmentDTO]
     coauthors: list[CoauthorRowDTO]
     versions: list[DraftVersionDTO]

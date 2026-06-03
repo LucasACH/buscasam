@@ -97,6 +97,7 @@ class DraftState:
     is_owner: bool
     visibility: str
     area_path: str
+    published_at: datetime | None
     attachments: list[AttachmentInfo]
     coauthors: list[CoauthorRow]
     versions: list[DetailVersion]
@@ -347,7 +348,7 @@ async def get_draft_state(
                     "       v.generated_abstract, v.generated_keywords, "
                     "       v.generated_fecha, "
                     "       v.headline_fingerprint, d.titulo, d.visibility, "
-                    "       d.area_path::text AS area_path, "
+                    "       d.area_path::text AS area_path, d.published_at, "
                     "       (SELECT a.user_id FROM document_authors a "
                     "         WHERE a.doc_id = d.id AND a.status = 'owner' LIMIT 1) "
                     "         AS owner_user_id "
@@ -461,6 +462,7 @@ async def get_draft_state(
         is_owner=is_owner,
         visibility=row["visibility"],
         area_path=row["area_path"],
+        published_at=row["published_at"],
         attachments=[
             AttachmentInfo(
                 id=a["id"],

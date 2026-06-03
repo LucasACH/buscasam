@@ -957,6 +957,8 @@ export interface components {
             visibility: "publico" | "interno" | "privado";
             /** Area Path */
             area_path: string;
+            /** Published At */
+            published_at: string | null;
             /** Attachments */
             attachments: components["schemas"]["AttachmentDTO"][];
             /** Coauthors */

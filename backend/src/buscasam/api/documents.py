@@ -227,6 +227,9 @@ async def get_draft(
         is_owner=state.is_owner,
         visibility=cast(Visibility, state.visibility),
         area_path=state.area_path,
+        published_at=(
+            state.published_at.isoformat() if state.published_at is not None else None
+        ),
         attachments=[
             AttachmentDTO(
                 id=a.id,

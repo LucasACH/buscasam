@@ -295,7 +295,11 @@ function EditarForm({
 
   return (
     <main className="mx-auto w-full max-w-3xl px-6 py-8">
-      <PageHeader statusLabel={lifecycle.statusLabel} />
+      <PageHeader
+        statusLabel={lifecycle.statusLabel}
+        publishedAt={lifecycle.publishedAt}
+        isDirty={isDirty}
+      />
 
       <form className="space-y-6">
         <Field label="Título" htmlFor="titulo">
@@ -380,13 +384,6 @@ function EditarForm({
             </div>
           </Field>
         )}
-
-        <div className="mt-2 flex items-center gap-3">
-          <Button type="button" disabled={!isDirty || saving} onClick={saveAll}>
-            {saving && <Loader2 className="size-4 animate-spin" />}
-            Guardar cambios
-          </Button>
-        </div>
       </form>
 
       {/* Pre-publish, the initial version matches the candidate predicate and
@@ -443,11 +440,18 @@ function EditarForm({
         </div>
       )}
 
-      {/* Eliminar is owner-only and lives only here (not on Mis trabajos rows),
-          keeping the delete mutation single-copy (module map §Frontend Papelera). */}
-      {state.isOwner && (
-        <div className="border-border mt-8 border-t pt-8">
-          <DeleteTrabajo softDelete={actions.softDelete} />
+      {/* Guardar cambios surfaces only while there's something to save; Eliminar
+          is owner-only and lives only here (not on Mis trabajos rows), keeping the
+          delete mutation single-copy (module map §Frontend Papelera). */}
+      {(isDirty || state.isOwner) && (
+        <div className="border-border mt-8 flex flex-wrap items-center gap-3 border-t pt-8">
+          {isDirty && (
+            <Button type="button" disabled={saving} onClick={saveAll}>
+              {saving && <Loader2 className="size-4 animate-spin" />}
+              Guardar cambios
+            </Button>
+          )}
+          {state.isOwner && <DeleteTrabajo softDelete={actions.softDelete} />}
         </div>
       )}
 
@@ -488,33 +492,81 @@ function PublishOverlay({ phase }: { phase: Exclude<PublishPhase, "idle"> }) {
   );
 }
 
-function StatusPill({ label }: { label: string }) {
-  const tone = STATUS_TONE[label] ?? "neutral";
+function StatusPill({ label, tone }: { label: string; tone?: BadgeTone }) {
+  const resolvedTone = tone ?? STATUS_TONE[label] ?? "neutral";
   return (
     <span
       data-testid="status-pill"
-      className={`inline-flex h-[26px] items-center gap-1 rounded-full px-3 text-[13px] font-medium whitespace-nowrap ${TONE_CLASSES[tone]}`}
+      className={`inline-flex h-[26px] items-center gap-1 rounded-full px-3 text-[13px] font-medium whitespace-nowrap ${TONE_CLASSES[resolvedTone]}`}
     >
       {label}
     </span>
   );
 }
 
-function PageHeader({ statusLabel }: { statusLabel: string }) {
-  return (
-    <div className="mb-7">
-      <Link
-        href="/mis-trabajos"
-        className="text-muted-foreground hover:text-foreground mb-4 -ml-1 inline-flex items-center gap-1 text-[13px]"
-      >
+const BACK_LINK_CLASS =
+  "text-muted-foreground hover:text-foreground mb-4 -ml-1 inline-flex items-center gap-1 text-[13px]";
+
+function BackLink({ isDirty }: { isDirty: boolean }) {
+  const router = useRouter();
+  if (!isDirty) {
+    return (
+      <Link href="/mis-trabajos" className={BACK_LINK_CLASS}>
         <ChevronLeft className="size-4" />
         Mis trabajos
       </Link>
+    );
+  }
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <button type="button" className={BACK_LINK_CLASS}>
+          <ChevronLeft className="size-4" />
+          Mis trabajos
+        </button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>¿Salir sin guardar?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Tenés cambios sin guardar. Si salís ahora, se perderán.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Seguir editando</AlertDialogCancel>
+          <AlertDialogAction onClick={() => router.push("/mis-trabajos")}>
+            Salir sin guardar
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+function PageHeader({
+  statusLabel,
+  publishedAt = null,
+  isDirty = false,
+}: {
+  statusLabel: string;
+  publishedAt?: string | null;
+  isDirty?: boolean;
+}) {
+  return (
+    <div className="mb-7">
+      <BackLink isDirty={isDirty} />
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-[28px] font-semibold tracking-tight">
           Editar trabajo
         </h1>
-        <StatusPill label={statusLabel} />
+        {publishedAt ? (
+          <StatusPill
+            label={`Publicado el ${new Date(publishedAt).toLocaleDateString("es-AR")}`}
+            tone="green"
+          />
+        ) : (
+          <StatusPill label={statusLabel} />
+        )}
       </div>
     </div>
   );

@@ -40,6 +40,7 @@ export type DraftState = {
     gateMessage: string | null;
     canPublish: boolean;
     initialPhase: "indexing" | "failed" | "ready";
+    publishedAt: string | null;
   };
   isOwner: boolean;
   visibility: DraftStateDTO["visibility"];
@@ -186,6 +187,7 @@ function projectDraftState(state: DraftStateDTO): DraftState {
         : null,
       canPublish: state.publish_gate_reason === null && state.is_owner,
       initialPhase: initialPhase(state),
+      publishedAt: state.published_at,
     },
     isOwner: state.is_owner,
     visibility: state.visibility,

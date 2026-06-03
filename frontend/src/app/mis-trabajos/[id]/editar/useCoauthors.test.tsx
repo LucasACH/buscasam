@@ -43,6 +43,7 @@ function returns(overrides: Partial<DraftStateDTO> = {}) {
     is_owner: true,
     visibility: "publico",
     area_path: "escuela.carrera.materia",
+    published_at: null,
     attachments: [],
     coauthors: [
       {

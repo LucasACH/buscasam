@@ -527,13 +527,12 @@ describe("editar page", () => {
     await waitFor(() => expect(refreshDraft).toHaveBeenCalled());
   });
 
-  it("keeps Guardar disabled and does not PATCH without changes", async () => {
+  it("hides Guardar and does not PATCH without changes", async () => {
     useDraftStateMock.mockReturnValue(draft({}));
     render(<EditarPage />);
     expect(
-      screen.getByRole("button", { name: /guardar cambios/i }),
-    ).toBeDisabled();
-    clickSave();
+      screen.queryByRole("button", { name: /guardar cambios/i }),
+    ).not.toBeInTheDocument();
     await Promise.resolve();
     expect(apiPatch).not.toHaveBeenCalled();
   });
@@ -593,6 +592,30 @@ describe("editar page", () => {
     await confirmDelete();
     await waitFor(() => expect(toastError).toHaveBeenCalled());
     expect(push).not.toHaveBeenCalled();
+  });
+
+  it("navigates back directly when there are no unsaved changes", () => {
+    useDraftStateMock.mockReturnValue(draft({}));
+    render(<EditarPage />);
+    expect(screen.getByRole("link", { name: /mis trabajos/i })).toHaveAttribute(
+      "href",
+      "/mis-trabajos",
+    );
+  });
+
+  it("warns before leaving with unsaved changes", async () => {
+    useDraftStateMock.mockReturnValue(draft({ title: "Mi tesis" }));
+    render(<EditarPage />);
+    fireEvent.change(screen.getByLabelText("Título"), {
+      target: { value: "Nuevo" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /mis trabajos/i }));
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+    expect(push).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: /^salir sin guardar$/i }),
+    );
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/mis-trabajos"));
   });
 });
 
