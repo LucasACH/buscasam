@@ -2,10 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, X } from "lucide-react";
+import { Info, Search, X } from "lucide-react";
 
 import { api } from "@/api/client";
 import type { components } from "@/api/schema";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 type UserHit = components["schemas"]["UserSearchResult"];
 
@@ -32,6 +37,7 @@ export function CoauthorPicker({
 }: CoauthorPickerProps) {
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
+  const [hintOpen, setHintOpen] = useState(false);
   // Display data for ids the user has picked in this session. Chips are derived
   // from `value`; ids the parent passed but we never saw render as a placeholder.
   const [picked, setPicked] = useState<ReadonlyMap<number, UserHit>>(new Map());
@@ -66,7 +72,25 @@ export function CoauthorPicker({
 
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="text-sm font-medium">{label}</span>
+      <span className="flex items-center gap-1.5 text-sm font-medium">
+        {label}
+        <Tooltip open={hintOpen} onOpenChange={setHintOpen} delayDuration={0}>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label="Más información sobre coautores"
+              className="text-muted-foreground hover:text-foreground inline-flex"
+              onClick={() => setHintOpen((o) => !o)}
+            >
+              <Info className="size-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>
+            Sólo se pueden encontrar personas con una cuenta. Si todavía no
+            tiene, agregala como coautor externo.
+          </TooltipContent>
+        </Tooltip>
+      </span>
       <div className="relative">
         <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
         <input

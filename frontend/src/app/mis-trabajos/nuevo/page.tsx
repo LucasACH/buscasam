@@ -15,9 +15,15 @@ import { AreasCascader } from "@/components/AreasCascader";
 import { CoauthorPicker } from "@/components/CoauthorPicker";
 import { Button } from "@/components/ui/button";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   AlertTriangle,
   ChevronDown,
   ChevronLeft,
+  Info,
   Plus,
   Upload,
   X,
@@ -99,6 +105,7 @@ function NuevoForm() {
   const [file, setFile] = useState<File | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [fileHintOpen, setFileHintOpen] = useState(false);
 
   const {
     register,
@@ -374,9 +381,30 @@ function NuevoForm() {
         />
 
         <div className="space-y-1.5">
-          <label htmlFor="main_file" className="text-sm font-medium">
+          <span className="flex items-center gap-1.5 text-sm font-medium">
             Archivo principal <span className="text-destructive">*</span>
-          </label>
+            <Tooltip
+              open={fileHintOpen}
+              onOpenChange={setFileHintOpen}
+              delayDuration={0}
+            >
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Más información sobre el archivo principal"
+                  className="text-muted-foreground hover:text-foreground inline-flex"
+                  onClick={() => setFileHintOpen((o) => !o)}
+                >
+                  <Info className="size-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                Subí el documento principal del trabajo. Una vez procesado, vas
+                a poder sumar archivos adicionales (anexos, datasets, código)
+                desde la edición.
+              </TooltipContent>
+            </Tooltip>
+          </span>
           <label
             htmlFor="main_file"
             className="border-border-strong flex cursor-pointer flex-col items-center rounded-lg border-[1.5px] border-dashed bg-neutral-50 px-6 py-8 text-center transition hover:border-neutral-400 hover:bg-neutral-100"

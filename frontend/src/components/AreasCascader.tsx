@@ -5,6 +5,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
   MapPin,
   Search,
   X,
@@ -23,6 +24,10 @@ function parentOf(area_path: string): string {
   return parts.join(".");
 }
 
+function isMateria(area_path: string): boolean {
+  return area_path.split(".").pop()!.startsWith("materia_");
+}
+
 function normalize(s: string): string {
   return s
     .normalize("NFD")
@@ -35,11 +40,38 @@ export type AreasCascaderProps = {
   value?: string | null;
 };
 
-// Drill-down Escuela › Carrera › Materia cascader. Only leaves (the deepest
-// level under a branch) are selectable; branch rows drill into their children.
+// Drill-down Escuela › Área › Carrera › Materia cascader. Only Materias (the
+// leaves) are selectable; branch rows drill into their children. The search
+// placeholder names the level being shown, indexed by drill depth.
+const SEARCH_PLACEHOLDER = [
+  "Buscar escuela…",
+  "Buscar área…",
+  "Buscar carrera…",
+  "Buscar materia…",
+];
+
+const REPORT_URL =
+  "https://github.com/LucasACH/buscasam/issues/new?title=" +
+  encodeURIComponent("Falta una escuela, área, carrera o materia") +
+  "&body=" +
+  encodeURIComponent(
+    "Indicá qué falta y dónde debería ubicarse:\n\n" +
+      "- Escuela:\n- Área:\n- Carrera:\n- Materia:\n\n" +
+      "Detalle adicional:\n",
+  );
+
 export function AreasCascader({ onChange, value }: AreasCascaderProps) {
   const { data } = useAreas();
-  const rows = data ?? [];
+  // Only Materias are selectable; prune branches that lead to none (e.g. a
+  // Carrera with no Materia) so they never surface as dead-end leaves.
+  const keep = new Set<string>();
+  for (const a of data ?? []) {
+    if (!isMateria(a.area_path)) continue;
+    const parts = a.area_path.split(".");
+    for (let i = 1; i <= parts.length; i++)
+      keep.add(parts.slice(0, i).join("."));
+  }
+  const rows = (data ?? []).filter((a) => keep.has(a.area_path));
   const byPath = new Map(rows.map((a) => [a.area_path, a.display_name]));
 
   // `nav` is the parent path whose children are listed; "" lists the escuelas.
@@ -80,7 +112,7 @@ export function AreasCascader({ onChange, value }: AreasCascaderProps) {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Buscar área…"
+          placeholder={SEARCH_PLACEHOLDER[depth] ?? "Buscar…"}
           className="placeholder:text-muted-foreground flex-1 bg-transparent text-sm outline-none"
         />
         {query && (
@@ -161,6 +193,18 @@ export function AreasCascader({ onChange, value }: AreasCascaderProps) {
           </button>
         </div>
       )}
+
+      <div className="border-border border-t px-3 py-2">
+        <a
+          href={REPORT_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs"
+        >
+          <ExternalLink className="size-3.5 flex-none" />
+          ¿Falta una escuela, área, carrera o materia? Reportala
+        </a>
+      </div>
     </div>
   );
 }
