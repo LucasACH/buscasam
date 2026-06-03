@@ -1,0 +1,98 @@
+# Fast-lane gate on every PR and push to main: lint, type-check and test both
+# halves so a red commit can never sit on main until tag time (ADR-0013's release
+# validate is the final authoritative gate; this catches the same test/lint/type
+# failures earlier). Release-only checks (image builds, pip-audit, OpenAPI drift,
+# terraform) stay in release.yml and are not duplicated here.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Newer pushes supersede in-flight runs on the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.28.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frontend dependencies from lockfile
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Check frontend
+        working-directory: frontend
+        run: |
+          pnpm format:check
+          pnpm lint
+          pnpm typecheck
+          pnpm test
+
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16@sha256:00ba258a66dac104fd5171074a0084462a64a1369d8513f3d0a634e2f24d15bc
+        env:
+          POSTGRES_USER: buscasam
+          POSTGRES_PASSWORD: buscasam
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U buscasam -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install backend OCR system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            tesseract-ocr tesseract-ocr-spa tesseract-ocr-eng \
+            libmagic1 poppler-utils ghostscript qpdf
+
+      - name: Install backend dependencies from lockfile
+        working-directory: backend
+        run: uv sync --frozen --dev --extra ocr
+
+      - name: Check backend quality
+        working-directory: backend
+        run: |
+          uv run ruff format --check .
+          uv run ruff check .
+          uv run mypy .
+          uv run python -m compileall -q src
+
+      - name: Test backend
+        working-directory: backend
+        run: uv run pytest
