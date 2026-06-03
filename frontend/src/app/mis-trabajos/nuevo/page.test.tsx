@@ -99,7 +99,7 @@ async function fillRequiredFields() {
       type: "application/pdf",
     },
   );
-  await user.upload(screen.getByLabelText(/archivo/i), file);
+  await user.upload(screen.getByLabelText(/arrastrá tu archivo/i), file);
   return user;
 }
 

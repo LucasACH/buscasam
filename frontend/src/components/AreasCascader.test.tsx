@@ -34,7 +34,24 @@ const AREAS = [
     area_path: "escuela_ciencia.carrera_matematica",
     display_name: "Matemática",
   },
+  {
+    area_path: "escuela_ciencia.carrera_matematica.materia_algebra",
+    display_name: "Álgebra",
+  },
+  // No Materia → pruned from the cascader.
+  {
+    area_path: "escuela_ciencia.carrera_vacia",
+    display_name: "Carrera Vacía",
+  },
   { area_path: "escuela_humanidades", display_name: "Escuela de Humanidades" },
+  {
+    area_path: "escuela_humanidades.carrera_historia",
+    display_name: "Historia",
+  },
+  {
+    area_path: "escuela_humanidades.carrera_historia.materia_antigua",
+    display_name: "Historia Antigua",
+  },
 ];
 
 describe("AreasCascader", () => {
@@ -98,15 +115,22 @@ describe("AreasCascader", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it("selects an escuela that is itself a leaf", async () => {
+  it("prunes branches that lead to no Materia", async () => {
     const user = userEvent.setup();
-    const onChange = vi.fn();
-    wrap(<AreasCascader onChange={onChange} />);
+    wrap(<AreasCascader onChange={() => {}} />);
 
     await user.click(
-      await screen.findByRole("button", { name: /Escuela de Humanidades/ }),
+      await screen.findByRole("button", {
+        name: /Escuela de Ciencia y Tecnología/,
+      }),
     );
-    expect(onChange).toHaveBeenCalledWith("escuela_humanidades");
+    // Carreras with a Materia survive; the materia-less one is gone.
+    expect(
+      await screen.findByRole("button", { name: /Ing\. Informática/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Carrera Vacía/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("back button returns to the parent level", async () => {
@@ -161,7 +185,7 @@ describe("AreasCascader", () => {
 
     // "Informática" lives one level down; from the escuela list it must not match.
     await user.type(
-      await screen.findByPlaceholderText("Buscar área…"),
+      await screen.findByPlaceholderText("Buscar escuela…"),
       "informatica",
     );
 
@@ -176,13 +200,14 @@ describe("AreasCascader", () => {
     wrap(<AreasCascader onChange={() => {}} />);
 
     await user.type(
-      await screen.findByPlaceholderText("Buscar área…"),
+      await screen.findByPlaceholderText("Buscar escuela…"),
       "ciencia",
     );
     await user.click(
       screen.getByRole("button", { name: /Escuela de Ciencia y Tecnología/ }),
     );
 
+    // Inside the escuela the placeholder names the next level down.
     expect(screen.getByPlaceholderText("Buscar área…")).toHaveValue("");
     // Full child list is shown again, not filtered by "ciencia".
     expect(
