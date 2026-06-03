@@ -137,6 +137,21 @@ pnpm dev
 
 Open http://localhost:3000.
 
+## Git hooks (recommended)
+
+Auto-format and lint staged files before each commit (ruff on `backend/`,
+prettier on `frontend/`). Needs `pre-commit` and a one-time install:
+
+```bash
+pip install pre-commit   # or: brew install pre-commit
+pre-commit install
+```
+
+The hooks are convenience only — the authoritative gate is CI
+(`.github/workflows/ci.yml`), which runs lint, type-check, and the full test
+suite on every PR and push to `main`. `--no-verify` skips the local hooks but
+not CI.
+
 ## End-to-end smoke check
 
 1. http://localhost:3000/login → Sign in with Google.
