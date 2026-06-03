@@ -1,12 +1,6 @@
 import type { Metadata } from "next";
-import {
-  HydrationBoundary,
-  QueryClient,
-  dehydrate,
-} from "@tanstack/react-query";
 
 import { BuscarClient } from "./BuscarClient";
-import { fetchAreas, fetchPopular } from "./fetchLanding";
 
 // Canonical strips query params (q/area/tipo/pagina) so filtered/search states
 // don't fragment into thousands of near-duplicate indexable URLs.
@@ -18,21 +12,11 @@ export const metadata: Metadata = {
   openGraph: { url: "/buscar", images: ["/opengraph-image"] },
 };
 
-export default async function BuscarPage() {
-  const queryClient = new QueryClient();
-  // Areas back both the filter tree and the breadcrumb labels; the most-read
-  // ranking only renders on the landing. Both are prefetched unconditionally so
-  // the route stays static (reading searchParams would force dynamic rendering
-  // and a no-store header, which disables bfcache); the popular query is
-  // ISR-cached, so prefetching it on the results view is cheap and unused.
-  await Promise.all([
-    queryClient.prefetchQuery({ queryKey: ["areas"], queryFn: fetchAreas }),
-    queryClient.prefetchQuery({ queryKey: ["popular"], queryFn: fetchPopular }),
-  ]);
-
-  return (
-    <HydrationBoundary state={dehydrate(queryClient)}>
-      <BuscarClient />
-    </HydrationBoundary>
-  );
+// No server prefetch: reading searchParams would force dynamic rendering and a
+// no-store header (breaks bfcache), while prefetching unconditionally bakes
+// empty data into the static prerender at build time. The client fetches areas
+// and the most-read ranking fresh on mount, so the page stays a cacheable
+// static shell and the data is always live.
+export default function BuscarPage() {
+  return <BuscarClient />;
 }
