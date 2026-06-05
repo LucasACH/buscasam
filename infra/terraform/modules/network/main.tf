@@ -1,5 +1,6 @@
-# Dedicated VPC. The app and GPU VMs run with no external IP; egress (image
-# pulls, model pre-stage) goes through Cloud NAT.
+# Dedicated VPC. The app VM carries an external IP for egress (image pulls,
+# model pre-stage); no Cloud NAT. A GPU VM (ollama, count=0) would need its own
+# egress path if ever re-enabled.
 resource "google_compute_network" "vpc" {
   name                    = "buscasam"
   auto_create_subnetworks = false
@@ -10,20 +11,6 @@ resource "google_compute_subnetwork" "subnet" {
   network       = google_compute_network.vpc.id
   region        = var.region
   ip_cidr_range = var.subnet_cidr
-}
-
-resource "google_compute_router" "router" {
-  name    = "buscasam"
-  network = google_compute_network.vpc.id
-  region  = var.region
-}
-
-resource "google_compute_router_nat" "nat" {
-  name                               = "buscasam"
-  router                             = google_compute_router.router.name
-  region                             = var.region
-  nat_ip_allocate_option             = "AUTO_ONLY"
-  source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
 }
 
 # SSH via Identity-Aware Proxy, so `gcloud compute ssh` works without a public IP.

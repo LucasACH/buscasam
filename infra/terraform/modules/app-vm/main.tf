@@ -74,7 +74,10 @@ resource "google_compute_instance" "app" {
   network_interface {
     network    = var.network
     subnetwork = var.subnetwork
-    # No access_config block => no external IP.
+    # Ephemeral external IP for egress (replaces Cloud NAT). Ingress still
+    # arrives via the LB on :80; promote to a reserved address if the LB is
+    # ever removed and DNS points here directly.
+    access_config {}
   }
 
   service_account {
