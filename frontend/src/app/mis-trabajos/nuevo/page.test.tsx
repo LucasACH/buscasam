@@ -91,7 +91,8 @@ async function fillRequiredFields() {
     await screen.findByRole("button", { name: /Bases de Datos/ }),
   );
 
-  await user.selectOptions(screen.getByLabelText(/tipo/i), "tesis");
+  await user.click(screen.getByLabelText(/tipo/i));
+  await user.click(await screen.findByRole("option", { name: "Tesis" }));
   await user.click(screen.getByLabelText(/público/i));
 
   const file = new File(
@@ -346,7 +347,10 @@ describe("/mis-trabajos/nuevo page", () => {
 
     // A carrera is too broad for an apunte: the selection is dropped and the
     // trigger returns to its placeholder.
-    await user.selectOptions(screen.getByLabelText(/tipo/i), "apunte_resumen");
+    await user.click(screen.getByLabelText(/tipo/i));
+    await user.click(
+      await screen.findByRole("option", { name: "Apunte / Resumen" }),
+    );
     expect(
       await screen.findByRole("button", { name: /elegí un área/i }),
     ).toBeInTheDocument();
