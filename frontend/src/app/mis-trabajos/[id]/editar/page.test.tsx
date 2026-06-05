@@ -603,19 +603,51 @@ describe("editar page", () => {
     );
   });
 
-  it("warns before leaving with unsaved changes", async () => {
+  it("warns before leaving via a link with unsaved changes", async () => {
     useDraftStateMock.mockReturnValue(draft({ title: "Mi tesis" }));
     render(<EditarPage />);
     fireEvent.change(screen.getByLabelText("Título"), {
       target: { value: "Nuevo" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /mis trabajos/i }));
+    fireEvent.click(screen.getByRole("link", { name: /mis trabajos/i }));
     expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
     expect(push).not.toHaveBeenCalled();
     fireEvent.click(
       screen.getByRole("button", { name: /^salir sin guardar$/i }),
     );
     await waitFor(() => expect(push).toHaveBeenCalledWith("/mis-trabajos"));
+  });
+
+  it("warns on browser Back with unsaved changes", async () => {
+    useDraftStateMock.mockReturnValue(draft({ title: "Mi tesis" }));
+    render(<EditarPage />);
+    fireEvent.change(screen.getByLabelText("Título"), {
+      target: { value: "Nuevo" },
+    });
+    fireEvent.popState(window);
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    fireEvent.click(
+      screen.getByRole("button", { name: /^salir sin guardar$/i }),
+    );
+    await waitFor(() => expect(back).toHaveBeenCalled());
+    back.mockRestore();
+  });
+
+  it("reclaims the Back sentinel after saving so Back isn't a dead no-op", async () => {
+    useDraftStateMock.mockReturnValue(draft({ title: "Mi tesis" }));
+    render(<EditarPage />);
+    fireEvent.change(screen.getByLabelText("Título"), {
+      target: { value: "Nuevo" },
+    });
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    clickSave();
+    // Save clears isDirty → the guard pops its sentinel so the next Back works.
+    await waitFor(() => expect(back).toHaveBeenCalledTimes(1));
+    // Guard is disarmed: a Back press no longer shows the leave dialog.
+    fireEvent.popState(window);
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    back.mockRestore();
   });
 });
 
