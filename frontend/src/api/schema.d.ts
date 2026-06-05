@@ -703,6 +703,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Health */
+        get: operations["get_health_api_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1001,6 +1018,13 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** HealthDTO */
+        HealthDTO: {
+            /** Status */
+            status: string;
+            /** Services */
+            services: components["schemas"]["ServiceHealthDTO"][];
+        };
         /** InspectMetadataDTO */
         InspectMetadataDTO: {
             /** Titulo */
@@ -1246,6 +1270,17 @@ export interface components {
              * @default false
              */
             fuzzy_fallback: boolean;
+        };
+        /** ServiceHealthDTO */
+        ServiceHealthDTO: {
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Status */
+            status: string;
+            /** Detail */
+            detail?: string | null;
         };
         /** SitemapEntryDTO */
         SitemapEntryDTO: {
@@ -2551,6 +2586,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SitemapEntryDTO"][];
+                };
+            };
+        };
+    };
+    get_health_api_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthDTO"];
                 };
             };
         };
