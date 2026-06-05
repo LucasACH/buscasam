@@ -539,8 +539,8 @@ function NuevoForm() {
           </div>
 
           <AlertDialogDescription className="mt-2">
-            Elegí cómo completar el resumen y las palabras clave del trabajo. Vas
-            a poder editarlos antes de publicar.
+            Elegí cómo completar el resumen y las palabras clave del trabajo.
+            Vas a poder editarlos antes de publicar.
           </AlertDialogDescription>
 
           <div

@@ -17,8 +17,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.execute(
-        "ALTER TABLE documents "
-        "ADD COLUMN metadata_llm boolean NOT NULL DEFAULT true"
+        "ALTER TABLE documents ADD COLUMN metadata_llm boolean NOT NULL DEFAULT true"
     )
 
 
