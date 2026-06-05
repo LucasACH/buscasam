@@ -87,12 +87,9 @@ describe("useDraftState", () => {
     vi.unstubAllGlobals();
   });
 
-  it("projects the generated snapshot alongside staged values", async () => {
+  it("projects the staged values", async () => {
     returns({
       staged_abstract: "resumen editado",
-      generated_abstract: "resumen del extractor",
-      generated_keywords: ["extractor"],
-      generated_fecha: "2022-07-01",
     });
     const { result } = renderHook(() => useDraftState(1), {
       wrapper: wrapper(),
@@ -100,11 +97,6 @@ describe("useDraftState", () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(result.current.state!.staged_abstract).toBe("resumen editado");
-    expect(result.current.state!.generated_abstract).toBe(
-      "resumen del extractor",
-    );
-    expect(result.current.state!.generated_keywords).toEqual(["extractor"]);
-    expect(result.current.state!.generated_fecha).toBe("2022-07-01");
   });
 
   it("surfaces isError without retrying on 404 (not manageable)", async () => {

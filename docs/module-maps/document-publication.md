@@ -237,9 +237,10 @@ async def write_indexed_candidate(
 # headline_fingerprint, indexed_at.
 # generated_* (generated_abstract/keywords/fecha) is an immutable per-version
 # snapshot of the extractor's raw output (issue #94): written once here, never
-# COALESCE-guarded and never overwritten by an author edit, so the editar form
-# can offer per-field Restaurar. staged_* keeps the author's edit (COALESCE);
-# generated_* keeps the extractor value.
+# COALESCE-guarded and never overwritten by an author edit. staged_* keeps the
+# author's edit (COALESCE); generated_* keeps the extractor value. The editar
+# form no longer consumes generated_* (Restaurar now undoes unsaved changes
+# client-side); the snapshot remains exposed on the draft-state DTO.
 
 async def write_headline(version_id: int, headline: Chunk, embed: halfvec, fp: str) -> None
 # Used by refresh_headline. Replaces the single is_headline=true chunk for this
@@ -331,12 +332,12 @@ On submit: `POST /api/documents` (validation 422 surfaced inline) → on success
 - `useDraftState(id)` for staged metadata and interpreted lifecycle meaning (status pill copy, initial-publication phase, publish eligibility, gate copy, refresh after a mutation).
 - **Initial-publication block.** On the initial path (`versions.length === 0`), the page reads `lifecycle.initialPhase` and, while it is not `ready`, renders only the heading, the status pill, and a centered full-page body — never the metadata form, suggestions, attachments, candidate/versions panels, coautores, the Publicar button, or (during `indexing`) Eliminar. `indexing` shows a blocking loader with Spanish copy ("el trabajo se procesa server-side; podés cerrar y volver"); `failed` shows the failure message (`lifecycle.gateMessage`) plus the owner-only Eliminar affordance. Polling unblocks the page automatically: when `initialPhase` becomes `ready` the full form mounts fresh (prefilled staged values). This replaces the former per-panel `showSuggestionsSpinner` overlay for the initial-indexing case — the spinner now only applies inside the already-published candidate flow.
 - A metadata form (RHF + Zod, scoped to this page — not extracted) bound to `documents.get_draft_state`'s staged + author-entered fields. Save-on-blur PATCHes `/api/documents/{id}`.
-- Per-field **Restaurar** affordance on resumen / palabras clave / fecha (issue #94). Each input is prefilled with the staged value; the inline Restaurar shows only when that field's staged value diverges from the immutable `generated_*` snapshot, and reverts it to the generated value via the existing metadata PATCH. Título has no Restaurar — it is author-entered, not generated. This replaces the former "Sugerencias del extractor" side panel (the prefilled inputs + Restaurar subsume it); the form is a single column.
+- Per-field **Restaurar** affordance on resumen / palabras clave / fecha. Each input is prefilled with the staged value; the inline Restaurar shows only while that field has unsaved changes and resets it to the last saved value (RHF `resetField`; Save re-baselines `defaultValues`). It is a client-side undo — no PATCH. Título has no Restaurar — it is author-entered, not generated. This replaces the former "Sugerencias del extractor" side panel (the prefilled inputs + Restaurar subsume it); the form is a single column.
 - `AttachmentsPanel({ docId })` (PRD stories 22-25).
 - **Publish** button — enabled only when the lifecycle view exposes `canPublish`; the inline message renders its Spanish `gateMessage`. On click: `POST /api/documents/{id}/publish`; a 409 (race) requests a draft refresh through the hook.
 - Status pill at the top renders the lifecycle view's `statusLabel`: `Procesando…` / `Listo para publicar` / `Falló el procesamiento` (PRD story 16).
 
-**Responsibilities:** The edit-page layout, the save-on-blur metadata PATCH wiring, and the staged↔generated↔final flow (per-field Restaurar). It renders lifecycle meaning supplied by the draft-management Module; it does not know OpenAPI status/gate strings or the draft query cache contract.
+**Responsibilities:** The edit-page layout, the save-on-blur metadata PATCH wiring, and the per-field Restaurar (undo unsaved changes). It renders lifecycle meaning supplied by the draft-management Module; it does not know OpenAPI status/gate strings or the draft query cache contract.
 
 **Seams:** None.
 
@@ -423,7 +424,7 @@ Both hooks share TanStack Query against `GET /api/documents/{id}/draft`. The raw
 - **`core/document_access`** — gains `manageable_where(alias: str, user_ctx: UserCtx) -> tuple[str, dict]` returning the WHERE-clause body for owner-or-accepted-coauthor scope (ADR-0010 §8). Joins `document_authors` with `status IN ('owner', 'accepted') AND user_id = :user_id`. Used by every `api/documents` mutation route and by `list_own_documents`. The seam now has **three real adapters** (`invitado_where`, `readable_where`, `manageable_where`); the conceptual seam flagged in auth-sessions.md is now fully materialized.
 - **`api/auth`** — adds `GET /api/users/search?q=<prefix>` guarded by `require_authenticated`. Returns up to ~10 `{user_id, name, email_local, picture_url}` rows from `users` with `ILIKE` prefix on `name` (and possibly `email_local`), excluding the current user. SQL inline in the router per the same "earn a domain module with a second caller" rule that keeps notifications inline.
 - **`components/AreasCascader`** — gains `requireLeaf?: boolean` prop (PRD story 5). When `true`, the cascader's emitted `onChange` only fires after Materia (the leaf) is selected; partial selections render an inline error "Elegí una Materia". Other callers (the search filter) keep `requireLeaf={false}`.
-- **`document_versions` schema** — gains immutable generated-snapshot columns `generated_abstract text`, `generated_keywords text[]`, `generated_fecha date` (migration `0018`, issue #94), mirroring the `staged_*` column types. Written once by `write_indexed_candidate` at index completion from the extractor's raw output and never mutated by author edits, so the editar form can revert any staged field to the generated value.
+- **`document_versions` schema** — gains immutable generated-snapshot columns `generated_abstract text`, `generated_keywords text[]`, `generated_fecha date` (migration `0018`, issue #94), mirroring the `staged_*` column types. Written once by `write_indexed_candidate` at index completion from the extractor's raw output and never mutated by author edits. (The editar form's Restaurar no longer reads these — it undoes unsaved changes client-side — but the snapshot stays on the draft-state DTO.)
 - **`chunks` schema** — `version_id bigint not null references document_versions(id)` and `is_current boolean not null default false` implement ADR-0006 §6. Sequence identity is version-scoped: `UNIQUE (version_id, chunk_seq)` replaces `UNIQUE (doc_id, chunk_seq)`, permitting an indexed replacement to coexist with the current version before publish.
 - **`AuthNav`** — gains a "Mis trabajos" entry in the authenticated dropdown linking to `/mis-trabajos`. One line.
 - **`api/search` / `core/search_query`** — unchanged at the public interface; lexical, hybrid-semantic, and `recientes&q=` candidate CTEs now admit only `chunks.is_current=true`. Publish is the atomic point at which replacement text enters reader-visible search.
