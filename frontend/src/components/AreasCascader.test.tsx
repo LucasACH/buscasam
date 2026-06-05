@@ -274,9 +274,7 @@ describe("AreasCascader", () => {
     expect(onChange).toHaveBeenCalledWith(
       "escuela_ciencia.carrera_informatica",
     );
-    expect(
-      await screen.findByText(/Elegir una? .+ \(opcional\)/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Elegir una? \S+/)).toBeInTheDocument();
 
     // Refining replaces the selection with the materia.
     await user.click(
@@ -299,9 +297,7 @@ describe("AreasCascader", () => {
     );
 
     expect(onChange).toHaveBeenCalledWith("escuela_ciencia");
-    expect(
-      await screen.findByText(/Elegir una? .+ \(opcional\)/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Elegir una? \S+/)).toBeInTheDocument();
   });
 
   it("fires onComplete when a leaf (materia) is picked", async () => {

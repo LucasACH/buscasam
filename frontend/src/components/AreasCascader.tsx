@@ -5,8 +5,8 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  CornerDownRight,
   ExternalLink,
-  MapPin,
   Search,
   X,
 } from "lucide-react";
@@ -176,8 +176,15 @@ export function AreasCascader({
           </div>
         )}
         {nav && value === nav && !searching && (
-          <div className="text-muted-foreground px-2.5 pt-1.5 pb-1 text-xs">
-            Elegir {LEVEL_NAME[depth] ?? "una materia"} (opcional)
+          <div className="border-primary/20 bg-primary-tint text-primary-hover sticky top-0 z-10 mb-1 flex items-center gap-2 rounded-md border px-2.5 py-2 text-[13px] font-semibold">
+            <CornerDownRight
+              className="size-4 flex-none opacity-80"
+              strokeWidth={2.5}
+            />
+            <span>
+              Elegir {LEVEL_NAME[depth] ?? "una materia"}
+              <span className="ml-1 font-normal opacity-70">(opcional)</span>
+            </span>
           </div>
         )}
         {listed.map((a) => {
@@ -193,9 +200,6 @@ export function AreasCascader({
                 selected ? "bg-primary-tint" : "hover:bg-neutral-100",
               )}
             >
-              {leaf && (
-                <MapPin className="text-muted-foreground size-3.5 flex-none" />
-              )}
               <span className="flex-1 truncate">{a.display_name}</span>
               {!leaf && (
                 <ChevronRight className="text-muted-foreground size-[15px]" />
