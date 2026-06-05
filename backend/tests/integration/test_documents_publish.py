@@ -219,6 +219,19 @@ async def test_publish_processing_candidate_conflicts_without_mutating(session):
     assert current is False
 
 
+async def test_publish_without_metadata_conflicts(session):
+    # Opt-out path: indexed + matching fingerprint but empty abstract/keywords.
+    # The author must fill both before the work can go live.
+    owner = await make_user(session, role="estudiante")
+    doc_id, _ = await _seed_candidate(
+        session, owner_user_id=owner, staged_abstract="", staged_keywords=[]
+    )
+    ctx = UserCtx(user_id=owner, is_unsam=True, role="estudiante")
+
+    with pytest.raises(documents.PublishConflict):
+        await documents.publish(session, ctx, doc_id)
+
+
 async def test_publish_fingerprint_mismatch_conflicts(session):
     owner = await make_user(session, role="estudiante")
     # Stored fingerprint that does not match title + staged_abstract.
@@ -266,14 +279,17 @@ async def test_published_replacement_becomes_searchable_only_on_publish(session)
             text(
                 "INSERT INTO document_versions "
                 "(doc_id, version_no, sha256, original_filename, bytes, mime, "
-                " uploaded_by, index_status, staged_abstract, headline_fingerprint) "
+                " uploaded_by, index_status, staged_abstract, staged_keywords, "
+                " headline_fingerprint) "
                 "VALUES (:doc, 2, decode(repeat('02', 32), 'hex'), 'replacement.pdf', "
-                " 1, 'application/pdf', :uid, 'indexed', :abstract, :fp) RETURNING id"
+                " 1, 'application/pdf', :uid, 'indexed', :abstract, :kw, :fp) "
+                "RETURNING id"
             ),
             {
                 "doc": doc_id,
                 "uid": owner,
                 "abstract": replacement_abstract,
+                "kw": ["bd", "sql"],
                 "fp": headline_fingerprint("Mi trabajo", replacement_abstract),
             },
         )

@@ -124,6 +124,50 @@ async def test_create_draft_returns_201_with_doc_id(client, session):
     assert author["user_id"] == uid
 
 
+async def test_create_draft_persists_metadata_llm_opt_out(client, session):
+    uid = await make_user(session)
+    sid = await _seed_session(session, uid)
+    await session.commit()
+
+    r = await client.post(
+        "/api/documents",
+        json={**_VALID_DRAFT, "metadata_llm": False},
+        headers={"origin": _ORIGIN},
+        cookies={auth.SID_COOKIE: _sid_cookie(sid)},
+    )
+
+    assert r.status_code == 201
+    metadata_llm = (
+        await session.execute(
+            text("SELECT metadata_llm FROM documents WHERE id = :id"),
+            {"id": r.json()["id"]},
+        )
+    ).scalar_one()
+    assert metadata_llm is False
+
+
+async def test_create_draft_defaults_metadata_llm_true(client, session):
+    uid = await make_user(session)
+    sid = await _seed_session(session, uid)
+    await session.commit()
+
+    r = await client.post(
+        "/api/documents",
+        json=_VALID_DRAFT,
+        headers={"origin": _ORIGIN},
+        cookies={auth.SID_COOKIE: _sid_cookie(sid)},
+    )
+
+    assert r.status_code == 201
+    metadata_llm = (
+        await session.execute(
+            text("SELECT metadata_llm FROM documents WHERE id = :id"),
+            {"id": r.json()["id"]},
+        )
+    ).scalar_one()
+    assert metadata_llm is True
+
+
 async def test_create_draft_inserts_pending_coauthor_rows(client, session):
     owner_id = await make_user(session, name="Owner")
     coauthor_id = await make_user(session, name="Coauthor")

@@ -60,6 +60,9 @@ class CreateDraftRequest(BaseModel):
     visibility: Visibility
     external_authors: list[ExternalAuthorInput] = []
     coauthor_user_ids: list[int] = []
+    # Opt-in to LLM abstract/keyword enrichment (sends extracted text to the
+    # metadata LLM). When false, the author writes abstract + keywords by hand.
+    metadata_llm: bool = True
 
 
 class CreateDraftResponse(BaseModel):

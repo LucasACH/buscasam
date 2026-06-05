@@ -25,8 +25,10 @@ async def _seed_candidate(
     titulo: str = "Tesis",
     index_status: str = "indexed",
     staged_abstract: str = "resumen",
+    staged_keywords: list[str] | None = None,
 ) -> tuple[int, int]:
     """Returns (doc_id, version_id) for a draft owned by owner_id."""
+    staged_keywords = staged_keywords if staged_keywords is not None else ["kw"]
     doc_id = await make_document(session, publication_status="draft", titulo=titulo)
     await make_document_author(session, doc_id, user_id=owner_id, status="owner")
     fp = headline_fingerprint(titulo, staged_abstract)
@@ -35,15 +37,17 @@ async def _seed_candidate(
             text(
                 "INSERT INTO document_versions "
                 "(doc_id, version_no, sha256, original_filename, bytes, mime, "
-                " uploaded_by, index_status, staged_abstract, headline_fingerprint) "
+                " uploaded_by, index_status, staged_abstract, staged_keywords, "
+                " headline_fingerprint) "
                 "VALUES (:d, 1, decode(repeat('00', 32), 'hex'), 'f', 1, "
-                " 'application/pdf', :u, :st, :abs, :fp) RETURNING id"
+                " 'application/pdf', :u, :st, :abs, :kw, :fp) RETURNING id"
             ),
             {
                 "d": doc_id,
                 "u": owner_id,
                 "st": index_status,
                 "abs": staged_abstract,
+                "kw": staged_keywords,
                 "fp": fp,
             },
         )
