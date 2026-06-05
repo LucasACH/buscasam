@@ -3,6 +3,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/api/client";
+import { HttpError } from "@/api/HttpError";
 import type { components } from "@/api/schema";
 import { revalidateBuscar } from "@/app/buscar/actions";
 
@@ -109,14 +110,6 @@ const CANDIDATE_STATUS_LABEL: Record<Candidate["status"], string> = {
 };
 
 const draftQueryKey = (docId: number) => ["draft", docId] as const;
-
-class HttpError extends Error {
-  status: number;
-  constructor(status: number) {
-    super(`HTTP ${status}`);
-    this.status = status;
-  }
-}
 
 function shouldPoll(state: DraftStateDTO | undefined): boolean {
   return (
