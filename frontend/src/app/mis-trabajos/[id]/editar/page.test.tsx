@@ -91,9 +91,6 @@ function draft(
       staged_abstract: "resumen extraído",
       staged_keywords: ["redes", "grafos"],
       staged_fecha: "2024-03-01",
-      generated_abstract: "resumen extraído",
-      generated_keywords: ["redes", "grafos"],
-      generated_fecha: "2024-03-01",
       isOwner: true,
       area_path: "escuela.carrera.materia",
       candidate: null,
@@ -402,7 +399,7 @@ describe("editar page", () => {
     expect(screen.queryByTestId("suggestion-abstract")).not.toBeInTheDocument();
   });
 
-  it("hides Restaurar when staged equals the generated snapshot", () => {
+  it("hides Restaurar while the form is pristine", () => {
     useDraftStateMock.mockReturnValue(draft({}));
     render(<EditarPage />);
     expect(screen.queryByTestId("restore-abstract")).not.toBeInTheDocument();
@@ -410,37 +407,32 @@ describe("editar page", () => {
     expect(screen.queryByTestId("restore-fecha")).not.toBeInTheDocument();
   });
 
-  it("shows Restaurar only for fields whose staged value diverges", () => {
-    useDraftStateMock.mockReturnValue(
-      draft({
-        staged_abstract: "resumen editado",
-        staged_keywords: ["editado"],
-        // staged_fecha unchanged from generated → no Restaurar
-      }),
-    );
+  it("shows Restaurar only for fields with unsaved changes", () => {
+    useDraftStateMock.mockReturnValue(draft({}));
     render(<EditarPage />);
+    fireEvent.change(screen.getByLabelText("Resumen"), {
+      target: { value: "resumen editado" },
+    });
+    fireEvent.change(screen.getByLabelText("Palabras clave"), {
+      target: { value: "editado" },
+    });
+    // fecha untouched → no Restaurar
     expect(screen.getByTestId("restore-abstract")).toBeInTheDocument();
     expect(screen.getByTestId("restore-keywords")).toBeInTheDocument();
     expect(screen.queryByTestId("restore-fecha")).not.toBeInTheDocument();
   });
 
-  it("hides Restaurar when no generated snapshot exists (pre-migration draft)", () => {
-    // Drafts indexed before migration 0018 have null/empty generated_*; there is
-    // nothing to restore to, so Restaurar must not offer to wipe the staged value.
-    useDraftStateMock.mockReturnValue(
-      draft({
-        staged_abstract: "resumen editado",
-        staged_keywords: ["editado"],
-        staged_fecha: "2024-03-01",
-        generated_abstract: null,
-        generated_keywords: [],
-        generated_fecha: null,
-      }),
-    );
+  it("hides Restaurar again when the input is typed back to the saved value", () => {
+    useDraftStateMock.mockReturnValue(draft({}));
     render(<EditarPage />);
+    fireEvent.change(screen.getByLabelText("Resumen"), {
+      target: { value: "resumen editado" },
+    });
+    expect(screen.getByTestId("restore-abstract")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Resumen"), {
+      target: { value: "resumen extraído" },
+    });
     expect(screen.queryByTestId("restore-abstract")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("restore-keywords")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("restore-fecha")).not.toBeInTheDocument();
   });
 
   it("never offers Restaurar for título (author-entered, not generated)", () => {
@@ -449,46 +441,45 @@ describe("editar page", () => {
     expect(screen.queryByTestId("restore-titulo")).not.toBeInTheDocument();
   });
 
-  it("Restaurar stages the generated value, persisted on save", async () => {
+  it("Restaurar reverts the field to its seeded value without persisting", async () => {
     useDraftStateMock.mockReturnValue(
-      draft({
-        staged_abstract: "resumen editado",
-        generated_abstract: "resumen del extractor",
-      }),
+      draft({ staged_abstract: "resumen editado" }),
     );
     render(<EditarPage />);
-    expect(screen.getByLabelText("Resumen")).toHaveValue("resumen editado");
+    fireEvent.change(screen.getByLabelText("Resumen"), {
+      target: { value: "otro texto" },
+    });
 
     fireEvent.click(screen.getByTestId("restore-abstract"));
 
     await waitFor(() =>
-      expect(screen.getByLabelText("Resumen")).toHaveValue(
-        "resumen del extractor",
-      ),
+      expect(screen.getByLabelText("Resumen")).toHaveValue("resumen editado"),
     );
-    // Restaurar only stages the value; nothing persists until Guardar.
+    // Restaurar only resets the input; nothing is PATCHed.
     expect(apiPatch).not.toHaveBeenCalled();
-
-    clickSave();
-    await waitFor(() => expect(apiPatch).toHaveBeenCalled());
-    const opts = apiPatch.mock.calls[0]![1];
-    expect(opts.body).toMatchObject({ abstract: "resumen del extractor" });
-    await waitFor(() => expect(refreshDraft).toHaveBeenCalled());
+    expect(screen.queryByTestId("restore-abstract")).not.toBeInTheDocument();
   });
 
-  it("saves restored keywords as the generated array", async () => {
-    useDraftStateMock.mockReturnValue(
-      draft({
-        staged_keywords: ["editado"],
-        generated_keywords: ["redes", "grafos"],
-      }),
-    );
+  it("Restaurar reverts to the last saved value, not the original seed", async () => {
+    useDraftStateMock.mockReturnValue(draft({}));
     render(<EditarPage />);
-    fireEvent.click(screen.getByTestId("restore-keywords"));
+    fireEvent.change(screen.getByLabelText("Resumen"), {
+      target: { value: "resumen guardado" },
+    });
     clickSave();
-    await waitFor(() => expect(apiPatch).toHaveBeenCalled());
-    const opts = apiPatch.mock.calls[0]![1];
-    expect(opts.body).toMatchObject({ keywords: ["redes", "grafos"] });
+    await waitFor(() => expect(refreshDraft).toHaveBeenCalled());
+    // Save re-baselines the form → Restaurar disappears.
+    await waitFor(() =>
+      expect(screen.queryByTestId("restore-abstract")).not.toBeInTheDocument(),
+    );
+
+    fireEvent.change(screen.getByLabelText("Resumen"), {
+      target: { value: "otro texto" },
+    });
+    fireEvent.click(screen.getByTestId("restore-abstract"));
+    await waitFor(() =>
+      expect(screen.getByLabelText("Resumen")).toHaveValue("resumen guardado"),
+    );
   });
 
   it("PATCHes title on save", async () => {

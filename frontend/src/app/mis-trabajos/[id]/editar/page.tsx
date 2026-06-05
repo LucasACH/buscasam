@@ -286,18 +286,25 @@ function EditarForm({
   const router = useRouter();
   const [publishPhase, setPublishPhase] = useState<PublishPhase>("idle");
   const [saving, setSaving] = useState(false);
-  const { register, getValues, setValue, reset, control, formState } =
-    useForm<FormValues>({
-      resolver: zodResolver(formSchema),
-      mode: "onBlur",
-      defaultValues: {
-        titulo: state.title,
-        abstract: state.staged_abstract ?? "",
-        keywords: (state.staged_keywords ?? []).join(", "),
-        fecha: state.staged_fecha ?? "",
-        visibility: state.visibility,
-      },
-    });
+  const {
+    register,
+    getValues,
+    setValue,
+    reset,
+    resetField,
+    control,
+    formState,
+  } = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    mode: "onBlur",
+    defaultValues: {
+      titulo: state.title,
+      abstract: state.staged_abstract ?? "",
+      keywords: (state.staged_keywords ?? []).join(", "),
+      fecha: state.staged_fecha ?? "",
+      visibility: state.visibility,
+    },
+  });
   const { dirtyFields, isDirty } = formState;
   const leaveGuard = useLeaveGuard(isDirty);
 
@@ -332,25 +339,6 @@ function EditarForm({
     setSaving(false);
   }
 
-  // Stage a generated field's extractor snapshot (issue #94) back into the
-  // form; it persists on the next Save like any other edit. The form is not
-  // re-seeded on metadata edits, so setValue keeps the visible input in sync.
-  function restoreField(field: "abstract" | "keywords" | "fecha") {
-    if (field === "abstract") {
-      setValue("abstract", state.generated_abstract ?? "", {
-        shouldDirty: true,
-      });
-    }
-    if (field === "keywords") {
-      setValue("keywords", (state.generated_keywords ?? []).join(", "), {
-        shouldDirty: true,
-      });
-    }
-    if (field === "fecha") {
-      setValue("fecha", state.generated_fecha ?? "", { shouldDirty: true });
-    }
-  }
-
   async function onPublish() {
     setPublishPhase("publishing");
     try {
@@ -380,27 +368,14 @@ function EditarForm({
 
   const { lifecycle } = state;
 
-  // The prefilled inputs subsume the old suggestions panel; Restaurar appears
-  // per field only while the live input diverges from the generated snapshot.
-  // Driven off useWatch() (not staged_*) so it toggles on every keystroke rather
-  // than waiting for the blur-time PATCH + refresh to land.
+  // Per-field undo: Restaurar shows only while the input has unsaved changes
+  // and resets it to the last saved value — defaultValues are re-baselined on
+  // every Save via reset(v), so resetField always lands on the latest save,
+  // not the original extractor snapshot. dirtyFields toggles per keystroke.
   const watched = useWatch({ control });
-  const canRestoreAbstract =
-    state.generated_abstract != null &&
-    (watched.abstract ?? "") !== state.generated_abstract;
-  const canRestoreKeywords =
-    state.generated_keywords != null &&
-    state.generated_keywords.length > 0 &&
-    !keywordsEqual(
-      (watched.keywords ?? "")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
-      state.generated_keywords,
-    );
-  const canRestoreFecha =
-    state.generated_fecha != null &&
-    (watched.fecha ?? "") !== state.generated_fecha;
+  const canRestoreAbstract = !!dirtyFields.abstract;
+  const canRestoreKeywords = !!dirtyFields.keywords;
+  const canRestoreFecha = !!dirtyFields.fecha;
 
   return (
     <main className="mx-auto w-full max-w-3xl px-6 py-8">
@@ -421,7 +396,7 @@ function EditarForm({
             canRestoreAbstract && (
               <Restaurar
                 testId="restore-abstract"
-                onClick={() => restoreField("abstract")}
+                onClick={() => resetField("abstract")}
               />
             )
           }
@@ -440,7 +415,7 @@ function EditarForm({
             canRestoreKeywords && (
               <Restaurar
                 testId="restore-keywords"
-                onClick={() => restoreField("keywords")}
+                onClick={() => resetField("keywords")}
               />
             )
           }
@@ -459,7 +434,7 @@ function EditarForm({
             canRestoreFecha && (
               <Restaurar
                 testId="restore-fecha"
-                onClick={() => restoreField("fecha")}
+                onClick={() => resetField("fecha")}
               />
             )
           }
@@ -730,10 +705,6 @@ function DeleteTrabajo({
       </AlertDialogContent>
     </AlertDialog>
   );
-}
-
-function keywordsEqual(a: string[], b: string[]): boolean {
-  return a.length === b.length && a.every((x, i) => x === b[i]);
 }
 
 function Field({
