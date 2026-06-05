@@ -110,6 +110,14 @@ const CANDIDATE_STATUS_LABEL: Record<Candidate["status"], string> = {
 
 const draftQueryKey = (docId: number) => ["draft", docId] as const;
 
+class HttpError extends Error {
+  status: number;
+  constructor(status: number) {
+    super(`HTTP ${status}`);
+    this.status = status;
+  }
+}
+
 function shouldPoll(state: DraftStateDTO | undefined): boolean {
   return (
     // A freshly created draft starts at "pending" before the worker picks it
@@ -137,7 +145,7 @@ function projectCandidate(c: CandidateDTO): Candidate {
 }
 
 function useDraftQuery(docId: number) {
-  return useQuery<DraftStateDTO>({
+  return useQuery<DraftStateDTO, HttpError>({
     queryKey: draftQueryKey(docId),
     refetchInterval: (q) =>
       shouldPoll(q.state.data) ? POLL_INTERVAL_MS : false,
@@ -145,12 +153,15 @@ function useDraftQuery(docId: number) {
     // keep polling while backgrounded so the page reflects live progress on
     // return instead of freezing at the last foreground poll.
     refetchIntervalInBackground: true,
+    // 404 means not manageable by this user (or gone) — surface isError
+    // immediately so the page can redirect instead of retrying.
+    retry: (failureCount, err) => err.status !== 404 && failureCount < 3,
     queryFn: async () => {
-      const { data, error } = await api.GET("/api/documents/{doc_id}/draft", {
-        params: { path: { doc_id: docId } },
-      });
-      if (error) throw error;
-      if (!data) throw new Error("empty draft state");
+      const { data, error, response } = await api.GET(
+        "/api/documents/{doc_id}/draft",
+        { params: { path: { doc_id: docId } } },
+      );
+      if (error || !data) throw new HttpError(response.status);
       return data;
     },
   });

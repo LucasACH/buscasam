@@ -107,6 +107,22 @@ describe("useDraftState", () => {
     expect(result.current.state!.generated_fecha).toBe("2022-07-01");
   });
 
+  it("surfaces isError without retrying on 404 (not manageable)", async () => {
+    apiGet.mockResolvedValue({
+      data: undefined,
+      error: { detail: "Not Found" },
+      response: { status: 404 },
+    });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(result.current.isError).toBe(true);
+    expect(result.current.state).toBeUndefined();
+    expect(apiGet).toHaveBeenCalledTimes(1);
+  });
+
   it("interprets a publishable owner draft for page consumers", async () => {
     returns({
       index_status: "indexed",
