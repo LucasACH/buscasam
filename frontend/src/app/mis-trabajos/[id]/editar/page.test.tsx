@@ -633,6 +633,22 @@ describe("editar page", () => {
     await waitFor(() => expect(back).toHaveBeenCalled());
     back.mockRestore();
   });
+
+  it("reclaims the Back sentinel after saving so Back isn't a dead no-op", async () => {
+    useDraftStateMock.mockReturnValue(draft({ title: "Mi tesis" }));
+    render(<EditarPage />);
+    fireEvent.change(screen.getByLabelText("Título"), {
+      target: { value: "Nuevo" },
+    });
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    clickSave();
+    // Save clears isDirty → the guard pops its sentinel so the next Back works.
+    await waitFor(() => expect(back).toHaveBeenCalledTimes(1));
+    // Guard is disarmed: a Back press no longer shows the leave dialog.
+    fireEvent.popState(window);
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    back.mockRestore();
+  });
 });
 
 function clickSave() {

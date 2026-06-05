@@ -174,12 +174,14 @@ function useLeaveGuard(isDirty: boolean) {
   const router = useRouter();
   const [pending, setPending] = useState<PendingLeave | null>(null);
   const leavingRef = useRef(false);
+  const armedRef = useRef(false);
 
   useEffect(() => {
     if (!isDirty) return;
     // Sentinel entry: Back now pops to this same URL (a router no-op), which
     // lets us ask before actually leaving.
     window.history.pushState(null, "", window.location.href);
+    armedRef.current = true;
 
     const onBeforeUnload = (e: BeforeUnloadEvent) => e.preventDefault();
     const onClick = (e: MouseEvent) => {
@@ -194,6 +196,7 @@ function useLeaveGuard(isDirty: boolean) {
       setPending({ type: "link", href });
     };
     const onPopState = () => {
+      armedRef.current = false; // Back consumed the sentinel
       if (!leavingRef.current) setPending({ type: "back" });
     };
 
@@ -204,6 +207,13 @@ function useLeaveGuard(isDirty: boolean) {
       window.removeEventListener("beforeunload", onBeforeUnload);
       document.removeEventListener("click", onClick, true);
       window.removeEventListener("popstate", onPopState);
+      // Form went clean (Save) while still here → pop the sentinel so Back
+      // isn't a dead no-op. Skip when deliberately leaving (confirmLeave's
+      // router.push / history.back already drive the stack).
+      if (armedRef.current && !leavingRef.current) {
+        armedRef.current = false;
+        window.history.back();
+      }
     };
   }, [isDirty]);
 
@@ -218,8 +228,10 @@ function useLeaveGuard(isDirty: boolean) {
   function cancelLeave() {
     if (leavingRef.current || !pending) return;
     // The Back press consumed the sentinel; re-arm it for the next press.
-    if (pending.type === "back")
+    if (pending.type === "back") {
       window.history.pushState(null, "", window.location.href);
+      armedRef.current = true;
+    }
     setPending(null);
   }
 
