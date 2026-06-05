@@ -104,15 +104,19 @@ class DraftState:
     candidate: CandidateState | None
 
 
-def _publish_gate_reason(index_status: str, fingerprint_matches: bool) -> str | None:
-    """Server-owned publish gate. None iff the candidate is indexed and its
-    stored headline fingerprint matches current title + staged_abstract."""
+def _publish_gate_reason(
+    index_status: str, fingerprint_matches: bool, has_metadata: bool
+) -> str | None:
+    """Server-owned publish gate. None iff the candidate is indexed, its stored
+    headline fingerprint matches current title + staged_abstract, and abstract +
+    keywords are both present. The metadata gate enforces manual entry on the
+    opt-out path (no LLM ran), where both fields land empty after indexing."""
     if index_status in ("pending", "processing"):
         return "processing"
     if index_status == "failed":
         return "processing_failed"
     if index_status == "indexed" and fingerprint_matches:
-        return None
+        return None if has_metadata else "missing_metadata"
     return "reindexing_headline"
 
 
@@ -136,6 +140,7 @@ async def create_draft(
     visibility: str,
     external_authors: list[ExternalAuthor],
     coauthor_user_ids: list[int],
+    metadata_llm: bool,
 ) -> int:
     owner_name = (
         await session.execute(
@@ -147,14 +152,15 @@ async def create_draft(
     doc_id = (
         await session.execute(
             text(
-                "INSERT INTO documents (visibility, publication_status, titulo, fecha, area_path, tipo) "
-                "VALUES (:visibility, 'draft', :titulo, CURRENT_DATE, :area_path, :tipo) RETURNING id"
+                "INSERT INTO documents (visibility, publication_status, titulo, fecha, area_path, tipo, metadata_llm) "
+                "VALUES (:visibility, 'draft', :titulo, CURRENT_DATE, :area_path, :tipo, :metadata_llm) RETURNING id"
             ),
             {
                 "visibility": visibility,
                 "titulo": title,
                 "area_path": area_path,
                 "tipo": document_type,
+                "metadata_llm": metadata_llm,
             },
         )
     ).scalar_one()
@@ -420,7 +426,12 @@ async def get_draft_state(
             staged_keywords=cand_row["staged_keywords"] or [],
             staged_fecha=cand_row["staged_fecha"],
             can_publish=is_owner
-            and _publish_gate_reason(cand_row["index_status"], cand_matches) is None,
+            and _publish_gate_reason(
+                cand_row["index_status"],
+                cand_matches,
+                bool(cand_row["staged_abstract"] and cand_row["staged_keywords"]),
+            )
+            is None,
             can_discard=True,
             indexed_at=cand_row["indexed_at"],
             error=cand_row["index_error"],
@@ -458,7 +469,11 @@ async def get_draft_state(
         generated_keywords=row["generated_keywords"] or [],
         generated_fecha=row["generated_fecha"],
         index_error=row["index_error"],
-        publish_gate_reason=_publish_gate_reason(row["index_status"], matches),
+        publish_gate_reason=_publish_gate_reason(
+            row["index_status"],
+            matches,
+            bool(row["staged_abstract"] and row["staged_keywords"]),
+        ),
         is_owner=is_owner,
         visibility=row["visibility"],
         area_path=row["area_path"],

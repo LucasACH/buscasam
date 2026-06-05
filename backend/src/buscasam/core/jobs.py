@@ -94,14 +94,11 @@ async def _complete_indexing(
     `index_status='processing'`, so a descartar committed during the embed IO
     makes this write a clean no-op — no chunks materialize on a discarded row."""
     # 'summarizing' surfaces as a checkpoint only when the metadata LLM actually
-    # runs; otherwise the heuristic extractor is instant and the step is
+    # runs; otherwise (globally disabled, or this doc opted out) the step is
     # 'analyzing' (metadata + chunking). See ADR-0011 progress UI.
-    await _set_stage(
-        sm,
-        cv.version_id,
-        "summarizing" if settings.metadata_llm_enabled else "analyzing",
-    )
-    meta = await extractmod.suggest_metadata(doc)
+    use_llm = cv.metadata_llm and settings.metadata_llm_enabled
+    await _set_stage(sm, cv.version_id, "summarizing" if use_llm else "analyzing")
+    meta = await extractmod.suggest_metadata(doc, use_llm=cv.metadata_llm)
     body = chunkmod.chunk(doc)
     headline = chunkmod.headline_chunk(cv.title, meta.abstract)
     fp = chunkmod.headline_fingerprint(cv.title, meta.abstract)

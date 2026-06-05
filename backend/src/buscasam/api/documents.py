@@ -78,6 +78,7 @@ async def create_draft_endpoint(
                 for a in body.external_authors
             ],
             coauthor_user_ids=body.coauthor_user_ids,
+            metadata_llm=body.metadata_llm,
         )
     except InvalidCoauthorId as exc:
         raise HTTPException(

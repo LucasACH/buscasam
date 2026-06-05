@@ -309,6 +309,33 @@ async def test_suggest_metadata_uses_llm_success(monkeypatch):
     assert seen_format[0]["additionalProperties"] is False
 
 
+async def test_suggest_metadata_opt_out_returns_empty_without_calling_llm(
+    monkeypatch,
+):
+    # use_llm=False is the per-document opt-out: no LLM, no heuristic abstract/
+    # keywords, only fecha is derived. A live transport would fail the test.
+    monkeypatch.setattr(settings, "metadata_llm_enabled", True)
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise AssertionError("LLM must not be called when use_llm=False")
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="http://ollama"
+    )
+    try:
+        meta = await suggest_metadata(
+            _doc("Trabajo presentado en 2021 sobre grafos y redes."),
+            client,
+            use_llm=False,
+        )
+    finally:
+        await client.aclose()
+
+    assert meta.abstract == ""
+    assert meta.keywords == []
+    assert meta.fecha.year == 2021
+
+
 async def test_suggest_metadata_keeps_explicit_abstract_over_llm(monkeypatch):
     monkeypatch.setattr(settings, "metadata_llm_enabled", True)
 

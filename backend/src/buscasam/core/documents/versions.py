@@ -31,6 +31,7 @@ class CandidateVersion:
     mime: str
     title: str
     owner_user_id: int | None
+    metadata_llm: bool
 
 
 async def attach_main_version(
@@ -230,7 +231,7 @@ async def load_candidate(session: AsyncSession, version_id: int) -> CandidateVer
             await session.execute(
                 text(
                     "SELECT v.id, v.doc_id, encode(v.sha256, 'hex') AS sha, v.mime, "
-                    "       d.titulo, "
+                    "       d.titulo, d.metadata_llm, "
                     "       (SELECT a.user_id FROM document_authors a "
                     "         WHERE a.doc_id = v.doc_id AND a.status = 'owner' LIMIT 1) "
                     "         AS owner_user_id "
@@ -252,4 +253,5 @@ async def load_candidate(session: AsyncSession, version_id: int) -> CandidateVer
         mime=row["mime"],
         title=row["titulo"],
         owner_user_id=row["owner_user_id"],
+        metadata_llm=row["metadata_llm"],
     )

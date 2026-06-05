@@ -548,12 +548,20 @@ async def _close_metadata_client(client) -> None:
         await client.aclose()
 
 
-async def suggest_metadata(doc: ExtractedDoc, client=None) -> IndexableMetadata:
+async def suggest_metadata(
+    doc: ExtractedDoc, client=None, *, use_llm: bool = True
+) -> IndexableMetadata:
     """Best-effort staged metadata path.
 
     Heuristics always produce the fallback. The local LLM may clean up fallback
     output, but any timeout/outage/malformed output is non-fatal.
+
+    `use_llm=False` is the per-document opt-out: no text leaves the box and no
+    heuristic abstract/keywords are suggested — only fecha is derived, so the
+    author writes abstract + keywords by hand (enforced by the publish gate).
     """
+    if not use_llm:
+        return IndexableMetadata(abstract="", keywords=[], fecha=_derive_fecha(doc))
     fallback = derive_metadata(doc)
     if not settings.metadata_llm_enabled or not doc.text.strip():
         return fallback

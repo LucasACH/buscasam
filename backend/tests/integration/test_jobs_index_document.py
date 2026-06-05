@@ -462,6 +462,55 @@ async def test_index_document_persists_local_metadata_llm_output(
     assert row["staged_keywords"] == ["grafos", "centralidad"]
 
 
+async def test_index_document_opt_out_indexes_without_metadata(
+    session, blob_root, worker_sm, monkeypatch
+):
+    # documents.metadata_llm=false: index without sending text to the LLM and
+    # leave abstract/keywords empty for the author to fill (publish gate enforces).
+    payload = _docx_bytes(
+        [
+            "Este documento analiza grafos de coautoría académica.",
+            "El método compara redes, componentes y centralidad.",
+        ]
+    )
+    sha_hex, sha_bytes = _persist_blob(blob_root, payload)
+    uid, doc_id, version_id = await _seed_version(
+        session, sha_bytes=sha_bytes, mime=_DOCX_MIME
+    )
+    await session.execute(
+        text("UPDATE documents SET metadata_llm = false WHERE id = :id"),
+        {"id": doc_id},
+    )
+    await session.commit()
+    tei = _tei_mock()
+    monkeypatch.setattr(jobs.extractmod.settings, "metadata_llm_enabled", True)
+
+    async def _llm(client, doc, fallback):
+        raise AssertionError("LLM must not run for an opt-out document")
+
+    monkeypatch.setattr(jobs.extractmod, "_call_metadata_llm", _llm)
+
+    await jobs._run_index_document(worker_sm, tei, version_id)
+    await tei.aclose()
+
+    row = (
+        (
+            await session.execute(
+                text(
+                    "SELECT index_status, staged_abstract, staged_keywords "
+                    "FROM document_versions WHERE id = :id"
+                ),
+                {"id": version_id},
+            )
+        )
+        .mappings()
+        .one()
+    )
+    assert row["index_status"] == "indexed"
+    assert row["staged_abstract"] == ""
+    assert row["staged_keywords"] == []
+
+
 async def test_index_document_metadata_llm_timeout_still_indexes(
     session, blob_root, worker_sm, monkeypatch
 ):

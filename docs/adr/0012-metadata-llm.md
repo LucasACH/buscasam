@@ -62,3 +62,35 @@ compatibility; production opts into `vertex` via Terraform (`startup.sh` renders
 the `.env`). The non-fatal contract (item 3) is unchanged — any Vertex error,
 timeout, or malformed/non-Spanish output degrades to the heuristic fallback —
 so this remains not a launch gate.
+
+## Amendment (2026-06-05): per-document opt-in, default off
+
+LLM enrichment is now opt-in per document, not a global on/off. Because the
+prompt sends the extracted document text to the provider (Vertex in prod), an
+author who is uneasy about that — e.g. for an `interno`/`privado` work — must be
+able to decline before any text leaves the box.
+
+- **`documents.metadata_llm`** (boolean, default `true` for backward
+  compatibility) is set at draft creation. The upload form gates on a
+  **forced-choice dialog**: "Subir trabajo" validates the file and then opens a
+  dialog with two explicit actions — "Generar con IA" / "Continuar sin IA"
+  (plus Cancelar) and no preselected default — so the author makes a conscious
+  decision rather than relying on a checkbox they might miss. The dialog states
+  what is sent, where, and that the file is not used to train models.
+- **Opt-out path.** `core/extract.suggest_metadata(use_llm=False)` skips the LLM
+  *and* the heuristic abstract/keywords entirely — only fecha is derived. No text
+  reaches any provider. `core/jobs` reads the doc-level flag (`AND`-ed with the
+  global `metadata_llm_enabled`) and reports the `analyzing` stage instead of
+  `summarizing`.
+- **Manual metadata is now mandatory to publish.** The publish gate
+  (`core/documents.drafts._publish_gate_reason`) and the server-side
+  `core/documents.publication.publish` both require non-empty abstract +
+  keywords (new gate reason `missing_metadata`). On the LLM path this is
+  effectively always satisfied; on the opt-out path it forces the author to
+  write both before the work goes live. This *does* tighten the pre-existing gate
+  (empty abstract/keywords used to be publishable), accepted as the cost of the
+  opt-out.
+
+The provider dispatch, prompt, JSON contract, Spanish guard, and non-fatal
+contract are unchanged. The choice is fixed at creation and persists across
+re-uploads/reindex (the flag lives on `documents`, read via `load_candidate`).

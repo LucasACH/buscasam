@@ -818,6 +818,11 @@ export interface components {
              * @default []
              */
             coauthor_user_ids: number[];
+            /**
+             * Metadata Llm
+             * @default true
+             */
+            metadata_llm: boolean;
         };
         /** CreateDraftResponse */
         CreateDraftResponse: {

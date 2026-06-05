@@ -233,6 +233,39 @@ describe("useDraftState", () => {
     });
   });
 
+  it("blocks publication with Spanish copy when metadata is missing", async () => {
+    returns({
+      index_status: "indexed",
+      publish_gate_reason: "missing_metadata",
+    });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(result.current.state?.lifecycle).toMatchObject({
+      gateMessage: "Completá el resumen y las palabras clave para publicar",
+      canPublish: false,
+    });
+  });
+
+  // missing_metadata is a user-action gate, not a processing state: it must not
+  // poll, or the editar page would refetch forever while the author types.
+  it("does not poll while metadata is missing", async () => {
+    returns({
+      index_status: "indexed",
+      publish_gate_reason: "missing_metadata",
+    });
+    renderHook(() => useDraftState(1), { wrapper: wrapper() });
+
+    await vi.advanceTimersByTimeAsync(0);
+    const initial = apiGet.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(3000);
+
+    expect(apiGet.mock.calls.length).toBe(initial);
+  });
+
   it("polls every 3s while processing", async () => {
     returns({ index_status: "processing", publish_gate_reason: "processing" });
     renderHook(() => useDraftState(1), { wrapper: wrapper() });

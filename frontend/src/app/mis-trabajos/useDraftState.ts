@@ -101,6 +101,7 @@ const GATE_COPY: Record<string, string> = {
   processing: "Procesando…",
   reindexing_headline: "Reindexando título…",
   processing_failed: "Falló el procesamiento — revisá tu archivo",
+  missing_metadata: "Completá el resumen y las palabras clave para publicar",
 };
 
 const CANDIDATE_STATUS_LABEL: Record<Candidate["status"], string> = {

@@ -82,10 +82,10 @@ Queda fuera del MVP:
 ## Publicación
 
 ### Flujo
-1. Usuario autenticado crea borrador con título, autores, área, tipo y visibilidad.
+1. Usuario autenticado crea borrador con título, autores, área, tipo y visibilidad. Al subir, decide si genera resumen y palabras clave con IA: si lo activa, el texto del documento se procesa con un modelo (Google Vertex en producción) para sugerir resumen y palabras clave; si no, el texto no sale del sistema y el autor los escribe a mano. La decisión es por documento y se toma al crear el borrador.
 2. Sube archivo principal; la API responde `202` y procesa fuera del request.
-3. El sistema extrae texto y sugiere abstract, palabras clave y fecha del trabajo.
-4. El autor revisa o edita sugerencias. Si cambia título/abstract, el índice de encabezado se regenera antes de habilitar publicación.
+3. El sistema extrae texto y deriva la fecha del trabajo. Con IA activada sugiere además abstract y palabras clave; sin IA esos campos quedan vacíos.
+4. El autor revisa o edita sugerencias. El abstract y las palabras clave son obligatorios para publicar. Si cambia título/abstract, el índice de encabezado se regenera antes de habilitar publicación.
 5. El autor publica; recién entonces el documento aparece en búsqueda, detalle y descarga según visibilidad.
 
 ### Estados

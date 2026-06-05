@@ -103,6 +103,18 @@ async function fillRequiredFields() {
   return user;
 }
 
+// Click "Subir trabajo", select a metadata option in the dialog, then confirm.
+async function submitWithChoice(
+  user: ReturnType<typeof userEvent.setup>,
+  choice: "Generar con IA" | "Continuar sin IA" = "Continuar sin IA",
+) {
+  await user.click(screen.getByRole("button", { name: /subir/i }));
+  await user.click(
+    await screen.findByRole("radio", { name: new RegExp(choice, "i") }),
+  );
+  await user.click(screen.getByRole("button", { name: /confirmar/i }));
+}
+
 describe("/mis-trabajos/nuevo page", () => {
   beforeEach(() => {
     replace.mockReset();
@@ -127,7 +139,7 @@ describe("/mis-trabajos/nuevo page", () => {
     wrap(<NuevoPage />);
 
     const user = await fillRequiredFields();
-    await user.click(screen.getByRole("button", { name: /subir/i }));
+    await submitWithChoice(user, "Continuar sin IA");
 
     await waitFor(() =>
       expect(replace).toHaveBeenCalledWith("/mis-trabajos/42/editar"),
@@ -141,8 +153,54 @@ describe("/mis-trabajos/nuevo page", () => {
         area_path: "escuela_ciencia.carrera_informatica.materia_bd",
         document_type: "tesis",
         visibility: "publico",
+        metadata_llm: false,
       },
     });
+  });
+
+  it("sends metadata_llm: true when choosing 'Generar con IA'", async () => {
+    apiPost.mockResolvedValue({ data: { id: 42 } });
+    mockUpload(() => new Response("", { status: 202 }));
+
+    wrap(<NuevoPage />);
+
+    const user = await fillRequiredFields();
+    await submitWithChoice(user, "Generar con IA");
+
+    await waitFor(() =>
+      expect(replace).toHaveBeenCalledWith("/mis-trabajos/42/editar"),
+    );
+
+    const createCall = apiPost.mock.calls.find(([p]) => p === "/api/documents");
+    expect(createCall![1]).toMatchObject({ body: { metadata_llm: true } });
+  });
+
+  it("defaults to 'Generar con IA' with Confirmar enabled", async () => {
+    wrap(<NuevoPage />);
+
+    const user = await fillRequiredFields();
+    await user.click(screen.getByRole("button", { name: /subir/i }));
+
+    expect(
+      await screen.findByRole("radio", { name: /Generar con IA/i }),
+    ).toBeChecked();
+    expect(screen.getByRole("button", { name: /confirmar/i })).toBeEnabled();
+  });
+
+  it("closing the dialog does not create a draft", async () => {
+    apiPost.mockResolvedValue({ data: { id: 42 } });
+    mockUpload(() => new Response("", { status: 202 }));
+
+    wrap(<NuevoPage />);
+
+    const user = await fillRequiredFields();
+    await user.click(screen.getByRole("button", { name: /subir/i }));
+    await user.click(await screen.findByRole("button", { name: /cerrar/i }));
+
+    expect(
+      apiPost.mock.calls.find(([p]) => p === "/api/documents"),
+    ).toBeUndefined();
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it("surfaces the 415 detail inline when the upload is rejected", async () => {
@@ -162,7 +220,7 @@ describe("/mis-trabajos/nuevo page", () => {
 
     wrap(<NuevoPage />);
     const user = await fillRequiredFields();
-    await user.click(screen.getByRole("button", { name: /subir/i }));
+    await submitWithChoice(user);
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /protegido por contraseña/,
@@ -187,7 +245,7 @@ describe("/mis-trabajos/nuevo page", () => {
 
     wrap(<NuevoPage />);
     const user = await fillRequiredFields();
-    await user.click(screen.getByRole("button", { name: /subir/i }));
+    await submitWithChoice(user);
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/50 MB/);
     expect(replace).not.toHaveBeenCalled();
@@ -201,7 +259,7 @@ describe("/mis-trabajos/nuevo page", () => {
 
     wrap(<NuevoPage />);
     const user = await fillRequiredFields();
-    await user.click(screen.getByRole("button", { name: /subir/i }));
+    await submitWithChoice(user);
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/coauthor/i);
     expect(replace).not.toHaveBeenCalled();
@@ -213,7 +271,7 @@ describe("/mis-trabajos/nuevo page", () => {
 
     wrap(<NuevoPage />);
     const user = await fillRequiredFields();
-    await user.click(screen.getByRole("button", { name: /subir/i }));
+    await submitWithChoice(user);
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /No se pudo conectar con el servidor/,

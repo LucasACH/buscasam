@@ -134,8 +134,8 @@ export default function EditarPage() {
             </div>
             <p className="text-muted-foreground text-sm leading-relaxed">
               Estamos procesando tu archivo. Esto puede tardar unos minutos.
-              Podés cerrar esta página y volver más tarde: el trabajo sigue
-              procesándose.
+              El trabajo sigue procesándose aunque cierres esta página, así que
+              podés volver más tarde.
             </p>
           </div>
         ) : (

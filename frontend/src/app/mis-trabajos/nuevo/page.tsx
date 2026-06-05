@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm, useFieldArray, Controller } from "react-hook-form";
@@ -15,16 +15,25 @@ import { AreasCascader } from "@/components/AreasCascader";
 import { CoauthorPicker } from "@/components/CoauthorPicker";
 import { Button } from "@/components/ui/button";
 import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
   AlertTriangle,
+  Check,
   ChevronDown,
   ChevronLeft,
   Info,
+  Lock,
   Plus,
+  Sparkles,
   Upload,
   X,
 } from "lucide-react";
@@ -88,6 +97,49 @@ function titleCase(s: string): string {
   return s.toLowerCase().replace(/\b\p{L}/gu, (c) => c.toUpperCase());
 }
 
+function OptionCard({
+  selected,
+  onSelect,
+  icon,
+  title,
+  description,
+}: {
+  selected: boolean;
+  onSelect: () => void;
+  icon: ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      onClick={onSelect}
+      className={`flex items-start gap-3 rounded-lg border px-3.5 py-3 text-left text-sm transition ${
+        selected
+          ? "border-primary bg-primary-tint"
+          : "border-border-strong bg-card hover:border-neutral-400"
+      }`}
+    >
+      <span
+        className={`mt-0.5 ${selected ? "text-primary" : "text-muted-foreground"}`}
+      >
+        {icon}
+      </span>
+      <span className="flex-1">
+        <span className="block font-semibold">{title}</span>
+        <span className="text-muted-foreground mt-0.5 block text-[13px]">
+          {description}
+        </span>
+      </span>
+      <span className="mt-0.5 size-4 flex-none">
+        {selected && <Check className="text-primary size-4" />}
+      </span>
+    </button>
+  );
+}
+
 export default function NuevoPage() {
   const { isInvitado, isLoading } = useUser();
   const router = useRouter();
@@ -127,12 +179,32 @@ function NuevoForm() {
 
   const externalAuthors = useFieldArray({ control, name: "external_authors" });
 
-  async function onSubmit(values: FormValues) {
+  // The file is validated and the values are stashed here; the metadata_llm
+  // choice is then selected in the dialog and committed with Confirmar. A
+  // non-null pendingValues opens the dialog; metadataChoice is the picked
+  // option (null until the user selects one, gating Confirmar).
+  const [pendingValues, setPendingValues] = useState<FormValues | null>(null);
+  const [metadataChoice, setMetadataChoice] = useState<boolean | null>(null);
+
+  function onValid(values: FormValues) {
     setSubmitError(null);
     if (!file) {
       setSubmitError("Adjuntá el archivo principal");
       return;
     }
+    setMetadataChoice(true);
+    setPendingValues(values);
+  }
+
+  function closeDialog() {
+    setPendingValues(null);
+    setMetadataChoice(null);
+  }
+
+  async function doSubmit(values: FormValues, metadataLlm: boolean) {
+    closeDialog();
+    if (!file) return;
+    setSubmitError(null);
     setSubmitting(true);
     try {
       const { data, error } = await api.POST("/api/documents", {
@@ -147,6 +219,7 @@ function NuevoForm() {
             email: a.email.trim(),
           })),
           coauthor_user_ids: values.coauthor_user_ids,
+          metadata_llm: metadataLlm,
         },
       });
       if (error || !data) {
@@ -175,6 +248,7 @@ function NuevoForm() {
           visibilidad: values.visibilidad,
           has_external_authors: values.external_authors.length > 0,
           has_coauthors: values.coauthor_user_ids.length > 0,
+          metadata_llm: metadataLlm,
         });
         router.replace(`/mis-trabajos/${id}/editar`);
         return;
@@ -208,7 +282,7 @@ function NuevoForm() {
         Nuevo trabajo
       </h1>
 
-      <form className="mt-7 space-y-6" onSubmit={handleSubmit(onSubmit)}>
+      <form className="mt-7 space-y-6" onSubmit={handleSubmit(onValid)}>
         <div className="space-y-1.5">
           <label htmlFor="titulo" className="text-sm font-medium">
             Título <span className="text-destructive">*</span>
@@ -442,6 +516,69 @@ function NuevoForm() {
           Subir trabajo
         </Button>
       </form>
+
+      <AlertDialog
+        open={pendingValues !== null}
+        onOpenChange={(open) => {
+          if (!open) closeDialog();
+        }}
+      >
+        <AlertDialogContent>
+          <div className="flex items-center justify-between gap-4">
+            <AlertDialogTitle>¿Generar resumen con IA?</AlertDialogTitle>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Cerrar"
+              className="text-muted-foreground -mr-1 flex-none"
+              onClick={closeDialog}
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
+
+          <AlertDialogDescription className="mt-2">
+            Elegí cómo completar el resumen y las palabras clave del trabajo. Vas
+            a poder editarlos antes de publicar.
+          </AlertDialogDescription>
+
+          <div
+            role="radiogroup"
+            aria-label="Generación de metadatos"
+            className="mt-3 flex flex-col gap-2.5"
+          >
+            <OptionCard
+              selected={metadataChoice === true}
+              onSelect={() => setMetadataChoice(true)}
+              icon={<Sparkles className="size-4 flex-none" />}
+              title="Generar con IA"
+              description="Procesamos el texto del documento con IA para sugerirte un resumen y palabras clave. Vas a poder editarlos. El archivo no se usa para entrenar modelos."
+            />
+            <OptionCard
+              selected={metadataChoice === false}
+              onSelect={() => setMetadataChoice(false)}
+              icon={<Lock className="size-4 flex-none" />}
+              title="Continuar sin IA"
+              description="El texto no sale del sistema. Escribís el resumen y las palabras clave a mano."
+            />
+          </div>
+
+          <div className="mt-3 flex justify-end">
+            <Button
+              type="button"
+              disabled={metadataChoice === null}
+              onClick={() =>
+                pendingValues &&
+                metadataChoice !== null &&
+                doSubmit(pendingValues, metadataChoice)
+              }
+            >
+              Confirmar
+            </Button>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
     </main>
   );
 }

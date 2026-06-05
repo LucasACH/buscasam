@@ -51,7 +51,8 @@ async def publish(session: AsyncSession, user_ctx: UserCtx, doc_id: int) -> None
     matches = row["headline_fingerprint"] == headline_fingerprint(
         row["titulo"], row["staged_abstract"] or ""
     )
-    if row["index_status"] != "indexed" or not matches:
+    has_metadata = bool(row["staged_abstract"] and row["staged_keywords"])
+    if row["index_status"] != "indexed" or not matches or not has_metadata:
         raise PublishConflict
 
     version_id = row["version_id"]

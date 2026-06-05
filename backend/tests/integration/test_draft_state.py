@@ -39,6 +39,7 @@ async def _seed_candidate(
     staged_fecha: date | None = None,
     fingerprint_matches: bool = True,
 ) -> tuple[int, int, int]:
+    staged_keywords = staged_keywords if staged_keywords is not None else ["kw"]
     uid = await make_user(session)
     doc_id = await make_document(session, publication_status="draft", titulo=titulo)
     await session.execute(
@@ -84,6 +85,21 @@ async def test_get_draft_state_indexed_and_matched_is_publishable(session):
     assert state.index_status == "indexed"
     assert state.publish_gate_reason is None
     assert state.staged_abstract == "resumen"
+
+
+async def test_get_draft_state_indexed_without_metadata_gates_missing_metadata(
+    session,
+):
+    # Opt-out path lands here: indexed + matching fingerprint but empty
+    # abstract/keywords. The gate blocks publish until the author fills both.
+    uid, doc_id, _ = await _seed_candidate(
+        session, staged_abstract="", staged_keywords=[]
+    )
+
+    state = await documents.get_draft_state(session, _ctx(uid), doc_id)
+
+    assert state.index_status == "indexed"
+    assert state.publish_gate_reason == "missing_metadata"
 
 
 async def test_get_draft_state_exposes_generated_snapshot(session):
@@ -383,7 +399,7 @@ async def test_title_edited_during_processing_self_enqueues_reindex(session, wor
         body=[],
         headline=chunkmod.headline_chunk(old_title, "abs"),
         embeds=[np.zeros(1024)],
-        meta=IndexableMetadata(abstract="abs", keywords=[], fecha=None),
+        meta=IndexableMetadata(abstract="abs", keywords=["kw"], fecha=None),
         headline_fingerprint=chunkmod.headline_fingerprint(old_title, "abs"),
     )
 
