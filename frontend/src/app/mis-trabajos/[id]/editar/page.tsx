@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useForm, useWatch } from "react-hook-form";
@@ -164,6 +164,96 @@ export default function EditarPage() {
   );
 }
 
+type PendingLeave = { type: "link"; href: string } | { type: "back" };
+
+// Guards every way out of the page while the form is dirty: internal link
+// clicks (back link, header, logo, …) and the browser Back button get the
+// custom confirm dialog; reload, tab close and external URLs get the native
+// prompt via beforeunload (browsers don't allow a custom dialog there).
+function useLeaveGuard(isDirty: boolean) {
+  const router = useRouter();
+  const [pending, setPending] = useState<PendingLeave | null>(null);
+  const leavingRef = useRef(false);
+
+  useEffect(() => {
+    if (!isDirty) return;
+    // Sentinel entry: Back now pops to this same URL (a router no-op), which
+    // lets us ask before actually leaving.
+    window.history.pushState(null, "", window.location.href);
+
+    const onBeforeUnload = (e: BeforeUnloadEvent) => e.preventDefault();
+    const onClick = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0) return;
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      if (!(e.target instanceof Element)) return;
+      const anchor = e.target.closest("a[href]");
+      const href = anchor?.getAttribute("href");
+      if (!href?.startsWith("/") || anchor?.getAttribute("target")) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setPending({ type: "link", href });
+    };
+    const onPopState = () => {
+      if (!leavingRef.current) setPending({ type: "back" });
+    };
+
+    window.addEventListener("beforeunload", onBeforeUnload);
+    document.addEventListener("click", onClick, true);
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      document.removeEventListener("click", onClick, true);
+      window.removeEventListener("popstate", onPopState);
+    };
+  }, [isDirty]);
+
+  function confirmLeave() {
+    if (!pending) return;
+    leavingRef.current = true;
+    if (pending.type === "link") router.push(pending.href);
+    else window.history.back();
+    setPending(null);
+  }
+
+  function cancelLeave() {
+    if (leavingRef.current || !pending) return;
+    // The Back press consumed the sentinel; re-arm it for the next press.
+    if (pending.type === "back")
+      window.history.pushState(null, "", window.location.href);
+    setPending(null);
+  }
+
+  return { pending, confirmLeave, cancelLeave };
+}
+
+function LeaveGuardDialog({
+  guard,
+}: {
+  guard: ReturnType<typeof useLeaveGuard>;
+}) {
+  return (
+    <AlertDialog
+      open={guard.pending !== null}
+      onOpenChange={(open) => !open && guard.cancelLeave()}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>¿Salir sin guardar?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Tenés cambios sin guardar. Si salís ahora, se perderán.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Seguir editando</AlertDialogCancel>
+          <AlertDialogAction onClick={guard.confirmLeave}>
+            Salir sin guardar
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 function EditarForm({
   docId,
   state,
@@ -191,6 +281,7 @@ function EditarForm({
       },
     });
   const { dirtyFields, isDirty } = formState;
+  const leaveGuard = useLeaveGuard(isDirty);
 
   // Persist every dirty field in one metadata PATCH. The Save button is only
   // enabled while isDirty, so at least one field is sent. visibility is gated
@@ -298,7 +389,6 @@ function EditarForm({
       <PageHeader
         statusLabel={lifecycle.statusLabel}
         publishedAt={lifecycle.publishedAt}
-        isDirty={isDirty}
       />
 
       <form className="space-y-6">
@@ -455,6 +545,8 @@ function EditarForm({
         </div>
       )}
 
+      <LeaveGuardDialog guard={leaveGuard} />
+
       {publishPhase !== "idle" && <PublishOverlay phase={publishPhase} />}
     </main>
   );
@@ -504,57 +596,28 @@ function StatusPill({ label, tone }: { label: string; tone?: BadgeTone }) {
   );
 }
 
-const BACK_LINK_CLASS =
-  "text-muted-foreground hover:text-foreground mb-4 -ml-1 inline-flex items-center gap-1 text-[13px]";
-
-function BackLink({ isDirty }: { isDirty: boolean }) {
-  const router = useRouter();
-  if (!isDirty) {
-    return (
-      <Link href="/mis-trabajos" className={BACK_LINK_CLASS}>
-        <ChevronLeft className="size-4" />
-        Mis trabajos
-      </Link>
-    );
-  }
+function BackLink() {
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <button type="button" className={BACK_LINK_CLASS}>
-          <ChevronLeft className="size-4" />
-          Mis trabajos
-        </button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>¿Salir sin guardar?</AlertDialogTitle>
-          <AlertDialogDescription>
-            Tenés cambios sin guardar. Si salís ahora, se perderán.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Seguir editando</AlertDialogCancel>
-          <AlertDialogAction onClick={() => router.push("/mis-trabajos")}>
-            Salir sin guardar
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <Link
+      href="/mis-trabajos"
+      className="text-muted-foreground hover:text-foreground mb-4 -ml-1 inline-flex items-center gap-1 text-[13px]"
+    >
+      <ChevronLeft className="size-4" />
+      Mis trabajos
+    </Link>
   );
 }
 
 function PageHeader({
   statusLabel,
   publishedAt = null,
-  isDirty = false,
 }: {
   statusLabel: string;
   publishedAt?: string | null;
-  isDirty?: boolean;
 }) {
   return (
     <div className="mb-7">
-      <BackLink isDirty={isDirty} />
+      <BackLink />
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-[28px] font-semibold tracking-tight">
           Editar trabajo
