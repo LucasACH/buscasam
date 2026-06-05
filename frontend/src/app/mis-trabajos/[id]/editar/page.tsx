@@ -476,7 +476,7 @@ function EditarForm({
                 <Select value={field.value} onValueChange={field.onChange}>
                   <SelectTrigger
                     id="visibility"
-                    className="max-w-[240px] data-[size=default]:h-10"
+                    className="w-full max-w-[240px] data-[size=default]:h-10"
                   >
                     <SelectValue />
                   </SelectTrigger>
