@@ -3,17 +3,10 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { api } from "@/api/client";
+import { HttpError } from "@/api/HttpError";
 import type { components } from "@/api/schema";
 
 export type Related = components["schemas"]["RelatedDTO"];
-
-class HttpError extends Error {
-  status: number;
-  constructor(status: number) {
-    super(`HTTP ${status}`);
-    this.status = status;
-  }
-}
 
 async function fetchRelated(docId: number): Promise<Related[]> {
   const { data, response } = await api.GET("/api/docs/{doc_id}/related", {

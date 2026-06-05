@@ -100,11 +100,17 @@ export default function EditarPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const docId = Number(params.id);
-  const { state, isLoading, refresh, actions } = useDraftState(docId);
+  const { state, isLoading, isError, refresh, actions } = useDraftState(docId);
 
   useEffect(() => {
     if (isInvitado) router.replace(`/login?next=/mis-trabajos/${docId}/editar`);
   }, [isInvitado, router, docId]);
+
+  // Non-manageable docs 404 on the draft endpoint (no existence leak), so any
+  // load failure routes back to the list instead of rendering a blank page.
+  useEffect(() => {
+    if (isError) router.replace("/mis-trabajos");
+  }, [isError, router]);
 
   if (userLoading || isInvitado || !user) return null;
   if (isLoading || !state) return null;

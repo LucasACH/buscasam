@@ -138,11 +138,23 @@ describe("editar page", () => {
     attachmentActions.add.mockReset();
     attachmentActions.remove.mockReset();
     push.mockReset();
+    replace.mockReset();
     attachmentsPanelMock.mockClear();
     candidatePanelMock.mockClear();
     versionsPanelMock.mockClear();
   });
   afterEach(() => cleanup());
+
+  it("redirects to Mis trabajos when the draft fails to load (e.g. not manageable)", () => {
+    useDraftStateMock.mockReturnValue({
+      ...draft(),
+      state: undefined,
+      isError: true,
+    });
+    render(<EditarPage />);
+
+    expect(replace).toHaveBeenCalledWith("/mis-trabajos");
+  });
 
   it("blocks the page with a loader while the initial version is indexing", () => {
     useDraftStateMock.mockReturnValue(
