@@ -373,6 +373,7 @@ function EditarForm({
   // every Save via reset(v), so resetField always lands on the latest save,
   // not the original extractor snapshot. dirtyFields toggles per keystroke.
   const watched = useWatch({ control });
+  const canRestoreTitulo = !!dirtyFields.titulo;
   const canRestoreAbstract = !!dirtyFields.abstract;
   const canRestoreKeywords = !!dirtyFields.keywords;
   const canRestoreFecha = !!dirtyFields.fecha;
@@ -385,7 +386,18 @@ function EditarForm({
       />
 
       <form className="space-y-6">
-        <Field label="Título" htmlFor="titulo">
+        <Field
+          label="Título"
+          htmlFor="titulo"
+          action={
+            canRestoreTitulo && (
+              <Restaurar
+                testId="restore-titulo"
+                onClick={() => resetField("titulo")}
+              />
+            )
+          }
+        >
           <input id="titulo" className={INPUT_CLASS} {...register("titulo")} />
         </Field>
         <AreaField areaPath={state.area_path} />
