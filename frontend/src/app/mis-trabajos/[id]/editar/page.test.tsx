@@ -402,6 +402,7 @@ describe("editar page", () => {
   it("hides Restaurar while the form is pristine", () => {
     useDraftStateMock.mockReturnValue(draft({}));
     render(<EditarPage />);
+    expect(screen.queryByTestId("restore-titulo")).not.toBeInTheDocument();
     expect(screen.queryByTestId("restore-abstract")).not.toBeInTheDocument();
     expect(screen.queryByTestId("restore-keywords")).not.toBeInTheDocument();
     expect(screen.queryByTestId("restore-fecha")).not.toBeInTheDocument();
@@ -435,9 +436,19 @@ describe("editar page", () => {
     expect(screen.queryByTestId("restore-abstract")).not.toBeInTheDocument();
   });
 
-  it("never offers Restaurar for título (author-entered, not generated)", () => {
-    useDraftStateMock.mockReturnValue(draft({ title: "Otro título" }));
+  it("Restaurar reverts título to its saved value", async () => {
+    useDraftStateMock.mockReturnValue(draft({ title: "Mi tesis" }));
     render(<EditarPage />);
+    fireEvent.change(screen.getByLabelText("Título"), {
+      target: { value: "Otro título" },
+    });
+
+    fireEvent.click(screen.getByTestId("restore-titulo"));
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Título")).toHaveValue("Mi tesis"),
+    );
+    expect(apiPatch).not.toHaveBeenCalled();
     expect(screen.queryByTestId("restore-titulo")).not.toBeInTheDocument();
   });
 
