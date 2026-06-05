@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useForm, useWatch } from "react-hook-form";
+import { useForm, useWatch, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -12,7 +12,6 @@ import confetti from "canvas-confetti";
 import {
   AlertTriangle,
   CheckCircle2,
-  ChevronDown,
   ChevronLeft,
   Loader2,
   RotateCcw,
@@ -23,6 +22,13 @@ import posthog from "posthog-js";
 
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { TONE_CLASSES, type BadgeTone } from "@/components/StatusBadge";
 import {
   AlertDialog,
@@ -463,20 +469,27 @@ function EditarForm({
             metadata but cannot change who can read the trabajo. */}
         {state.isOwner && (
           <Field label="Visibilidad" htmlFor="visibility">
-            <div className="relative max-w-[240px]">
-              <select
-                id="visibility"
-                className={`${INPUT_CLASS} appearance-none pr-9`}
-                {...register("visibility")}
-              >
-                {VISIBILITIES.map((v) => (
-                  <option key={v.value} value={v.value}>
-                    {v.label}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2" />
-            </div>
+            <Controller
+              name="visibility"
+              control={control}
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger
+                    id="visibility"
+                    className="w-full max-w-[240px] data-[size=default]:h-10"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {VISIBILITIES.map((v) => (
+                      <SelectItem key={v.value} value={v.value}>
+                        {v.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
           </Field>
         )}
       </form>

@@ -16,6 +16,13 @@ import { AreasCascader } from "@/components/AreasCascader";
 import { CoauthorPicker } from "@/components/CoauthorPicker";
 import { Button } from "@/components/ui/button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -332,28 +339,37 @@ function NuevoForm() {
           <label htmlFor="tipo" className="text-sm font-medium">
             Tipo <span className="text-destructive">*</span>
           </label>
-          <div className="relative">
-            <select
-              id="tipo"
-              className={`${inputClass} appearance-none pr-9`}
-              {...register("tipo", {
-                // Drop a selection that became too broad for the new tipo
-                // (deeper than the minimum survives).
-                onChange: (e) => {
+          <Controller
+            name="tipo"
+            control={control}
+            render={({ field }) => (
+              <Select
+                value={field.value}
+                onValueChange={(value) => {
+                  field.onChange(value);
+                  // Drop a selection that became too broad for the new tipo
+                  // (deeper than the minimum survives).
                   const area = getValues("area_path");
-                  if (area && !areaPathAllowed(e.target.value, area))
+                  if (area && !areaPathAllowed(value, area))
                     setValue("area_path", "");
-                },
-              })}
-            >
-              {DOCUMENT_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2" />
-          </div>
+                }}
+              >
+                <SelectTrigger
+                  id="tipo"
+                  className="w-full data-[size=default]:h-10"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DOCUMENT_TYPES.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>
+                      {t.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          />
         </div>
 
         <div className="space-y-1.5">
