@@ -12,6 +12,11 @@ class InvalidCoauthorId(Exception):
         self.ids = ids
 
 
+class InvalidAreaForType(Exception):
+    """area_path is broader than the tipo's minimum level (area_rules), or its
+    leaf segment carries no recognized level prefix (→ 422)."""
+
+
 class PublishConflict(Exception):
     """The candidate is not indexed, or its stored headline fingerprint no
     longer matches current title + staged_abstract (→ 409)."""

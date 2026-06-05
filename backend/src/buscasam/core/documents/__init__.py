@@ -14,6 +14,11 @@ from buscasam.core.documents._shared import (
     DetailVersion,
     assert_manageable,
 )
+from buscasam.core.documents.area_rules import (
+    MIN_AREA_LEVEL,
+    area_level,
+    area_path_allowed,
+)
 from buscasam.core.documents.attachments import add_attachment, remove_attachment
 from buscasam.core.documents.coauthors import (
     accept_invitation,
@@ -52,6 +57,7 @@ from buscasam.core.documents.exceptions import (
     CoauthorAlreadyListed,
     CoauthorNotPending,
     DocumentNotFound,
+    InvalidAreaForType,
     InvalidCoauthorId,
     InvitationNotPending,
     NoCandidateToDiscard,
@@ -102,9 +108,11 @@ __all__ = [
     "DownloadableFile",
     "DraftState",
     "ExternalAuthor",
+    "InvalidAreaForType",
     "InvalidCoauthorId",
     "InvitationDisclosure",
     "InvitationNotPending",
+    "MIN_AREA_LEVEL",
     "MainFile",
     "NoCandidateToDiscard",
     "NoPublishedVersion",
@@ -113,6 +121,8 @@ __all__ = [
     "PublishConflict",
     "accept_invitation",
     "add_attachment",
+    "area_level",
+    "area_path_allowed",
     "assert_manageable",
     "attach_main_version",
     "create_draft",

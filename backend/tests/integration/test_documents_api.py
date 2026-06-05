@@ -200,7 +200,7 @@ async def test_patch_draft_persists_document_fields(client, session):
         f"/api/documents/{doc_id}",
         json={
             "visibility": "interno",
-            "area_path": "escuela.fisica",
+            "area_path": "escuela_ciencia.carrera_fisica",
             "document_type": "paper",
         },
         headers={"origin": settings.base_url},
@@ -222,7 +222,7 @@ async def test_patch_draft_persists_document_fields(client, session):
         .one()
     )
     assert row["visibility"] == "interno"
-    assert row["area_path"] == "escuela.fisica"
+    assert row["area_path"] == "escuela_ciencia.carrera_fisica"
     assert row["tipo"] == "paper"
 
 
@@ -286,6 +286,10 @@ async def test_patch_draft_clears_fecha_with_null(client, session):
         {"visibility": "secreto"},
         {"document_type": "blogpost"},
         {"area_path": "Escuela.Física"},
+        # Seeded doc is tipo 'paper': an escuela-level area is too broad.
+        {"area_path": "escuela_ciencia"},
+        # Seeded doc sits at escuela level: too broad for any tipo.
+        {"document_type": "apunte_resumen"},
     ],
 )
 async def test_patch_draft_invalid_enum_or_path_returns_422(client, session, body):

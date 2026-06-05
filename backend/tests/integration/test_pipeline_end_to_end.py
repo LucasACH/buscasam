@@ -28,7 +28,7 @@ from tests.factories import make_user
 _ORIGIN = "http://localhost:3000"
 _DRAFT = {
     "title": "Mi tesis de grado",
-    "area_path": "escuela_ciencia.fisica",
+    "area_path": "escuela_ciencia.carrera_fisica",
     "document_type": "paper",
     "visibility": "publico",
     "external_authors": [],

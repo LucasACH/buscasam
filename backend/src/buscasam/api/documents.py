@@ -32,6 +32,7 @@ from buscasam.core.documents import (
     CoauthorNotPending,
     DocumentNotFound,
     ExternalAuthor,
+    InvalidAreaForType,
     InvalidCoauthorId,
     NoCandidateToDiscard,
     NoPublishedVersion,
@@ -345,6 +346,11 @@ async def patch_draft(
         raise HTTPException(status_code=404)
     except NotOwner:
         raise HTTPException(status_code=403)
+    except InvalidAreaForType:
+        raise HTTPException(
+            status_code=422,
+            detail="area_path is broader than the minimum level for this document_type",
+        )
     return Response(status_code=204)
 
 
