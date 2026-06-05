@@ -9,6 +9,7 @@ import { CopyEmailButton } from "@/components/CopyEmailButton";
 import { ReportDialog } from "@/components/ReportDialog";
 import { StatusBadge } from "@/components/StatusBadge";
 import { VersionsPanel } from "@/components/VersionsPanel";
+import { AreaBreadcrumb } from "@/components/AreaBreadcrumb";
 import { Button } from "@/components/ui/button";
 import { TIPO_LABEL, VISIBILITY_LABEL } from "@/lib/labels";
 
@@ -228,12 +229,7 @@ function DetailView({
           <dl className="mt-6 grid grid-cols-[64px_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-sm">
             <dt className="text-muted-foreground">Área</dt>
             <dd className="text-foreground flex flex-wrap items-center gap-x-1.5">
-              {areaName.split(" › ").map((crumb, i) => (
-                <span key={i} className="flex items-center gap-x-1.5">
-                  {i > 0 && <span className="text-muted-foreground/60">›</span>}
-                  <span className="break-words">{crumb}</span>
-                </span>
-              ))}
+              <AreaBreadcrumb areaName={areaName} />
             </dd>
             <dt className="text-muted-foreground">Tipo</dt>
             <dd className="text-foreground">{tipo}</dd>
