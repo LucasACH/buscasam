@@ -304,6 +304,50 @@ describe("AreasCascader", () => {
     ).toBeInTheDocument();
   });
 
+  it("fires onComplete when a leaf (materia) is picked", async () => {
+    const user = userEvent.setup();
+    const onComplete = vi.fn();
+    wrap(<Controlled onChange={() => {}} onComplete={onComplete} />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Escuela de Ciencia y Tecnología/,
+      }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /Ing\. Informática/ }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /Bases de Datos/ }),
+    );
+
+    expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not fire onComplete when a non-leaf node is picked", async () => {
+    const user = userEvent.setup();
+    const onComplete = vi.fn();
+    wrap(
+      <Controlled
+        onChange={() => {}}
+        onComplete={onComplete}
+        minLevel="carrera"
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Escuela de Ciencia y Tecnología/,
+      }),
+    );
+    // A carrera (selectable at minLevel) with materias under it is non-leaf.
+    await user.click(
+      await screen.findByRole("button", { name: /Ing\. Informática/ }),
+    );
+
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
   it("opens at the parent of the selected value", async () => {
     wrap(
       <AreasCascader

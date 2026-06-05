@@ -16,6 +16,12 @@ import { AreasCascader } from "@/components/AreasCascader";
 import { CoauthorPicker } from "@/components/CoauthorPicker";
 import { Button } from "@/components/ui/button";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { useAreaLabel } from "@/lib/useAreas";
+import {
   AlertDialog,
   AlertDialogContent,
   AlertDialogDescription,
@@ -207,6 +213,10 @@ function NuevoForm() {
 
   // The tipo sets how deep the area selection must go (lib/areaLevels).
   const tipo = useWatch({ control, name: "tipo" });
+  // Collapsible área picker: the trigger shows the current selection; the
+  // cascader collapses on a terminal (leaf) pick and reopens on click.
+  const [areaOpen, setAreaOpen] = useState(false);
+  const areaLabel = useAreaLabel(useWatch({ control, name: "area_path" }));
 
   function onValid(values: FormValues) {
     setSubmitError(null);
@@ -354,14 +364,37 @@ function NuevoForm() {
             name="area_path"
             control={control}
             render={({ field }) => (
-              <div className="border-border bg-card overflow-hidden rounded-lg border">
-                <AreasCascader
-                  key={tipo}
-                  minLevel={MIN_AREA_LEVEL[tipo]}
-                  value={field.value || null}
-                  onChange={field.onChange}
-                />
-              </div>
+              <Popover open={areaOpen} onOpenChange={setAreaOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className={`${inputClass} flex items-center justify-between gap-2 text-left`}
+                  >
+                    <span
+                      className={
+                        areaLabel
+                          ? "truncate"
+                          : "text-muted-foreground truncate"
+                      }
+                    >
+                      {areaLabel ?? "Elegí un área"}
+                    </span>
+                    <ChevronDown className="text-muted-foreground size-4 flex-none" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="start"
+                  className="w-[var(--radix-popover-trigger-width)] overflow-hidden p-0"
+                >
+                  <AreasCascader
+                    key={tipo}
+                    minLevel={MIN_AREA_LEVEL[tipo]}
+                    value={field.value || null}
+                    onChange={field.onChange}
+                    onComplete={() => setAreaOpen(false)}
+                  />
+                </PopoverContent>
+              </Popover>
             )}
           />
           {errors.area_path && (

@@ -37,6 +37,10 @@ export type AreasCascaderProps = {
   value?: string | null;
   // Shallowest selectable level; anything deeper is also selectable.
   minLevel?: AreaLevel;
+  // Fired when a leaf (deepest, no children) is picked — the terminal
+  // selection, so the host can collapse. Valid non-leaf picks stay put to
+  // allow optional refinement.
+  onComplete?: () => void;
 };
 
 // Drill-down Escuela › Área › Carrera › Materia cascader. Nodes at or below
@@ -68,6 +72,7 @@ export function AreasCascader({
   onChange,
   value,
   minLevel = "materia",
+  onComplete,
 }: AreasCascaderProps) {
   const { data } = useAreas();
   const selectable = (path: string) => {
@@ -111,7 +116,8 @@ export function AreasCascader({
 
   function pick(path: string) {
     if (selectable(path)) onChange(path);
-    if (!isLeaf(path)) goTo(path);
+    if (isLeaf(path)) onComplete?.();
+    else goTo(path);
   }
 
   return (
