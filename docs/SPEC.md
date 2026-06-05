@@ -63,7 +63,8 @@ Queda fuera del MVP:
 - Archivo principal indexado: PDF, DOCX u ODT.
 - Hasta cinco adjuntos no indexados: CSV, código, imágenes y formatos permitidos.
 - Tipos cerrados: tesis, paper, trabajo práctico, proyecto de investigación, monografía, ponencia/poster, apunte/resumen, informe de cátedra.
-- Áreas jerárquicas: Escuela -> Carrera -> Materia/Disciplina.
+- Áreas jerárquicas: Escuela -> Área -> Carrera -> Materia/Disciplina.
+- Cada tipo exige una profundidad mínima de área (siempre se puede elegir un nivel más específico): trabajo práctico, apunte/resumen e informe de cátedra requieren una Materia; tesis y monografía, al menos una Carrera; paper, proyecto de investigación y ponencia/poster, al menos un Área. Una Escuela sola nunca alcanza.
 
 ### Visibilidad
 - `publico`: visible y descargable por cualquier visitante.

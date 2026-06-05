@@ -6,7 +6,26 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 const { apiGet } = vi.hoisted(() => ({ apiGet: vi.fn() }));
 vi.mock("@/api/client", () => ({ api: { GET: apiGet } }));
 
+import { useState } from "react";
+
 import { AreasCascader } from "./AreasCascader";
+import type { AreasCascaderProps } from "./AreasCascader";
+
+// Holds the selected value like a real form would, so value-dependent UI
+// (header check, "Elegir … (opcional)" divider) renders after selecting.
+function Controlled(props: AreasCascaderProps) {
+  const [value, setValue] = useState<string | null>(null);
+  return (
+    <AreasCascader
+      {...props}
+      value={value}
+      onChange={(v) => {
+        setValue(v);
+        props.onChange(v);
+      }}
+    />
+  );
+}
 
 function wrap(ui: React.ReactNode) {
   const client = new QueryClient({
@@ -215,13 +234,121 @@ describe("AreasCascader", () => {
     ).toBeInTheDocument();
   });
 
-  it("opens at the parent of the selected value and clears via Quitar área", async () => {
+  it('minLevel="carrera" keeps materia-less carreras and selects them on click', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
+    wrap(<AreasCascader onChange={onChange} minLevel="carrera" />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Escuela de Ciencia y Tecnología/,
+      }),
+    );
+    // No longer pruned: a carrera is itself selectable, and as a leaf it
+    // selects on click.
+    await user.click(
+      await screen.findByRole("button", { name: /Carrera Vacía/ }),
+    );
+
+    expect(onChange).toHaveBeenCalledWith("escuela_ciencia.carrera_vacia");
+  });
+
+  it('minLevel="carrera" selects a carrera on click and drills in to optionally refine', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    wrap(<Controlled onChange={onChange} minLevel="carrera" />);
+
+    // Escuelas are above the minimum: clicking only drills, no selection.
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Escuela de Ciencia y Tecnología/,
+      }),
+    );
+    expect(onChange).not.toHaveBeenCalled();
+
+    // Clicking the carrera selects it AND drills in: the materias are offered
+    // as optional refinement, not as a required next step.
+    await user.click(
+      await screen.findByRole("button", { name: /Ing\. Informática/ }),
+    );
+    expect(onChange).toHaveBeenCalledWith(
+      "escuela_ciencia.carrera_informatica",
+    );
+    expect(await screen.findByText(/Elegir una? \S+/)).toBeInTheDocument();
+
+    // Refining replaces the selection with the materia.
+    await user.click(
+      await screen.findByRole("button", { name: /Bases de Datos/ }),
+    );
+    expect(onChange).toHaveBeenLastCalledWith(
+      "escuela_ciencia.carrera_informatica.materia_bd",
+    );
+  });
+
+  it('minLevel="escuela" selects the escuela itself on click', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    wrap(<Controlled onChange={onChange} minLevel="escuela" />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Escuela de Ciencia y Tecnología/,
+      }),
+    );
+
+    expect(onChange).toHaveBeenCalledWith("escuela_ciencia");
+    expect(await screen.findByText(/Elegir una? \S+/)).toBeInTheDocument();
+  });
+
+  it("fires onComplete when a leaf (materia) is picked", async () => {
+    const user = userEvent.setup();
+    const onComplete = vi.fn();
+    wrap(<Controlled onChange={() => {}} onComplete={onComplete} />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Escuela de Ciencia y Tecnología/,
+      }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /Ing\. Informática/ }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /Bases de Datos/ }),
+    );
+
+    expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not fire onComplete when a non-leaf node is picked", async () => {
+    const user = userEvent.setup();
+    const onComplete = vi.fn();
+    wrap(
+      <Controlled
+        onChange={() => {}}
+        onComplete={onComplete}
+        minLevel="carrera"
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Escuela de Ciencia y Tecnología/,
+      }),
+    );
+    // A carrera (selectable at minLevel) with materias under it is non-leaf.
+    await user.click(
+      await screen.findByRole("button", { name: /Ing\. Informática/ }),
+    );
+
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it("opens at the parent of the selected value", async () => {
     wrap(
       <AreasCascader
         value="escuela_ciencia.carrera_informatica.materia_bd"
-        onChange={onChange}
+        onChange={() => {}}
       />,
     );
 
@@ -229,8 +356,5 @@ describe("AreasCascader", () => {
     expect(
       await screen.findByRole("button", { name: /Bases de Datos/ }),
     ).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /Quitar área/ }));
-    expect(onChange).toHaveBeenCalledWith(null);
   });
 });

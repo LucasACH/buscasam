@@ -118,13 +118,13 @@ export function SearchFilters({
           </button>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-[300px] overflow-hidden p-0">
+          {/* The popover stays open on selection: picking a node applies the
+              filter live and drills in so it can optionally be refined. It
+              unmounts on close, so the drill state resets per open. */}
           <AreasCascader
-            key={area ?? "none"}
             value={area}
-            onChange={(a) => {
-              onChange({ area: a });
-              setAreaOpen(false);
-            }}
+            minLevel="escuela"
+            onChange={(a) => onChange({ area: a })}
           />
         </PopoverContent>
       </Popover>

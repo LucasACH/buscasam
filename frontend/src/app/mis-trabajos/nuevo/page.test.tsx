@@ -76,7 +76,9 @@ async function fillRequiredFields() {
   const user = userEvent.setup();
   await user.type(screen.getByLabelText(/título/i), "Mi tesis sobre BD");
 
-  // Drill through Escuela → Carrera → Materia.
+  // Open the área picker, then drill Escuela → Carrera → Materia. Picking the
+  // materia (a leaf) collapses the popover.
+  await user.click(screen.getByRole("button", { name: /elegí un área/i }));
   await user.click(
     await screen.findByRole("button", {
       name: /Escuela de Ciencia y Tecnología/,
@@ -277,6 +279,81 @@ describe("/mis-trabajos/nuevo page", () => {
       /No se pudo conectar con el servidor/,
     );
     expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("submits a carrera-level área for a tesis", async () => {
+    apiPost.mockResolvedValue({ data: { id: 42 } });
+    mockUpload((url) => {
+      if (url.endsWith("/api/documents/42/upload")) {
+        return new Response("", { status: 202 });
+      }
+      return new Response("", { status: 404 });
+    });
+
+    wrap(<NuevoPage />);
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/título/i), "Mi tesis sobre BD");
+    // Default tipo is tesis (min carrera): clicking the carrera selects it —
+    // the materias it drills into are optional refinement only, so the picker
+    // stays open. Close it to keep the carrera-level selection.
+    await user.click(screen.getByRole("button", { name: /elegí un área/i }));
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Escuela de Ciencia y Tecnología/,
+      }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /Ing\. Informática/ }),
+    );
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByLabelText(/público/i));
+    const file = new File(
+      [new Uint8Array([0x25, 0x50, 0x44, 0x46])],
+      "tesis.pdf",
+      { type: "application/pdf" },
+    );
+    await user.upload(screen.getByLabelText(/arrastrá tu archivo/i), file);
+    await submitWithChoice(user);
+
+    await waitFor(() =>
+      expect(replace).toHaveBeenCalledWith("/mis-trabajos/42/editar"),
+    );
+    const createCall = apiPost.mock.calls.find(([p]) => p === "/api/documents");
+    expect(createCall![1]).toMatchObject({
+      body: {
+        area_path: "escuela_ciencia.carrera_informatica",
+        document_type: "tesis",
+      },
+    });
+  });
+
+  it("clears an área that became too broad when the tipo changes", async () => {
+    wrap(<NuevoPage />);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /elegí un área/i }));
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Escuela de Ciencia y Tecnología/,
+      }),
+    );
+    // Selects the carrera (tesis min) while drilling into its materias.
+    await user.click(
+      await screen.findByRole("button", { name: /Ing\. Informática/ }),
+    );
+    await user.keyboard("{Escape}");
+
+    // A carrera is too broad for an apunte: the selection is dropped and the
+    // trigger returns to its placeholder.
+    await user.selectOptions(screen.getByLabelText(/tipo/i), "apunte_resumen");
+    expect(
+      await screen.findByRole("button", { name: /elegí un área/i }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /subir/i }));
+    expect(await screen.findByText("Elegí una Materia")).toBeInTheDocument();
+    expect(apiPost).not.toHaveBeenCalled();
   });
 
   it("redirects to /login when the user is invitado", async () => {

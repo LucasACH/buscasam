@@ -3,17 +3,24 @@
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useForm, useFieldArray, Controller } from "react-hook-form";
+import { useForm, useFieldArray, useWatch, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
 import posthog from "posthog-js";
 
 import { api } from "@/api/client";
+import { MIN_AREA_LEVEL, areaPathAllowed } from "@/lib/areaLevels";
 import { useUser } from "@/lib/useUser";
 import { AreasCascader } from "@/components/AreasCascader";
 import { CoauthorPicker } from "@/components/CoauthorPicker";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { useAreaLabel } from "@/lib/useAreas";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -67,29 +74,46 @@ const VISIBILITIES = [
   },
 ] as const;
 
-const formSchema = z.object({
-  titulo: z.string().min(1, "El título es obligatorio"),
-  area_path: z.string().min(1, "Elegí una Materia"),
-  tipo: z.enum([
-    "tesis",
-    "paper",
-    "trabajo_practico",
-    "proyecto_investigacion",
-    "monografia",
-    "ponencia_poster",
-    "apunte_resumen",
-    "informe_catedra",
-  ]),
-  visibilidad: z.enum(["publico", "interno", "privado"]),
-  external_authors: z.array(
-    z.object({
-      name: z.string().min(1, "El nombre es obligatorio"),
-      surname: z.string().min(1, "El apellido es obligatorio"),
-      email: z.string().email("Email inválido"),
-    }),
-  ),
-  coauthor_user_ids: z.array(z.number()),
-});
+// Required-area message per the tipo's minimum level (lib/areaLevels).
+const AREA_MSG = {
+  area: "Elegí al menos un Área",
+  carrera: "Elegí al menos una Carrera",
+  materia: "Elegí una Materia",
+} as const;
+
+const formSchema = z
+  .object({
+    titulo: z.string().min(1, "El título es obligatorio"),
+    area_path: z.string(),
+    tipo: z.enum([
+      "tesis",
+      "paper",
+      "trabajo_practico",
+      "proyecto_investigacion",
+      "monografia",
+      "ponencia_poster",
+      "apunte_resumen",
+      "informe_catedra",
+    ]),
+    visibilidad: z.enum(["publico", "interno", "privado"]),
+    external_authors: z.array(
+      z.object({
+        name: z.string().min(1, "El nombre es obligatorio"),
+        surname: z.string().min(1, "El apellido es obligatorio"),
+        email: z.string().email("Email inválido"),
+      }),
+    ),
+    coauthor_user_ids: z.array(z.number()),
+  })
+  .superRefine((vals, ctx) => {
+    if (!vals.area_path || !areaPathAllowed(vals.tipo, vals.area_path)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["area_path"],
+        message: AREA_MSG[MIN_AREA_LEVEL[vals.tipo] as keyof typeof AREA_MSG],
+      });
+    }
+  });
 
 type FormValues = z.infer<typeof formSchema>;
 
@@ -164,6 +188,7 @@ function NuevoForm() {
     handleSubmit,
     control,
     setValue,
+    getValues,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -185,6 +210,13 @@ function NuevoForm() {
   // option (null until the user selects one, gating Confirmar).
   const [pendingValues, setPendingValues] = useState<FormValues | null>(null);
   const [metadataChoice, setMetadataChoice] = useState<boolean | null>(null);
+
+  // The tipo sets how deep the area selection must go (lib/areaLevels).
+  const tipo = useWatch({ control, name: "tipo" });
+  // Collapsible área picker: the trigger shows the current selection; the
+  // cascader collapses on a terminal (leaf) pick and reopens on click.
+  const [areaOpen, setAreaOpen] = useState(false);
+  const areaLabel = useAreaLabel(useWatch({ control, name: "area_path" }));
 
   function onValid(values: FormValues) {
     setSubmitError(null);
@@ -297,30 +329,6 @@ function NuevoForm() {
         </div>
 
         <div className="space-y-1.5">
-          <span className="text-sm font-medium">
-            Área <span className="text-destructive">*</span>
-          </span>
-          <Controller
-            name="area_path"
-            control={control}
-            render={({ field }) => (
-              <div className="border-border bg-card overflow-hidden rounded-lg border">
-                <AreasCascader
-                  value={field.value || null}
-                  onChange={(area) => field.onChange(area ?? "")}
-                />
-              </div>
-            )}
-          />
-          {errors.area_path && (
-            <p className="text-destructive flex items-center gap-1.5 text-[13px]">
-              <AlertTriangle className="size-3.5" />
-              {errors.area_path.message}
-            </p>
-          )}
-        </div>
-
-        <div className="space-y-1.5">
           <label htmlFor="tipo" className="text-sm font-medium">
             Tipo <span className="text-destructive">*</span>
           </label>
@@ -328,7 +336,15 @@ function NuevoForm() {
             <select
               id="tipo"
               className={`${inputClass} appearance-none pr-9`}
-              {...register("tipo")}
+              {...register("tipo", {
+                // Drop a selection that became too broad for the new tipo
+                // (deeper than the minimum survives).
+                onChange: (e) => {
+                  const area = getValues("area_path");
+                  if (area && !areaPathAllowed(e.target.value, area))
+                    setValue("area_path", "");
+                },
+              })}
             >
               {DOCUMENT_TYPES.map((t) => (
                 <option key={t.value} value={t.value}>
@@ -338,6 +354,55 @@ function NuevoForm() {
             </select>
             <ChevronDown className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2" />
           </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <span className="text-sm font-medium">
+            Área <span className="text-destructive">*</span>
+          </span>
+          <Controller
+            name="area_path"
+            control={control}
+            render={({ field }) => (
+              <Popover open={areaOpen} onOpenChange={setAreaOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className={`${inputClass} flex items-center justify-between gap-2 text-left`}
+                  >
+                    <span
+                      className={
+                        areaLabel
+                          ? "truncate"
+                          : "text-muted-foreground truncate"
+                      }
+                    >
+                      {areaLabel ?? "Elegí un área"}
+                    </span>
+                    <ChevronDown className="text-muted-foreground size-4 flex-none" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="start"
+                  className="w-[var(--radix-popover-trigger-width)] overflow-hidden p-0"
+                >
+                  <AreasCascader
+                    key={tipo}
+                    minLevel={MIN_AREA_LEVEL[tipo]}
+                    value={field.value || null}
+                    onChange={field.onChange}
+                    onComplete={() => setAreaOpen(false)}
+                  />
+                </PopoverContent>
+              </Popover>
+            )}
+          />
+          {errors.area_path && (
+            <p className="text-destructive flex items-center gap-1.5 text-[13px]">
+              <AlertTriangle className="size-3.5" />
+              {errors.area_path.message}
+            </p>
+          )}
         </div>
 
         <fieldset className="space-y-1.5">

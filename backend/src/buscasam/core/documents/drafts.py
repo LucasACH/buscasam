@@ -21,7 +21,12 @@ from buscasam.core.documents._shared import (
     _to_detail_version,
     assert_manageable,
 )
-from buscasam.core.documents.exceptions import DocumentNotFound, InvalidCoauthorId
+from buscasam.core.documents.area_rules import area_path_allowed
+from buscasam.core.documents.exceptions import (
+    DocumentNotFound,
+    InvalidAreaForType,
+    InvalidCoauthorId,
+)
 
 if TYPE_CHECKING:
     from buscasam.core.auth import UserCtx
@@ -237,6 +242,27 @@ async def update_draft_metadata(
     await assert_manageable(session, user_ctx, doc_id)
     if visibility is not None:
         await _assert_owner(session, user_ctx, doc_id)
+
+    # The tipo↔area_path pair must keep satisfying the per-tipo minimum area
+    # depth (area_rules); fill the omitted half from the stored row.
+    if area_path is not None or document_type is not None:
+        current = (
+            (
+                await session.execute(
+                    text(
+                        "SELECT tipo, area_path::text AS area_path "
+                        "FROM documents WHERE id = :doc_id"
+                    ),
+                    {"doc_id": doc_id},
+                )
+            )
+            .mappings()
+            .one()
+        )
+        if not area_path_allowed(
+            document_type or current["tipo"], area_path or current["area_path"]
+        ):
+            raise InvalidAreaForType
 
     # Edit-relevant versions: the published current (is_current) and the
     # never-published candidate (first_published_at IS NULL). A discarded

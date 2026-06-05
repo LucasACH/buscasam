@@ -5,12 +5,13 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  CornerDownRight,
   ExternalLink,
-  MapPin,
   Search,
   X,
 } from "lucide-react";
 
+import { type AreaLevel, areaLevelOf, isAtLeast } from "@/lib/areaLevels";
 import { cn } from "@/lib/utils";
 import { useAreas } from "@/lib/useAreas";
 
@@ -24,10 +25,6 @@ function parentOf(area_path: string): string {
   return parts.join(".");
 }
 
-function isMateria(area_path: string): boolean {
-  return area_path.split(".").pop()!.startsWith("materia_");
-}
-
 function normalize(s: string): string {
   return s
     .normalize("NFD")
@@ -36,19 +33,30 @@ function normalize(s: string): string {
 }
 
 export type AreasCascaderProps = {
-  onChange: (area_path: string | null) => void;
+  onChange: (area_path: string) => void;
   value?: string | null;
+  // Shallowest selectable level; anything deeper is also selectable.
+  minLevel?: AreaLevel;
+  // Fired when a leaf (deepest, no children) is picked — the terminal
+  // selection, so the host can collapse. Valid non-leaf picks stay put to
+  // allow optional refinement.
+  onComplete?: () => void;
 };
 
-// Drill-down Escuela › Área › Carrera › Materia cascader. Only Materias (the
-// leaves) are selectable; branch rows drill into their children. The search
-// placeholder names the level being shown, indexed by drill depth.
+// Drill-down Escuela › Área › Carrera › Materia cascader. Nodes at or below
+// `minLevel` are selectable: clicking one selects it, and when it has
+// children the same click drills in so the selection can optionally be
+// refined — the header shows the chosen node with a check and the children
+// sit under an "Elegir … (opcional)" divider. The search placeholder and the
+// divider name the level being shown, indexed by drill depth.
 const SEARCH_PLACEHOLDER = [
   "Buscar escuela…",
   "Buscar área…",
   "Buscar carrera…",
   "Buscar materia…",
 ];
+
+const LEVEL_NAME = ["una escuela", "un área", "una carrera", "una materia"];
 
 const REPORT_URL =
   "https://github.com/LucasACH/buscasam/issues/new?title=" +
@@ -60,13 +68,23 @@ const REPORT_URL =
       "Detalle adicional:\n",
   );
 
-export function AreasCascader({ onChange, value }: AreasCascaderProps) {
+export function AreasCascader({
+  onChange,
+  value,
+  minLevel = "materia",
+  onComplete,
+}: AreasCascaderProps) {
   const { data } = useAreas();
-  // Only Materias are selectable; prune branches that lead to none (e.g. a
-  // Carrera with no Materia) so they never surface as dead-end leaves.
+  const selectable = (path: string) => {
+    const level = areaLevelOf(path);
+    return level !== null && isAtLeast(level, minLevel);
+  };
+  // Keep selectable nodes and their ancestors; prune branches that lead to no
+  // selectable node (e.g. a Carrera with no Materia when minLevel is materia)
+  // so they never surface as dead-end leaves.
   const keep = new Set<string>();
   for (const a of data ?? []) {
-    if (!isMateria(a.area_path)) continue;
+    if (!selectable(a.area_path)) continue;
     const parts = a.area_path.split(".");
     for (let i = 1; i <= parts.length; i++)
       keep.add(parts.slice(0, i).join("."));
@@ -97,11 +115,9 @@ export function AreasCascader({ onChange, value }: AreasCascaderProps) {
   }
 
   function pick(path: string) {
-    if (isLeaf(path)) {
-      onChange(path);
-    } else {
-      goTo(path);
-    }
+    if (selectable(path)) onChange(path);
+    if (isLeaf(path)) onComplete?.();
+    else goTo(path);
   }
 
   return (
@@ -145,6 +161,12 @@ export function AreasCascader({ onChange, value }: AreasCascaderProps) {
             <b className="text-foreground">{byPath.get(nav)}</b>
           )}
         </div>
+        {nav && value === nav && (
+          <Check
+            className="text-primary size-[15px] flex-none"
+            strokeWidth={2.5}
+          />
+        )}
       </div>
 
       <div className="max-h-[280px] overflow-y-auto p-1.5">
@@ -153,9 +175,21 @@ export function AreasCascader({ onChange, value }: AreasCascaderProps) {
             Sin resultados
           </div>
         )}
+        {nav && value === nav && !searching && (
+          <div className="border-primary/20 bg-primary-tint text-primary-hover sticky top-0 z-10 mb-1 flex items-center gap-2 rounded-md border px-2.5 py-2 text-[13px] font-semibold">
+            <CornerDownRight
+              className="size-4 flex-none opacity-80"
+              strokeWidth={2.5}
+            />
+            <span>
+              Elegir {LEVEL_NAME[depth] ?? "una materia"}
+              <span className="ml-1 font-normal opacity-70">(opcional)</span>
+            </span>
+          </div>
+        )}
         {listed.map((a) => {
           const leaf = isLeaf(a.area_path);
-          const selected = leaf && value === a.area_path;
+          const selected = value === a.area_path;
           return (
             <button
               key={a.area_path}
@@ -166,9 +200,6 @@ export function AreasCascader({ onChange, value }: AreasCascaderProps) {
                 selected ? "bg-primary-tint" : "hover:bg-neutral-100",
               )}
             >
-              {leaf && (
-                <MapPin className="text-muted-foreground size-3.5 flex-none" />
-              )}
               <span className="flex-1 truncate">{a.display_name}</span>
               {!leaf && (
                 <ChevronRight className="text-muted-foreground size-[15px]" />
@@ -180,19 +211,6 @@ export function AreasCascader({ onChange, value }: AreasCascaderProps) {
           );
         })}
       </div>
-
-      {value && (
-        <div className="border-border border-t p-2">
-          <button
-            type="button"
-            onClick={() => onChange(null)}
-            className="text-destructive flex w-full items-center justify-center gap-1.5 rounded-md px-2.5 py-2 text-sm hover:bg-neutral-100"
-          >
-            <X className="size-3.5" />
-            Quitar área
-          </button>
-        </div>
-      )}
 
       <div className="border-border border-t px-3 py-2">
         <a

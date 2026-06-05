@@ -7,9 +7,9 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-from buscasam.core.documents import CoauthorStatus
+from buscasam.core.documents import MIN_AREA_LEVEL, CoauthorStatus, area_path_allowed
 
 # Mirror the DB constraints (documents_visibility_check, documents_tipo_check,
 # area_path ltree) so invalid input is a 422 at the boundary, not a 500 from
@@ -63,6 +63,19 @@ class CreateDraftRequest(BaseModel):
     # Opt-in to LLM abstract/keyword enrichment (sends extracted text to the
     # metadata LLM). When false, the author writes abstract + keywords by hand.
     metadata_llm: bool = True
+
+    # Per-tipo minimum area depth (core/documents/area_rules). The PATCH path
+    # can't validate here — its fields are optional — so it re-checks in
+    # update_draft_metadata against the stored pair.
+    @model_validator(mode="after")
+    def _area_specific_enough(self) -> CreateDraftRequest:
+        if not area_path_allowed(self.document_type, self.area_path):
+            raise ValueError(
+                f"area_path must reach at least the "
+                f"'{MIN_AREA_LEVEL[self.document_type]}' level "
+                f"for document_type '{self.document_type}'"
+            )
+        return self
 
 
 class CreateDraftResponse(BaseModel):
