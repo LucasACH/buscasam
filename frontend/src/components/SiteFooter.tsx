@@ -1,9 +1,36 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
+
+import { statusMeta } from "@/app/estado/StatusList";
 
 const REPO_URL = "https://github.com/LucasACH/buscasam";
 const VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "dev";
+
+function StatusBadge() {
+  const { data: status = null } = useQuery({
+    queryKey: ["health", "overall"],
+    queryFn: async () => {
+      const r = await fetch("/api/health");
+      if (!r.ok) return null;
+      return ((await r.json()) as { status: string }).status;
+    },
+    refetchInterval: 60_000,
+  });
+  const meta = statusMeta(status);
+  return (
+    <Link
+      href="/estado"
+      aria-label={`Estado: ${meta.label}`}
+      title={meta.label}
+      className="inline-flex items-center"
+    >
+      <span className={`size-2 shrink-0 rounded-full ${meta.dot}`} />
+    </Link>
+  );
+}
 
 export function SiteFooter() {
   const pathname = usePathname();
@@ -32,6 +59,8 @@ export function SiteFooter() {
           </svg>
           GitHub
         </a>
+        <span aria-hidden>·</span>
+        <StatusBadge />
       </div>
     </footer>
   );
