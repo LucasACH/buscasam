@@ -22,6 +22,9 @@ export type Candidate = {
   canPublish: boolean;
   canDiscard: boolean;
   error: string | null;
+  failureKind: CandidateDTO["failure_kind"];
+  retryAvailableAt: string | null;
+  retryRemaining: number;
 };
 
 export type DraftState = {
@@ -39,6 +42,9 @@ export type DraftState = {
     canPublish: boolean;
     initialPhase: "indexing" | "failed" | "ready";
     publishedAt: string | null;
+    failureKind: DraftStateDTO["index_failure_kind"];
+    retryAvailableAt: string | null;
+    retryRemaining: number;
   };
   isOwner: boolean;
   visibility: DraftStateDTO["visibility"];
@@ -67,12 +73,15 @@ export type PublishMutationResult =
 
 export type DiscardMutationError = "discard_failed";
 
+export type RetryMutationError = "retry_failed";
+
 export type SoftDeleteMutationError = "delete_failed";
 
 export type DraftWorkspaceActions = {
   publish: () => Promise<PublishMutationResult>;
   replace: (file: File) => Promise<ReplaceMutationError | undefined>;
   discard: () => Promise<DiscardMutationError | undefined>;
+  retryIndexing: () => Promise<RetryMutationError | undefined>;
   softDelete: () => Promise<SoftDeleteMutationError | undefined>;
   attachments: {
     add: (file: File) => Promise<AttachmentMutationError | undefined>;
@@ -100,6 +109,26 @@ const GATE_COPY: Record<string, string> = {
   processing_failed: "Falló el procesamiento — revisá tu archivo",
   missing_metadata: "Completá el resumen y las palabras clave para publicar",
 };
+
+// 'system' failures are our fault, not the file's — don't blame the archivo,
+// offer the retry instead. Once the server-side retry cap is spent, stop
+// promising a retry the button can no longer deliver.
+const SYSTEM_FAILURE_COPY =
+  "Hubo un problema de nuestro lado al procesar tu archivo — podés reintentar";
+const SYSTEM_FAILURE_EXHAUSTED_COPY =
+  "Hubo un problema de nuestro lado al procesar tu archivo y se alcanzó el límite de reintentos";
+
+function gateMessage(state: DraftStateDTO): string | null {
+  if (!state.publish_gate_reason) return null;
+  if (
+    state.publish_gate_reason === "processing_failed" &&
+    state.index_failure_kind === "system"
+  )
+    return state.retry_remaining > 0
+      ? SYSTEM_FAILURE_COPY
+      : SYSTEM_FAILURE_EXHAUSTED_COPY;
+  return GATE_COPY[state.publish_gate_reason] ?? state.publish_gate_reason;
+}
 
 const CANDIDATE_STATUS_LABEL: Record<Candidate["status"], string> = {
   processing: "Procesando…",
@@ -132,6 +161,9 @@ function projectCandidate(c: CandidateDTO): Candidate {
     canPublish: c.can_publish,
     canDiscard: c.can_discard,
     error: c.error,
+    failureKind: c.failure_kind,
+    retryAvailableAt: c.retry_available_at,
+    retryRemaining: c.retry_remaining,
   };
 }
 
@@ -181,12 +213,13 @@ function projectDraftState(state: DraftStateDTO): DraftState {
       stage: state.index_stage,
       queued: state.index_status === "pending",
       showSuggestionsSpinner: state.index_status === "processing",
-      gateMessage: state.publish_gate_reason
-        ? (GATE_COPY[state.publish_gate_reason] ?? state.publish_gate_reason)
-        : null,
+      gateMessage: gateMessage(state),
       canPublish: state.publish_gate_reason === null && state.is_owner,
       initialPhase: initialPhase(state),
       publishedAt: state.published_at,
+      failureKind: state.index_failure_kind,
+      retryAvailableAt: state.retry_available_at,
+      retryRemaining: state.retry_remaining,
     },
     isOwner: state.is_owner,
     visibility: state.visibility,
@@ -271,6 +304,18 @@ export function useDraftState(docId: number) {
     return undefined;
   }
 
+  async function retryIndexing(): Promise<RetryMutationError | undefined> {
+    const { error } = await api.POST("/api/documents/{doc_id}/retry-indexing", {
+      params: { path: { doc_id: docId } },
+    });
+    // Refresh either way: success flips the row back to pending (the poll
+    // takes over), and a 409 race (already retried / cooldown drift) re-syncs
+    // the failed block with the server's clock.
+    await queryClient.invalidateQueries({ queryKey: draftQueryKey(docId) });
+    if (error) return "retry_failed";
+    return undefined;
+  }
+
   async function softDelete(): Promise<SoftDeleteMutationError | undefined> {
     const { error } = await api.DELETE("/api/documents/{doc_id}", {
       params: { path: { doc_id: docId } },
@@ -338,6 +383,7 @@ export function useDraftState(docId: number) {
     publish,
     replace,
     discard,
+    retryIndexing,
     softDelete,
     attachments: {
       add: addAttachment,

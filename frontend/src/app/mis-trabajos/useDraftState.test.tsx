@@ -41,6 +41,9 @@ function candidate(over: Partial<CandidateDTO> = {}): CandidateDTO {
     can_discard: true,
     indexed_at: null,
     error: null,
+    failure_kind: null,
+    retry_available_at: null,
+    retry_remaining: 3,
     ...over,
   };
 }
@@ -57,6 +60,9 @@ function returns(state: Partial<DraftStateDTO>) {
     generated_keywords: [],
     generated_fecha: null,
     index_error: null,
+    index_failure_kind: null,
+    retry_available_at: null,
+    retry_remaining: 3,
     publish_gate_reason: null,
     is_owner: true,
     visibility: "publico",
@@ -137,6 +143,9 @@ describe("useDraftState", () => {
       canPublish: true,
       initialPhase: "ready",
       publishedAt: null,
+      failureKind: null,
+      retryAvailableAt: null,
+      retryRemaining: 3,
     });
   });
 
@@ -319,6 +328,106 @@ describe("useDraftState", () => {
     await vi.advanceTimersByTimeAsync(9000);
 
     expect(apiGet.mock.calls.length).toBe(initial);
+  });
+
+  it("keeps the revisá-tu-archivo copy for a file failure", async () => {
+    returns({
+      index_status: "failed",
+      publish_gate_reason: "processing_failed",
+      index_failure_kind: "file",
+    });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(result.current.state?.lifecycle).toMatchObject({
+      gateMessage: "Falló el procesamiento — revisá tu archivo",
+      failureKind: "file",
+    });
+  });
+
+  it("uses the our-fault copy for a system failure", async () => {
+    returns({
+      index_status: "failed",
+      publish_gate_reason: "processing_failed",
+      index_failure_kind: "system",
+      retry_available_at: "2026-06-06T12:05:00+00:00",
+    });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(result.current.state?.lifecycle).toMatchObject({
+      gateMessage:
+        "Hubo un problema de nuestro lado al procesar tu archivo — podés reintentar",
+      failureKind: "system",
+      retryAvailableAt: "2026-06-06T12:05:00+00:00",
+    });
+  });
+
+  it("switches to the exhausted copy once no retries remain", async () => {
+    returns({
+      index_status: "failed",
+      publish_gate_reason: "processing_failed",
+      index_failure_kind: "system",
+      retry_remaining: 0,
+    });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(result.current.state?.lifecycle).toMatchObject({
+      gateMessage:
+        "Hubo un problema de nuestro lado al procesar tu archivo y se alcanzó el límite de reintentos",
+      retryRemaining: 0,
+    });
+  });
+
+  it("retryIndexing posts and refreshes the draft state", async () => {
+    returns({
+      index_status: "failed",
+      publish_gate_reason: "processing_failed",
+      index_failure_kind: "system",
+    });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    const callsBeforeRetry = apiGet.mock.calls.length;
+
+    const error = await result.current.actions.retryIndexing();
+
+    expect(error).toBeUndefined();
+    expect(apiPost).toHaveBeenCalledWith(
+      "/api/documents/{doc_id}/retry-indexing",
+      { params: { path: { doc_id: 1 } } },
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(apiGet.mock.calls.length).toBeGreaterThan(callsBeforeRetry);
+  });
+
+  it("retryIndexing surfaces a typed error on failure", async () => {
+    returns({
+      index_status: "failed",
+      publish_gate_reason: "processing_failed",
+      index_failure_kind: "system",
+    });
+    apiPost.mockResolvedValue({
+      error: { detail: "conflict" },
+      response: { status: 409 },
+    });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(await result.current.actions.retryIndexing()).toBe("retry_failed");
   });
 
   it("projects a ready candidate to Spanish label", async () => {

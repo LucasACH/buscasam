@@ -6,6 +6,7 @@ import posthog from "posthog-js";
 
 import { Button } from "@/components/ui/button";
 import { ProcessingSteps } from "@/components/ProcessingSteps";
+import { RetryIndexingButton } from "@/components/RetryIndexingButton";
 import { TONE_CLASSES, type BadgeTone } from "@/components/StatusBadge";
 import type {
   Candidate,
@@ -29,7 +30,10 @@ export function CandidatePanel({
   actions,
 }: {
   candidate: Candidate | null;
-  actions: Pick<DraftWorkspaceActions, "publish" | "replace" | "discard">;
+  actions: Pick<
+    DraftWorkspaceActions,
+    "publish" | "replace" | "discard" | "retryIndexing"
+  >;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
@@ -158,9 +162,22 @@ export function CandidatePanel({
                 {candidate.error}
               </p>
             )}
-            {candidate.canDiscard && (
-              <DiscardButton onClick={onDiscard} disabled={discarding} />
-            )}
+            <div className="flex flex-wrap gap-2">
+              {/* 'system' failures are retriable until the server-side retry
+                  cap is spent; 'file' failures need a new upload (Descartar +
+                  Reemplazar). */}
+              {candidate.failureKind === "system" &&
+                candidate.retryRemaining > 0 && (
+                  <RetryIndexingButton
+                    size="sm"
+                    retryAvailableAt={candidate.retryAvailableAt}
+                    retry={actions.retryIndexing}
+                  />
+                )}
+              {candidate.canDiscard && (
+                <DiscardButton onClick={onDiscard} disabled={discarding} />
+              )}
+            </div>
           </div>
         )}
       </div>
