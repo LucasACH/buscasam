@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { after } from "next/server";
+import { headers } from "next/headers";
 import { FileText, Mail } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -98,7 +99,9 @@ export default async function DocDetailPage({
   const s = typeof sp.s === "string" ? sp.s : null;
   const r = typeof sp.r === "string" ? Number(sp.r) : NaN;
   if (s && Number.isInteger(r) && r >= 1) {
-    after(() => recordSearchClick(s, docId, r));
+    // Read the cookie now (in render); request APIs can't be used inside after().
+    const cookie = (await headers()).get("cookie") ?? "";
+    after(() => recordSearchClick(s, docId, r, cookie));
   }
   // Pending invitee on a doc they cannot read: minimal disclosure only — no
   // metadata, abstract, archivo, adjuntos, related rail, or versions panel

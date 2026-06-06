@@ -32,11 +32,13 @@ export async function recordSearchClick(
   searchId: string,
   docId: number,
   rank: number,
+  cookie: string,
 ): Promise<void> {
   // Best-effort relevance instrumentation: attribute this doc view to the
   // search that produced it. Never throws — a logging failure must not break
-  // the page render. Idempotent server-side per (search_id, doc_id).
-  const cookie = (await headers()).get("cookie") ?? "";
+  // the page render. Idempotent server-side per (search_id, doc_id). `cookie`
+  // is passed in (read during render): request APIs like headers() can't be
+  // called from the after() callback this runs inside.
   try {
     await fetch(`${internalApiBase()}/search/click`, {
       method: "POST",
