@@ -138,3 +138,22 @@ async def test_click_endpoint_records_and_dedups(client, session):
         )
     ).all()
     assert rows == [(doc_id, 3)]
+
+
+async def test_click_rejected_when_doc_not_in_impression(client, session):
+    doc_id = await _seed_doc(session)
+    search_id = (
+        await client.get("/api/search", params={"q": "búsqueda léxica"})
+    ).json()["search_id"]
+
+    # A doc never shown for this search, and an unknown search_id, must both be
+    # gated out — the endpoint stays 204 (fire-and-forget) but nothing is stored.
+    unseen = {"search_id": search_id, "doc_id": doc_id + 999, "rank": 1}
+    forged = {"search_id": "deadbeef", "doc_id": doc_id, "rank": 1}
+    assert (await client.post("/api/search/click", json=unseen)).status_code == 204
+    assert (await client.post("/api/search/click", json=forged)).status_code == 204
+
+    count = (
+        await session.execute(text("SELECT count(*) FROM search_clicks"))
+    ).scalar_one()
+    assert count == 0

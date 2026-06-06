@@ -34,7 +34,13 @@ _QUERY_CACHE_MAX = 1024
 _query_cache: OrderedDict[str, np.ndarray] = OrderedDict()
 
 
-def _query_cache_key(text: str) -> str:
+def normalize_query(text: str) -> str:
+    """Canonical query normalization (whitespace collapse + casefold).
+
+    Single source of truth: the query-embedding cache key and the search_events
+    `q_norm` (core/search_log) must agree so impressions group by the exact unit
+    the embedder sees. Don't reimplement — import this.
+    """
     return re.sub(r"\s+", " ", text).strip().casefold()
 
 
@@ -71,7 +77,7 @@ async def embed(
         "truncate": True,
         "normalize": True,
     }
-    cache_key = _query_cache_key(text) if kind == "query" else None
+    cache_key = normalize_query(text) if kind == "query" else None
     if cache_key is not None and (hit := _query_cache.get(cache_key)) is not None:
         _query_cache.move_to_end(cache_key)
         return hit

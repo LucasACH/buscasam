@@ -8,18 +8,11 @@ ranking — kept apart from document_reads (ADR-0014) on purpose.
 
 from __future__ import annotations
 
-import re
-
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from buscasam.core.embed import normalize_query
 from buscasam.core.search_query import Filters, ResultRow
-
-
-def _q_norm(q: str) -> str:
-    """Same normalization as the query-embedding cache key (whitespace collapse
-    + casefold) so impressions group by the unit the embedder actually sees."""
-    return re.sub(r"\s+", " ", q).strip().casefold()
 
 
 async def record_search_event(
@@ -54,7 +47,7 @@ async def record_search_event(
             "search_id": search_id,
             "reader_key": reader_key,
             "q": filters.q,
-            "q_norm": _q_norm(filters.q),
+            "q_norm": normalize_query(filters.q),
             "orden": filters.orden,
             "area_path": filters.area_path,
             "tipos": list(filters.tipos),
@@ -80,12 +73,17 @@ async def record_click(
     rank: int,
     reader_key: str,
 ) -> None:
-    """Idempotent insert of one attributed click; no-op on a repeat
-    (search_id, doc_id) since rank is fixed within a search."""
+    """Insert one attributed click, but only if `doc_id` was actually shown in
+    that impression — the INSERT...SELECT is the membership gate: it matches a
+    search_events row by search_id with doc_id in its doc_ids, so a forged or
+    stale request (unknown search_id, or a doc never in the results) inserts
+    nothing. Idempotent: a no-op on a repeat (search_id, doc_id)."""
     await session.execute(
         text(
             "INSERT INTO search_clicks (search_id, doc_id, rank, reader_key) "
-            "VALUES (:search_id, :doc_id, :rank, :reader_key) "
+            "SELECT :search_id, :doc_id, :rank, :reader_key "
+            "FROM search_events "
+            "WHERE search_id = :search_id AND :doc_id = ANY(doc_ids) "
             "ON CONFLICT DO NOTHING"
         ),
         {
