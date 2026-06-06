@@ -32,13 +32,16 @@ def upgrade() -> None:
     )
     # Backfill rows that failed before this column existed, deriving the kind
     # from the structured index_error prefixes mark_failed has always written.
+    # Anchor index_failed_at a full cooldown in the past (RETRY_COOLDOWN = 5 min)
+    # so pre-existing 'system' failures are retriable immediately rather than
+    # serving a fresh countdown that starts at deploy time.
     op.execute(
         "UPDATE document_versions SET "
         "  index_error_kind = CASE "
         "    WHEN index_error LIKE 'corrupted:%' "
         "      OR index_error LIKE 'ocr_failed:%' THEN 'file' "
         "    ELSE 'system' END, "
-        "  index_failed_at = now() "
+        "  index_failed_at = now() - interval '5 minutes' "
         "WHERE index_status = 'failed'"
     )
 
