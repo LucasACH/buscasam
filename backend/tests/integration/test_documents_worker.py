@@ -356,13 +356,17 @@ async def test_mark_failed_sets_failed_status_and_inserts_notification(session):
     uid = await make_user(session)
     version_id = await _make_candidate_version(session, owner_id=uid)
 
-    await documents.mark_failed(session, version_id, error="corrupted: PDFSyntaxError")
+    await documents.mark_failed(
+        session, version_id, error="corrupted: PDFSyntaxError", kind="file"
+    )
 
     row = (
         (
             await session.execute(
                 text(
-                    "SELECT index_status, index_error FROM document_versions WHERE id = :id"
+                    "SELECT index_status, index_error, index_error_kind, "
+                    "  index_failed_at "
+                    "FROM document_versions WHERE id = :id"
                 ),
                 {"id": version_id},
             )
@@ -372,6 +376,8 @@ async def test_mark_failed_sets_failed_status_and_inserts_notification(session):
     )
     assert row["index_status"] == "failed"
     assert row["index_error"] == "corrupted: PDFSyntaxError"
+    assert row["index_error_kind"] == "file"
+    assert row["index_failed_at"] is not None
 
     notif = (
         (
@@ -395,8 +401,8 @@ async def test_mark_failed_is_idempotent_on_retry(session):
     uid = await make_user(session)
     version_id = await _make_candidate_version(session, owner_id=uid)
 
-    await documents.mark_failed(session, version_id, error="corrupted: a")
-    await documents.mark_failed(session, version_id, error="corrupted: b")
+    await documents.mark_failed(session, version_id, error="corrupted: a", kind="file")
+    await documents.mark_failed(session, version_id, error="corrupted: b", kind="file")
 
     count = (
         await session.execute(

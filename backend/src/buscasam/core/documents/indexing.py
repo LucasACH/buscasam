@@ -7,7 +7,7 @@ rows."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import numpy as np
 from sqlalchemy import text
@@ -248,7 +248,13 @@ async def write_headline(
     )
 
 
-async def mark_failed(session: AsyncSession, version_id: int, error: str) -> None:
+async def mark_failed(
+    session: AsyncSession,
+    version_id: int,
+    error: str,
+    *,
+    kind: Literal["file", "system"],
+) -> None:
     """Candidate terminal-state writer (ADR-0008 §5, ADR-0010 §9).
 
     Single seam called by every fatal indexing path — recognized parse/OCR
@@ -256,6 +262,11 @@ async def mark_failed(session: AsyncSession, version_id: int, error: str) -> Non
     UPDATE is first-write-wins so a later `exhausted retries:` reason cannot
     overwrite an earlier, more specific `corrupted:` cause. The notification
     insert is deduped at the unique (user_id, event_key) index.
+
+    `kind` classifies the failure for the editar UI: 'file' means the upload
+    itself is bad (author must provide a new file), 'system' means our side
+    broke (author may retry via `versions.retry_indexing` after the cooldown
+    anchored on index_failed_at).
     """
     cv = await load_candidate(session, version_id)
     # ADR-0011 §5: 'discarded' is terminal and excluded here too — a terminal
@@ -267,10 +278,11 @@ async def mark_failed(session: AsyncSession, version_id: int, error: str) -> Non
         await session.execute(
             text(
                 "UPDATE document_versions SET index_status = 'failed', "
-                "  index_error = :err "
+                "  index_error = :err, index_error_kind = :kind, "
+                "  index_failed_at = now() "
                 "WHERE id = :id AND index_status NOT IN ('failed', 'discarded')"
             ),
-            {"err": error, "id": version_id},
+            {"err": error, "kind": kind, "id": version_id},
         ),
     )
     # No transition (already failed, or discarded mid-flight) → no notification.

@@ -229,7 +229,9 @@ async def test_mark_failed_does_not_resurrect_discarded_candidate(session):
     )
     await documents.discard_candidate(session, _ctx(owner), doc_id)
 
-    await documents.mark_failed(session, candidate_vid, error="exhausted retries: X")
+    await documents.mark_failed(
+        session, candidate_vid, error="exhausted retries: X", kind="system"
+    )
 
     status = (
         await session.execute(
