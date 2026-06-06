@@ -131,7 +131,7 @@ async def index_document(version_id: int) -> None:
         await enqueue_ocr_index_document(version_id)
         return
     except (PDFSyntaxError, BadZipFile, ...) as e:
-        await documents.mark_failed(version_id, f"corrupted: {type(e).__name__}")
+        await documents.mark_failed(version_id, f"corrupted: {type(e).__name__}", kind="file")
         return
     await _complete_indexing(version, doc)
 ```
@@ -216,7 +216,9 @@ async def remove_attachment(user_ctx: UserCtx, doc_id: DocId, att_id: Attachment
 async def get_draft_state(user_ctx: UserCtx, doc_id: DocId) -> DraftState
 # Returns the polling payload: index_status, staged_*, headline_fingerprint_match,
 # publish_gate_reason ('processing' | 'reindexing_headline' | 'processing_failed' | None),
-# index_error. publish_gate_reason is None iff the publish call would succeed.
+# index_error, index_failure_kind ('file' | 'system' | None), retry_available_at
+# (index_failed_at + RETRY_COOLDOWN), retry_remaining (MAX_INDEX_RETRIES -
+# index_retry_count). publish_gate_reason is None iff the publish call would succeed.
 
 async def list_own_documents(user_ctx: UserCtx) -> list[OwnDocSummary]
 # For /mis-trabajos. Owner + accepted-coauthor scope via manageable_where.
@@ -247,9 +249,22 @@ async def write_headline(version_id: int, headline: Chunk, embed: halfvec, fp: s
 # version while retaining its is_current value: a published-current refresh
 # remains searchable; a staged replacement remains unsearchable.
 
-async def mark_failed(version_id: int, error: str) -> None
-# Transaction: index_status='failed', index_error=error,
+async def mark_failed(version_id: int, error: str, *, kind: Literal['file', 'system']) -> None
+# Transaction: index_status='failed', index_error=error, index_error_kind=kind,
+# index_failed_at=now(),
 # inserts notifications(kind='processing_failed', user_id=owner, ...) with unique event_key.
+# kind classifies the failure for the author-facing retry (ADR-0008 §5):
+# 'file' = bad upload (corrupted/ocr_failed), 'system' = our-side fault.
+
+# Author-facing retry (ADR-0008 §5)
+
+async def retry_indexing(user_ctx: UserCtx, doc_id: DocId) -> None
+# Manageable-scoped. Resets the never-published failed version to 'pending'
+# (clearing error + failure stamps, incrementing index_retry_count) and
+# re-enqueues index_document in the same transaction. Raises
+# NoRetriableFailure (no failed version / kind='file'), RetryLimitReached
+# (index_retry_count >= MAX_INDEX_RETRIES = 3), RetryCooldownActive
+# (inside RETRY_COOLDOWN = 5 min from index_failed_at) — each → 409.
 ```
 
 Private worker collaboration: `_begin_indexing(version_id)` row-locks the version, returns `None` for an already `indexed` completion, and otherwise moves the task into `processing` before extraction/OCR side effects. It is shared by default and OCR task implementations, not an enqueue Interface.
@@ -274,6 +289,7 @@ POST   /api/documents/{id}/upload                      → 202 / 415           (
 GET    /api/documents/{id}/draft                       → DraftStateDTO       (require_authenticated, manageable)
 PATCH  /api/documents/{id}                             → 204                 (require_authenticated, manageable)
 POST   /api/documents/{id}/publish                     → 204 / 409           (require_authenticated, manageable, owner-only)
+POST   /api/documents/{id}/retry-indexing              → 204 / 409           (require_authenticated, manageable)
 POST   /api/documents/{id}/attachments                 → 201 / 413 / 415     (require_authenticated, manageable)
 DELETE /api/documents/{id}/attachments/{att_id}        → 204                 (require_authenticated, manageable)
 GET    /api/me/documents                               → list[OwnDocDTO]     (require_authenticated)
@@ -365,6 +381,13 @@ useDraftState(docId: number) -> {
       // blocks all interaction behind a full-page loader/failure body until
       // this is "ready"; pages never read the raw index_status.
       initialPhase: "indexing" | "failed" | "ready";
+      // Author-facing retry for 'system' failures (ADR-0008 §5): the failed
+      // body shows a Reintentar button (components/RetryIndexingButton) that
+      // counts down to retryAvailableAt and hides once retryRemaining is 0,
+      // where gateMessage switches to the limit-reached copy.
+      failureKind: "file" | "system" | null;
+      retryAvailableAt: string | null;
+      retryRemaining: number;
     };
   } | undefined;
   isLoading: boolean;

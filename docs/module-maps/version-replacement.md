@@ -154,7 +154,10 @@ useDraftState(docId: number) -> {
       stagedFecha: string | null;
       canPublish: boolean;             // owner-only
       canDiscard: boolean;             // manageable
-      error: string | null;            // populated on status='failed'
+      failureMessage: string | null;   // Spanish copy mapped from failureKind; populated on status='failed'
+      failureKind: 'file' | 'system' | null;  // server classification (ADR-0008 §5)
+      retryAvailableAt: string | null; // cooldown end for 'system' failures
+      retryRemaining: number;          // manual retries left (server-capped)
     } | null;
     versions: DetailVersion[];          // server-filtered on first_published_at IS NOT NULL
   } | undefined;
@@ -196,7 +199,7 @@ Consumes `useDraftState(docId)`. Renders one of four states based on `state.cand
 - **No candidate** (`candidate === null`) — renders the **Reemplazar archivo principal** button (file picker with `accept=".pdf,.docx,.odt"`) and a helper line below it: *"La versión previa permanece pública hasta que publiques la nueva."* (PRD stories 11/13). Click on the file picker triggers `replace(file)`; inline error rendering for 413 ("Este archivo supera los 50 MB"), 415 ("Formato no soportado o PDF cifrado"), 409 (defensive; should not happen from this state).
 - **Processing** (`candidate.status === 'processing'`) — renders status pill *"Procesando…"*, the file's `original_filename`, and a **Descartar** button (visible when `canDiscard`). No suggestion display (staged_* still defaults from `documents.*`; nothing to compare yet). Optionally renders the Reemplazar button to replace the in-flight candidate (PRD story 8) — clicking it replaces the existing candidate per the chokepoint's inline-discard semantics.
 - **Ready** (`candidate.status === 'ready'`) — renders status pill *"Listo para publicar"*, the staged abstract/keywords/fecha alongside the published values from `state` (so the author can compare), a **Publicar** button (enabled iff `canPublish`), and a **Descartar** button. **Publicar** posts to the existing `POST /api/documents/{id}/publish` route. The existing publish-gate copy (gate reason → Spanish) for the published headline reindex still gates the button (the published doc cannot publish a candidate mid-reindex of its own headline, same fingerprint rule).
-- **Failed** (`candidate.status === 'failed'`) — renders status pill *"Falló el procesamiento"* with `candidate.error` rendered inline, and a **Descartar** button. After descartar, the panel returns to the no-candidate state, where Reemplazar is re-enabled.
+- **Failed** (`candidate.status === 'failed'`) — renders status pill *"Falló el procesamiento"* with `candidate.failureMessage` rendered inline (the raw `index_error` is internal English; the hook maps `failureKind` to the same Spanish copy the initial-upload block shows), and a **Descartar** button. For `failureKind === 'system'` with `retryRemaining > 0`, a **Reintentar** button (`components/RetryIndexingButton`) precedes Descartar: disabled with an mm:ss countdown until `retryAvailableAt`, then enabled; click posts `POST /api/documents/{id}/retry-indexing` (ADR-0008 §5) and the panel flips back to processing on the next poll. After descartar, the panel returns to the no-candidate state, where Reemplazar is re-enabled.
 
 `canPublish` is forwarded from the page (owner-only); `canDiscard` comes from the server through `state.candidate`.
 
