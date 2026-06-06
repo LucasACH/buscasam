@@ -47,6 +47,7 @@ import { CandidatePanel } from "@/components/CandidatePanel";
 import { CoauthorsPanel } from "@/components/CoauthorsPanel";
 import { DatePicker } from "@/components/DatePicker";
 import { ProcessingSteps } from "@/components/ProcessingSteps";
+import { RetryIndexingButton } from "@/components/RetryIndexingButton";
 import { VersionsPanel } from "@/components/VersionsPanel";
 import { useUser } from "@/lib/useUser";
 import {
@@ -155,7 +156,22 @@ export default function EditarPage() {
             <p className="text-destructive text-sm leading-relaxed">
               {state.lifecycle.gateMessage ?? "Falló el procesamiento"}
             </p>
-            {state.isOwner && <DeleteTrabajo softDelete={actions.softDelete} />}
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {/* 'system' failures are retriable (manageable-scoped, like
+                  replace/discard) until the server-side retry cap is spent;
+                  'file' failures need a new upload, so the only way out is
+                  Eliminar + crear de nuevo. */}
+              {state.lifecycle.failureKind === "system" &&
+                state.lifecycle.retryRemaining > 0 && (
+                  <RetryIndexingButton
+                    retryAvailableAt={state.lifecycle.retryAvailableAt}
+                    retry={actions.retryIndexing}
+                  />
+                )}
+              {state.isOwner && (
+                <DeleteTrabajo softDelete={actions.softDelete} />
+              )}
+            </div>
           </div>
         )}
       </BlockedShell>

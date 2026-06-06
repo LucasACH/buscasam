@@ -37,7 +37,10 @@ test("descartar a failed candidate returns the panel to the no-candidate state",
     can_publish: false,
     can_discard: true,
     indexed_at: null,
-    error: "No se pudo extraer el texto",
+    error: "corrupted: PDFSyntaxError",
+    failure_kind: "file",
+    retry_available_at: null,
+    retry_remaining: 3,
   };
 
   function draftBody() {
@@ -94,7 +97,7 @@ test("descartar a failed candidate returns the panel to the no-candidate state",
     "Falló el procesamiento",
   );
   await expect(panel.getByTestId("candidate-error")).toHaveText(
-    "No se pudo extraer el texto",
+    "Falló el procesamiento — revisá tu archivo",
   );
 
   // 2. Descartar.

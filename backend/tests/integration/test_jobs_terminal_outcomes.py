@@ -404,16 +404,19 @@ async def test_mark_failed_first_write_wins(session):
         )
     ).scalar_one()
 
-    await documents.mark_failed(session, version_id, error="corrupted: PDFSyntaxError")
     await documents.mark_failed(
-        session, version_id, error="exhausted retries: RuntimeError"
+        session, version_id, error="corrupted: PDFSyntaxError", kind="file"
+    )
+    await documents.mark_failed(
+        session, version_id, error="exhausted retries: RuntimeError", kind="system"
     )
 
     row = (
         (
             await session.execute(
                 text(
-                    "SELECT index_status, index_error FROM document_versions WHERE id = :id"
+                    "SELECT index_status, index_error, index_error_kind "
+                    "FROM document_versions WHERE id = :id"
                 ),
                 {"id": version_id},
             )
@@ -423,3 +426,4 @@ async def test_mark_failed_first_write_wins(session):
     )
     assert row["index_status"] == "failed"
     assert row["index_error"] == "corrupted: PDFSyntaxError"
+    assert row["index_error_kind"] == "file"

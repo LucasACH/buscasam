@@ -10,6 +10,7 @@ import { CandidatePanel } from "./CandidatePanel";
 const replace = vi.fn();
 const discard = vi.fn();
 const publish = vi.fn();
+const retryIndexing = vi.fn();
 
 type Candidate = {
   status: "processing" | "ready" | "failed";
@@ -20,7 +21,10 @@ type Candidate = {
   stagedFecha: string | null;
   canPublish: boolean;
   canDiscard: boolean;
-  error: string | null;
+  failureMessage: string | null;
+  failureKind: "file" | "system" | null;
+  retryAvailableAt: string | null;
+  retryRemaining: number;
 };
 
 function candidate(over: Partial<Candidate> = {}): Candidate {
@@ -33,14 +37,20 @@ function candidate(over: Partial<Candidate> = {}): Candidate {
     stagedFecha: null,
     canPublish: false,
     canDiscard: true,
-    error: null,
+    failureMessage: null,
+    failureKind: null,
+    retryAvailableAt: null,
+    retryRemaining: 3,
     ...over,
   };
 }
 
 function wrap(cand: Candidate | null) {
   return render(
-    <CandidatePanel candidate={cand} actions={{ publish, replace, discard }} />,
+    <CandidatePanel
+      candidate={cand}
+      actions={{ publish, replace, discard, retryIndexing }}
+    />,
   );
 }
 
@@ -52,6 +62,8 @@ describe("CandidatePanel", () => {
     discard.mockResolvedValue(undefined);
     publish.mockReset();
     publish.mockResolvedValue("published");
+    retryIndexing.mockReset();
+    retryIndexing.mockResolvedValue(undefined);
     toastError.mockReset();
   });
   afterEach(() => cleanup());
@@ -103,17 +115,72 @@ describe("CandidatePanel", () => {
     expect(screen.getByRole("button", { name: "Publicar" })).toBeDisabled();
   });
 
-  it("renders the failure pill with the inline error", () => {
+  it("renders the failure pill with the mapped failure message", () => {
     wrap(
       candidate({
         status: "failed",
         statusLabel: "Falló el procesamiento",
-        error: "No se pudo extraer el texto",
+        failureMessage: "Falló el procesamiento — revisá tu archivo",
+        failureKind: "file",
       }),
     );
 
     expect(screen.getByText("Falló el procesamiento")).toBeInTheDocument();
-    expect(screen.getByText("No se pudo extraer el texto")).toBeInTheDocument();
+    expect(screen.getByTestId("candidate-error")).toHaveTextContent(
+      "Falló el procesamiento — revisá tu archivo",
+    );
+  });
+
+  it("offers Reintentar only for a system failure", () => {
+    wrap(
+      candidate({
+        status: "failed",
+        statusLabel: "Falló el procesamiento",
+        failureKind: "system",
+      }),
+    );
+
+    expect(screen.getByTestId("retry-indexing")).toBeEnabled();
+  });
+
+  it("hides Reintentar once no retries remain", () => {
+    wrap(
+      candidate({
+        status: "failed",
+        statusLabel: "Falló el procesamiento",
+        failureKind: "system",
+        retryRemaining: 0,
+      }),
+    );
+
+    expect(screen.queryByTestId("retry-indexing")).not.toBeInTheDocument();
+  });
+
+  it("hides Reintentar for a file failure", () => {
+    wrap(
+      candidate({
+        status: "failed",
+        statusLabel: "Falló el procesamiento",
+        failureKind: "file",
+      }),
+    );
+
+    expect(screen.queryByTestId("retry-indexing")).not.toBeInTheDocument();
+  });
+
+  it("delegates Reintentar to retryIndexing()", async () => {
+    const user = userEvent.setup();
+    wrap(
+      candidate({
+        status: "failed",
+        statusLabel: "Falló el procesamiento",
+        failureKind: "system",
+      }),
+    );
+
+    await user.click(screen.getByTestId("retry-indexing"));
+
+    await waitFor(() => expect(retryIndexing).toHaveBeenCalledTimes(1));
   });
 
   it("delegates a picked file to replace()", async () => {

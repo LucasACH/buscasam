@@ -34,6 +34,25 @@ class NoCandidateToDiscard(Exception):
     §core/documents, ADR-0011 §9)."""
 
 
+class NoRetriableFailure(Exception):
+    """retry_indexing on a document with no system-side indexing failure
+    (→ 409): no failed never-published version, or the failure is
+    index_error_kind='file' (the upload itself is bad — needs a new file,
+    not a retry)."""
+
+
+class RetryCooldownActive(Exception):
+    """retry_indexing inside the cooldown window after index_failed_at
+    (→ 409). Gives the failing dependency time to recover before the author
+    burns another round of automatic attempts."""
+
+
+class RetryLimitReached(Exception):
+    """retry_indexing after MAX_INDEX_RETRIES author-initiated retries on the
+    version (→ 409). Past that, the remaining paths are Eliminar (initial
+    upload) or Descartar + Reemplazar (candidate)."""
+
+
 class AttachmentCapExceeded(Exception):
     """The document already holds the maximum of 5 attachments (→ 409)."""
 

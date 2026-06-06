@@ -14,6 +14,7 @@ const {
   refreshDraft,
   publishMock,
   softDeleteMock,
+  retryIndexingMock,
   attachmentActions,
 } = vi.hoisted(() => ({
   useDraftStateMock: vi.fn(),
@@ -22,6 +23,7 @@ const {
   refreshDraft: vi.fn(),
   publishMock: vi.fn(),
   softDeleteMock: vi.fn(),
+  retryIndexingMock: vi.fn(),
   attachmentActions: { add: vi.fn(), remove: vi.fn() },
 }));
 vi.mock("../../useDraftState", () => ({
@@ -116,6 +118,7 @@ function draft(
       attachments: attachmentActions,
       replace: vi.fn(),
       discard: vi.fn(),
+      retryIndexing: retryIndexingMock,
     },
   };
 }
@@ -132,6 +135,8 @@ describe("editar page", () => {
     publishMock.mockResolvedValue("published");
     softDeleteMock.mockReset();
     softDeleteMock.mockResolvedValue(undefined);
+    retryIndexingMock.mockReset();
+    retryIndexingMock.mockResolvedValue(undefined);
     attachmentActions.add.mockReset();
     attachmentActions.remove.mockReset();
     push.mockReset();
@@ -200,12 +205,42 @@ describe("editar page", () => {
     expect(
       screen.getByRole("button", { name: /eliminar/i }),
     ).toBeInTheDocument();
+    // file failures (no failureKind: "system") get no Reintentar — a new
+    // upload is the only way out.
+    expect(screen.queryByTestId("retry-indexing")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Título")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /publicar/i }),
     ).not.toBeInTheDocument();
     expect(candidatePanelMock).not.toHaveBeenCalled();
     expect(attachmentsPanelMock).not.toHaveBeenCalled();
+  });
+
+  it("offers Reintentar for a system failure on the initial draft", async () => {
+    useDraftStateMock.mockReturnValue(
+      draft(
+        { isOwner: true },
+        {
+          initialPhase: "failed",
+          statusLabel: "Falló el procesamiento",
+          gateMessage:
+            "Hubo un problema de nuestro lado al procesar tu archivo — podés reintentar",
+          canPublish: false,
+          failureKind: "system",
+          retryAvailableAt: "2020-01-01T00:00:00+00:00",
+          retryRemaining: 3,
+        },
+      ),
+    );
+    render(<EditarPage />);
+
+    expect(screen.getByTestId("failed-block")).toHaveTextContent(
+      "Hubo un problema de nuestro lado",
+    );
+    const button = screen.getByTestId("retry-indexing");
+    expect(button).toBeEnabled();
+    fireEvent.click(button);
+    await waitFor(() => expect(retryIndexingMock).toHaveBeenCalledTimes(1));
   });
 
   it("dismisses the loader and shows the prefilled form once indexing finishes", () => {

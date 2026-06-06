@@ -396,6 +396,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/documents/{doc_id}/retry-indexing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry Indexing Endpoint */
+        post: operations["retry_indexing_endpoint_api_documents__doc_id__retry_indexing_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/documents/{doc_id}/attachments": {
         parameters: {
             query?: never;
@@ -792,6 +809,12 @@ export interface components {
             indexed_at: string | null;
             /** Error */
             error: string | null;
+            /** Failure Kind */
+            failure_kind: ("file" | "system") | null;
+            /** Retry Available At */
+            retry_available_at: string | null;
+            /** Retry Remaining */
+            retry_remaining: number;
         };
         /** CoauthorRowDTO */
         CoauthorRowDTO: {
@@ -968,6 +991,12 @@ export interface components {
             generated_fecha: string | null;
             /** Index Error */
             index_error: string | null;
+            /** Index Failure Kind */
+            index_failure_kind: ("file" | "system") | null;
+            /** Retry Available At */
+            retry_available_at: string | null;
+            /** Retry Remaining */
+            retry_remaining: number;
             /** Publish Gate Reason */
             publish_gate_reason: string | null;
             /** Is Owner */
@@ -2004,6 +2033,35 @@ export interface operations {
         };
     };
     restore_document_api_documents__doc_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_indexing_endpoint_api_documents__doc_id__retry_indexing_post: {
         parameters: {
             query?: never;
             header?: never;
