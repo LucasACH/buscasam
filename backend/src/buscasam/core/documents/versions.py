@@ -197,9 +197,7 @@ RETRY_COOLDOWN = timedelta(minutes=5)
 MAX_INDEX_RETRIES = 3
 
 
-async def retry_indexing(
-    session: AsyncSession, user_ctx: UserCtx, doc_id: int
-) -> None:
+async def retry_indexing(session: AsyncSession, user_ctx: UserCtx, doc_id: int) -> None:
     """Author-initiated re-enqueue after a system-side indexing failure.
 
     Manageable-scoped; cross-user → DocumentNotFound. Only the never-published

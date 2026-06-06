@@ -210,8 +210,7 @@ async def test_draft_surfaces_failure_kind_and_retry_available_at(client, sessio
     expected = (
         await session.execute(
             text(
-                "SELECT index_failed_at + :cd FROM document_versions "
-                "WHERE doc_id = :d"
+                "SELECT index_failed_at + :cd FROM document_versions WHERE doc_id = :d"
             ),
             {"cd": RETRY_COOLDOWN, "d": doc_id},
         )

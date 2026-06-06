@@ -204,7 +204,10 @@ async def _run_ocr_index_document(sm, tei: httpx.AsyncClient, version_id: int) -
         logger.warning("ocr_failed version_id=%s", version_id, exc_info=True)
         async with sm() as session:
             await documents.mark_failed(
-                session, version_id, error=f"ocr_failed: {type(e).__name__}", kind="file"
+                session,
+                version_id,
+                error=f"ocr_failed: {type(e).__name__}",
+                kind="file",
             )
             await session.commit()
         return
