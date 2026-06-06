@@ -21,7 +21,7 @@ export type Candidate = {
   stagedFecha: CandidateDTO["staged_fecha"];
   canPublish: boolean;
   canDiscard: boolean;
-  error: string | null;
+  failureMessage: string | null;
   failureKind: CandidateDTO["failure_kind"];
   retryAvailableAt: string | null;
   retryRemaining: number;
@@ -118,15 +118,21 @@ const SYSTEM_FAILURE_COPY =
 const SYSTEM_FAILURE_EXHAUSTED_COPY =
   "Hubo un problema de nuestro lado al procesar tu archivo y se alcanzó el límite de reintentos";
 
-function gateMessage(state: DraftStateDTO): string | null {
-  if (!state.publish_gate_reason) return null;
-  if (
-    state.publish_gate_reason === "processing_failed" &&
-    state.index_failure_kind === "system"
-  )
-    return state.retry_remaining > 0
+function failureMessage(
+  kind: "file" | "system" | null,
+  retryRemaining: number,
+): string {
+  if (kind === "system")
+    return retryRemaining > 0
       ? SYSTEM_FAILURE_COPY
       : SYSTEM_FAILURE_EXHAUSTED_COPY;
+  return GATE_COPY.processing_failed;
+}
+
+function gateMessage(state: DraftStateDTO): string | null {
+  if (!state.publish_gate_reason) return null;
+  if (state.publish_gate_reason === "processing_failed")
+    return failureMessage(state.index_failure_kind, state.retry_remaining);
   return GATE_COPY[state.publish_gate_reason] ?? state.publish_gate_reason;
 }
 
@@ -160,7 +166,12 @@ function projectCandidate(c: CandidateDTO): Candidate {
     stagedFecha: c.staged_fecha,
     canPublish: c.can_publish,
     canDiscard: c.can_discard,
-    error: c.error,
+    // The raw index_error is internal English ("exhausted retries: …");
+    // map it to the same Spanish copy the initial-upload block shows.
+    failureMessage:
+      c.status === "failed"
+        ? failureMessage(c.failure_kind, c.retry_remaining)
+        : null,
     failureKind: c.failure_kind,
     retryAvailableAt: c.retry_available_at,
     retryRemaining: c.retry_remaining,

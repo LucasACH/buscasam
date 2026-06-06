@@ -452,6 +452,46 @@ describe("useDraftState", () => {
     });
   });
 
+  it("maps a failed candidate's raw error to Spanish copy per kind", async () => {
+    returns({
+      candidate: candidate({
+        status: "failed",
+        error: "exhausted retries: EmbedUnavailable",
+        failure_kind: "system",
+      }),
+    });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(result.current.state?.candidate).toMatchObject({
+      status: "failed",
+      failureMessage:
+        "Hubo un problema de nuestro lado al procesar tu archivo — podés reintentar",
+    });
+  });
+
+  it("uses the revisá-tu-archivo copy for a failed file candidate", async () => {
+    returns({
+      candidate: candidate({
+        status: "failed",
+        error: "corrupted: PDFSyntaxError",
+        failure_kind: "file",
+      }),
+    });
+    const { result } = renderHook(() => useDraftState(1), {
+      wrapper: wrapper(),
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(result.current.state?.candidate?.failureMessage).toBe(
+      "Falló el procesamiento — revisá tu archivo",
+    );
+  });
+
   it("exposes a null candidate when none is in flight", async () => {
     returns({ candidate: null });
     const { result } = renderHook(() => useDraftState(1), {

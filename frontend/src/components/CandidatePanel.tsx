@@ -154,12 +154,12 @@ export function CandidatePanel({
         {candidate?.status === "failed" && (
           <div className="space-y-3">
             <StatusPill tone="red">{candidate.statusLabel}</StatusPill>
-            {candidate.error && (
+            {candidate.failureMessage && (
               <p
                 data-testid="candidate-error"
                 className="text-destructive text-sm"
               >
-                {candidate.error}
+                {candidate.failureMessage}
               </p>
             )}
             <div className="flex flex-wrap gap-2">

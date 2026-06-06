@@ -21,7 +21,7 @@ type Candidate = {
   stagedFecha: string | null;
   canPublish: boolean;
   canDiscard: boolean;
-  error: string | null;
+  failureMessage: string | null;
   failureKind: "file" | "system" | null;
   retryAvailableAt: string | null;
   retryRemaining: number;
@@ -37,7 +37,7 @@ function candidate(over: Partial<Candidate> = {}): Candidate {
     stagedFecha: null,
     canPublish: false,
     canDiscard: true,
-    error: null,
+    failureMessage: null,
     failureKind: null,
     retryAvailableAt: null,
     retryRemaining: 3,
@@ -115,17 +115,20 @@ describe("CandidatePanel", () => {
     expect(screen.getByRole("button", { name: "Publicar" })).toBeDisabled();
   });
 
-  it("renders the failure pill with the inline error", () => {
+  it("renders the failure pill with the mapped failure message", () => {
     wrap(
       candidate({
         status: "failed",
         statusLabel: "Falló el procesamiento",
-        error: "No se pudo extraer el texto",
+        failureMessage: "Falló el procesamiento — revisá tu archivo",
+        failureKind: "file",
       }),
     );
 
     expect(screen.getByText("Falló el procesamiento")).toBeInTheDocument();
-    expect(screen.getByText("No se pudo extraer el texto")).toBeInTheDocument();
+    expect(screen.getByTestId("candidate-error")).toHaveTextContent(
+      "Falló el procesamiento — revisá tu archivo",
+    );
   });
 
   it("offers Reintentar only for a system failure", () => {
