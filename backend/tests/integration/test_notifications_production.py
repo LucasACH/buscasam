@@ -46,7 +46,12 @@ async def test_notify_coauthor_invite_shape(session):
 async def test_notify_indexing_failed_shape(session):
     uid = await make_user(session)
     await notifications.notify_indexing_failed(
-        session, user_id=uid, doc_id=5, doc_title="Redes", version_id=9, error="corrupted: X"
+        session,
+        user_id=uid,
+        doc_id=5,
+        doc_title="Redes",
+        version_id=9,
+        error="corrupted: X",
     )
     [row] = await _payload_rows(session, uid)
     assert row["event_key"] == "processing_failed:9"
