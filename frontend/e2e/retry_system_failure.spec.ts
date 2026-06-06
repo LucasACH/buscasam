@@ -148,9 +148,7 @@ test("a system failure past the retry limit offers no Reintentar", async ({
 
   await page.goto(`/mis-trabajos/${DOC_ID}/editar`);
   const failedBlock = page.getByTestId("failed-block");
-  await expect(failedBlock).toContainText(
-    "se alcanzó el límite de reintentos",
-  );
+  await expect(failedBlock).toContainText("se alcanzó el límite de reintentos");
   await expect(page.getByTestId("retry-indexing")).toHaveCount(0);
   // Eliminar remains the way out.
   await expect(
