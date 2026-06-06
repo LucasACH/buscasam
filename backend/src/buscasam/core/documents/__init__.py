@@ -62,8 +62,11 @@ from buscasam.core.documents.exceptions import (
     InvitationNotPending,
     NoCandidateToDiscard,
     NoPublishedVersion,
+    NoRetriableFailure,
     NotOwner,
     PublishConflict,
+    RetryCooldownActive,
+    RetryLimitReached,
 )
 from buscasam.core.documents.indexing import (
     _begin_indexing,
@@ -81,11 +84,14 @@ from buscasam.core.documents.lifecycle import (
 )
 from buscasam.core.documents.publication import publish
 from buscasam.core.documents.versions import (
+    MAX_INDEX_RETRIES,
+    RETRY_COOLDOWN,
     CandidateVersion,
     attach_main_version,
     discard_candidate,
     load_candidate,
     replace_main_version,
+    retry_indexing,
 )
 
 __all__ = [
@@ -112,13 +118,18 @@ __all__ = [
     "InvalidCoauthorId",
     "InvitationDisclosure",
     "InvitationNotPending",
+    "MAX_INDEX_RETRIES",
     "MIN_AREA_LEVEL",
     "MainFile",
     "NoCandidateToDiscard",
     "NoPublishedVersion",
+    "NoRetriableFailure",
     "NotOwner",
     "OwnDocSummary",
     "PublishConflict",
+    "RETRY_COOLDOWN",
+    "RetryCooldownActive",
+    "RetryLimitReached",
     "accept_invitation",
     "add_attachment",
     "area_level",
@@ -144,6 +155,7 @@ __all__ = [
     "remove_attachment",
     "replace_main_version",
     "restore",
+    "retry_indexing",
     "revoke_invitation",
     "set_index_stage",
     "soft_delete",

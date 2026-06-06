@@ -116,6 +116,9 @@ class CandidateStateDTO(BaseModel):
     can_discard: bool
     indexed_at: str | None  # ISO datetime; None until indexed.
     error: str | None
+    failure_kind: Literal["file", "system"] | None  # set while status='failed'
+    retry_available_at: str | None  # ISO datetime; cooldown end for 'system'
+    retry_remaining: int  # manual retries left (server-capped)
 
 
 class DraftStateDTO(BaseModel):
@@ -129,6 +132,9 @@ class DraftStateDTO(BaseModel):
     generated_keywords: list[str]
     generated_fecha: date | None
     index_error: str | None
+    index_failure_kind: Literal["file", "system"] | None  # while 'failed'
+    retry_available_at: str | None  # ISO datetime; cooldown end for 'system'
+    retry_remaining: int  # manual retries left (server-capped)
     publish_gate_reason: str | None
     is_owner: bool
     visibility: Visibility

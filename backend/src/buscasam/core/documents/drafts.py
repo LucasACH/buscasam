@@ -27,6 +27,7 @@ from buscasam.core.documents.exceptions import (
     InvalidAreaForType,
     InvalidCoauthorId,
 )
+from buscasam.core.documents.versions import MAX_INDEX_RETRIES, RETRY_COOLDOWN
 
 if TYPE_CHECKING:
     from buscasam.core.auth import UserCtx
@@ -74,6 +75,9 @@ class CandidateState:
     can_discard: bool  # manageable-scoped
     indexed_at: datetime | None
     error: str | None
+    failure_kind: str | None  # 'file' | 'system' while status='failed'
+    retry_available_at: datetime | None  # cooldown end for 'system' failures
+    retry_remaining: int  # manual retries left (MAX_INDEX_RETRIES cap)
 
 
 def _candidate_status(index_status: str) -> Literal["processing", "ready", "failed"]:
@@ -82,6 +86,18 @@ def _candidate_status(index_status: str) -> Literal["processing", "ready", "fail
     if index_status == "failed":
         return "failed"
     return "processing"  # pending | processing
+
+
+def _retry_available_at(index_failed_at: datetime | None) -> datetime | None:
+    """End of the retry cooldown (versions.retry_indexing enforces it; this
+    only feeds the UI countdown). None outside of 'failed'."""
+    if index_failed_at is None:
+        return None
+    return index_failed_at + RETRY_COOLDOWN
+
+
+def _retry_remaining(index_retry_count: int) -> int:
+    return max(0, MAX_INDEX_RETRIES - index_retry_count)
 
 
 @dataclass(frozen=True)
@@ -98,6 +114,9 @@ class DraftState:
     generated_keywords: list[str]
     generated_fecha: date | None
     index_error: str | None
+    index_failure_kind: str | None  # 'file' | 'system' while index_status='failed'
+    retry_available_at: datetime | None  # cooldown end for 'system' failures
+    retry_remaining: int  # manual retries left (MAX_INDEX_RETRIES cap)
     publish_gate_reason: str | None
     is_owner: bool
     visibility: str
@@ -377,6 +396,7 @@ async def get_draft_state(
                     "SELECT v.id AS version_id, v.index_status, v.index_stage, "
                     "       v.staged_abstract, "
                     "       v.staged_keywords, v.staged_fecha, v.index_error, "
+                    "       v.index_error_kind, v.index_failed_at, v.index_retry_count, "
                     "       v.generated_abstract, v.generated_keywords, "
                     "       v.generated_fecha, "
                     "       v.headline_fingerprint, d.titulo, d.visibility, "
@@ -428,6 +448,7 @@ async def get_draft_state(
                     "SELECT v.index_status, v.index_stage, v.staged_abstract, "
                     "       v.staged_keywords, "
                     "       v.staged_fecha, v.indexed_at, v.index_error, "
+                    "       v.index_error_kind, v.index_failed_at, v.index_retry_count, "
                     "       v.headline_fingerprint, d.titulo "
                     "FROM document_versions v JOIN documents d ON d.id = v.doc_id "
                     "WHERE v.doc_id = :doc_id AND v.is_current = false "
@@ -461,6 +482,9 @@ async def get_draft_state(
             can_discard=True,
             indexed_at=cand_row["indexed_at"],
             error=cand_row["index_error"],
+            failure_kind=cand_row["index_error_kind"],
+            retry_available_at=_retry_available_at(cand_row["index_failed_at"]),
+            retry_remaining=_retry_remaining(cand_row["index_retry_count"]),
         )
     # Owner row first, then insertion order. The CASE keeps the owner pinned
     # regardless of the row id; document_authors.id is monotonic per insert so
@@ -495,6 +519,9 @@ async def get_draft_state(
         generated_keywords=row["generated_keywords"] or [],
         generated_fecha=row["generated_fecha"],
         index_error=row["index_error"],
+        index_failure_kind=row["index_error_kind"],
+        retry_available_at=_retry_available_at(row["index_failed_at"]),
+        retry_remaining=_retry_remaining(row["index_retry_count"]),
         publish_gate_reason=_publish_gate_reason(
             row["index_status"],
             matches,

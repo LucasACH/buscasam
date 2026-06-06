@@ -4,6 +4,7 @@ module map §version-replacement)."""
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from sqlalchemy import text
@@ -16,6 +17,9 @@ from buscasam.core.documents.exceptions import (
     DocumentNotFound,
     NoCandidateToDiscard,
     NoPublishedVersion,
+    NoRetriableFailure,
+    RetryCooldownActive,
+    RetryLimitReached,
 )
 
 if TYPE_CHECKING:
@@ -178,6 +182,74 @@ async def replace_main_version(
     await jobs.enqueue_index_document(session, version_id)
 
     return version_id
+
+
+# Window after index_failed_at during which retry_indexing refuses to re-enqueue.
+# The automatic retries (ADR-0008 §5: 3 attempts, exponential backoff) already
+# spent ~3 minutes before the terminal failure; an immediate manual retry
+# against a still-down dependency would just burn another round. Surfaced to
+# the editar UI as retry_available_at so the button can show a countdown.
+RETRY_COOLDOWN = timedelta(minutes=5)
+
+# Author-initiated retries per version. Past this, the remaining paths are
+# Eliminar (initial upload) or Descartar + Reemplazar (candidate) — an outage
+# that survives 3 manual rounds needs an operator, not more clicks.
+MAX_INDEX_RETRIES = 3
+
+
+async def retry_indexing(
+    session: AsyncSession, user_ctx: UserCtx, doc_id: int
+) -> None:
+    """Author-initiated re-enqueue after a system-side indexing failure.
+
+    Manageable-scoped; cross-user → DocumentNotFound. Only the never-published
+    failed version (the initial upload or the in-flight replacement candidate —
+    at most one row matches) with index_error_kind='system' is retriable; a
+    'file' failure needs a new upload → NoRetriableFailure. Inside the cooldown
+    window → RetryCooldownActive; past MAX_INDEX_RETRIES → RetryLimitReached
+    (the endpoint maps all three to 409; the UI hides / disables the button, so
+    these only fire on races). Resets the row to 'pending' (clearing error +
+    failure stamps, incrementing index_retry_count) and enqueues index_document
+    in the same transaction (ADR-0008 §1). FOR UPDATE serializes against a
+    concurrent descartar / double-click; the queueing lock collapses a
+    duplicate enqueue to a no-op (ADR-0008 §7)."""
+    await assert_manageable(session, user_ctx, doc_id)
+    row = (
+        (
+            await session.execute(
+                text(
+                    "SELECT id, index_error_kind, index_retry_count, "
+                    "       now() >= index_failed_at + :cooldown AS cooldown_elapsed "
+                    "FROM document_versions "
+                    "WHERE doc_id = :doc_id AND index_status = 'failed' "
+                    "  AND first_published_at IS NULL "
+                    "FOR UPDATE"
+                ),
+                {"doc_id": doc_id, "cooldown": RETRY_COOLDOWN},
+            )
+        )
+        .mappings()
+        .one_or_none()
+    )
+    if row is None or row["index_error_kind"] != "system":
+        raise NoRetriableFailure
+    if row["index_retry_count"] >= MAX_INDEX_RETRIES:
+        raise RetryLimitReached
+    if not row["cooldown_elapsed"]:
+        raise RetryCooldownActive
+    await session.execute(
+        text(
+            "UPDATE document_versions SET index_status = 'pending', "
+            "  index_stage = NULL, index_error = NULL, "
+            "  index_error_kind = NULL, index_failed_at = NULL, "
+            "  index_retry_count = index_retry_count + 1 "
+            "WHERE id = :id"
+        ),
+        {"id": row["id"]},
+    )
+    from buscasam.core import jobs
+
+    await jobs.enqueue_index_document(session, row["id"])
 
 
 async def discard_candidate(

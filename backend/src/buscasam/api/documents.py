@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import AsyncIterator, cast
+from typing import AsyncIterator, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,8 +36,11 @@ from buscasam.core.documents import (
     InvalidCoauthorId,
     NoCandidateToDiscard,
     NoPublishedVersion,
+    NoRetriableFailure,
     NotOwner,
     PublishConflict,
+    RetryCooldownActive,
+    RetryLimitReached,
     add_attachment,
     assert_manageable,
     attach_main_version,
@@ -51,6 +54,7 @@ from buscasam.core.documents import (
     remove_attachment,
     replace_main_version,
     restore,
+    retry_indexing,
     revoke_invitation,
     soft_delete,
     update_draft_metadata,
@@ -225,6 +229,15 @@ async def get_draft(
         generated_keywords=state.generated_keywords,
         generated_fecha=state.generated_fecha,
         index_error=state.index_error,
+        index_failure_kind=cast(
+            "Literal['file', 'system'] | None", state.index_failure_kind
+        ),
+        retry_available_at=(
+            state.retry_available_at.isoformat()
+            if state.retry_available_at is not None
+            else None
+        ),
+        retry_remaining=state.retry_remaining,
         publish_gate_reason=state.publish_gate_reason,
         is_owner=state.is_owner,
         visibility=cast(Visibility, state.visibility),
@@ -279,6 +292,15 @@ async def get_draft(
                     else None
                 ),
                 error=state.candidate.error,
+                failure_kind=cast(
+                    "Literal['file', 'system'] | None", state.candidate.failure_kind
+                ),
+                retry_available_at=(
+                    state.candidate.retry_available_at.isoformat()
+                    if state.candidate.retry_available_at is not None
+                    else None
+                ),
+                retry_remaining=state.candidate.retry_remaining,
             )
             if state.candidate is not None
             else None
@@ -392,6 +414,27 @@ async def restore_document(
         await restore(session, user_ctx, doc_id)
     except DocumentNotFound:
         raise HTTPException(status_code=404)
+    return Response(status_code=204)
+
+
+@router.post("/documents/{doc_id}/retry-indexing", status_code=204)
+async def retry_indexing_endpoint(
+    doc_id: int,
+    user_ctx: auth.UserCtx = Depends(auth.require_authenticated),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    # Both 409s are race guards: the UI only offers Reintentar for a 'system'
+    # failure past its cooldown, so a normal click never hits them.
+    try:
+        await retry_indexing(session, user_ctx, doc_id)
+    except DocumentNotFound:
+        raise HTTPException(status_code=404)
+    except NoRetriableFailure:
+        raise HTTPException(status_code=409, detail={"reason": "not_retriable"})
+    except RetryLimitReached:
+        raise HTTPException(status_code=409, detail={"reason": "retry_limit"})
+    except RetryCooldownActive:
+        raise HTTPException(status_code=409, detail={"reason": "retry_cooldown"})
     return Response(status_code=204)
 
 
