@@ -46,18 +46,28 @@ async def test_notify_coauthor_invite_shape(session):
 async def test_notify_indexing_failed_shape(session):
     uid = await make_user(session)
     await notifications.notify_indexing_failed(
-        session, user_id=uid, doc_id=5, version_id=9, error="corrupted: X"
+        session, user_id=uid, doc_id=5, doc_title="Redes", version_id=9, error="corrupted: X"
     )
     [row] = await _payload_rows(session, uid)
     assert row["event_key"] == "processing_failed:9"
     assert row["kind"] == "processing_failed"
-    assert row["payload"] == {"doc_id": 5, "version_id": 9, "error": "corrupted: X"}
+    assert row["payload"] == {
+        "doc_id": 5,
+        "doc_title": "Redes",
+        "version_id": 9,
+        "error": "corrupted: X",
+    }
 
 
 async def test_notify_headline_refresh_failed_uses_distinct_key_same_kind(session):
     uid = await make_user(session)
     await notifications.notify_headline_refresh_failed(
-        session, user_id=uid, doc_id=5, version_id=9, error="exhausted retries: X"
+        session,
+        user_id=uid,
+        doc_id=5,
+        doc_title="Redes",
+        version_id=9,
+        error="exhausted retries: X",
     )
     [row] = await _payload_rows(session, uid)
     # Distinct prefix from indexing failure, so both can coexist on one version…
@@ -105,7 +115,7 @@ async def test_moderation_reason_none_serializes_to_json_null(session):
             s, user_id=uid, doc_id=5, doc_title="T", inviter="A"
         ),
         lambda s, uid: notifications.notify_indexing_failed(
-            s, user_id=uid, doc_id=5, version_id=9, error="e"
+            s, user_id=uid, doc_id=5, doc_title="T", version_id=9, error="e"
         ),
         lambda s, uid: notifications.notify_moderation_action(
             s,
