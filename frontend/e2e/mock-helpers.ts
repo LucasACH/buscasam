@@ -22,3 +22,16 @@ export async function resetMocks(): Promise<void> {
   const r = await fetch(`${BASE}/__mock/reset`, { method: "DELETE" });
   if (!r.ok) throw new Error(`resetMocks failed: ${r.status}`);
 }
+
+export type Recorded = {
+  method: string;
+  path: string;
+  headers: Record<string, string>;
+  body: string;
+};
+
+export async function getRecorded(): Promise<Recorded[]> {
+  const r = await fetch(`${BASE}/__mock/recorded`);
+  if (!r.ok) throw new Error(`getRecorded failed: ${r.status}`);
+  return (await r.json()) as Recorded[];
+}

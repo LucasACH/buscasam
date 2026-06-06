@@ -7,12 +7,12 @@ from datetime import date
 from typing import Literal
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from buscasam.api.deps import get_session, get_tei_client
-from buscasam.core import auth, search, search_query
+from buscasam.core import auth, search, search_log, search_query
 from buscasam.core.search_query import Orden
 from buscasam.settings import settings
 
@@ -51,10 +51,15 @@ class SearchResponse(BaseModel):
     unfiltered_total: int | None = None
     lexical_fallback: bool = False
     fuzzy_fallback: bool = False
+    # Join key for click attribution; null for non-relevance (recientes/filter-only)
+    # responses that carry no logged impression.
+    search_id: str | None = None
 
 
 @router.get("/search", response_model=SearchResponse)
 async def search_endpoint(
+    request: Request,
+    response: Response,
     q: str = Query(default=""),
     pagina: int = Query(default=1, ge=1),
     area: str | None = Query(default=None, pattern=r"^[a-z0-9_]+(\.[a-z0-9_]+)*$"),
@@ -92,6 +97,7 @@ async def search_endpoint(
             orden=orden,
         ),
         user_ctx=user_ctx,
+        reader_key=auth.reader_key(user_ctx, request, response),
         min_semantic_similarity=settings.min_semantic_similarity,
         fuzzy_word_similarity_threshold=settings.fuzzy_word_similarity_threshold,
         semantic_only_trgm_threshold=settings.semantic_only_trgm_threshold,
@@ -103,4 +109,31 @@ async def search_endpoint(
         unfiltered_total=result.unfiltered_total,
         lexical_fallback=result.lexical_fallback,
         fuzzy_fallback=result.fuzzy_fallback,
+        search_id=result.search_id,
+    )
+
+
+class ClickRequest(BaseModel):
+    search_id: str
+    doc_id: int
+    rank: int
+
+
+@router.post("/search/click", status_code=204)
+async def search_click_endpoint(
+    body: ClickRequest,
+    request: Request,
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+    user_ctx: auth.UserCtx = Depends(auth.current_user),
+) -> None:
+    """Attribute a result click to its originating search (core/search_log).
+    Fire-and-forget from the result navigation; idempotent per (search_id,
+    doc_id)."""
+    await search_log.record_click(
+        session,
+        search_id=body.search_id,
+        doc_id=body.doc_id,
+        rank=body.rank,
+        reader_key=auth.reader_key(user_ctx, request, response),
     )

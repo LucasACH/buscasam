@@ -21,6 +21,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/search/click": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Search Click Endpoint
+         * @description Attribute a result click to its originating search (core/search_log).
+         *     Fire-and-forget from the result navigation; idempotent per (search_id,
+         *     doc_id).
+         */
+        post: operations["search_click_endpoint_api_search_click_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/areas": {
         parameters: {
             query?: never;
@@ -815,6 +837,15 @@ export interface components {
             /** Retry Remaining */
             retry_remaining: number;
         };
+        /** ClickRequest */
+        ClickRequest: {
+            /** Search Id */
+            search_id: string;
+            /** Doc Id */
+            doc_id: number;
+            /** Rank */
+            rank: number;
+        };
         /** CoauthorRowDTO */
         CoauthorRowDTO: {
             /** User Id */
@@ -1298,6 +1329,8 @@ export interface components {
              * @default false
              */
             fuzzy_fallback: boolean;
+            /** Search Id */
+            search_id?: string | null;
         };
         /** ServiceHealthDTO */
         ServiceHealthDTO: {
@@ -1397,6 +1430,37 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SearchResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_click_endpoint_api_search_click_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClickRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

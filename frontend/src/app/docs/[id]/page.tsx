@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { after } from "next/server";
+import { headers } from "next/headers";
 import { FileText, Mail } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -13,7 +15,12 @@ import { AreaBreadcrumb } from "@/components/AreaBreadcrumb";
 import { Button } from "@/components/ui/button";
 import { TIPO_LABEL, VISIBILITY_LABEL } from "@/lib/labels";
 
-import { fetchAreas, fetchDocDetail, type Area } from "./fetchDetail";
+import {
+  fetchAreas,
+  fetchDocDetail,
+  recordSearchClick,
+  type Area,
+} from "./fetchDetail";
 import { DownloadButton } from "./DownloadButton";
 import { RelatedRail } from "./RelatedRail";
 import type {
@@ -22,7 +29,10 @@ import type {
   MinimalInviteDoc,
 } from "./types";
 
-type PageProps = { params: Promise<{ id: string }> };
+type PageProps = {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+};
 
 function parseDocId(raw: string): number | null {
   const n = Number(raw);
@@ -71,7 +81,10 @@ export async function generateMetadata({
   };
 }
 
-export default async function DocDetailPage({ params }: PageProps) {
+export default async function DocDetailPage({
+  params,
+  searchParams,
+}: PageProps) {
   const docId = parseDocId((await params).id);
   if (docId === null) notFound();
   const [detail, areas] = await Promise.all([
@@ -79,6 +92,24 @@ export default async function DocDetailPage({ params }: PageProps) {
     fetchAreas(),
   ]);
   if (!detail) notFound();
+  // Arrived from a search result (?s=search_id&r=rank): attribute the click.
+  // Runs post-response via after() so this non-critical write never delays the
+  // page render (recordSearchClick is already best-effort/idempotent).
+  const sp = await searchParams;
+  const s = typeof sp.s === "string" ? sp.s : null;
+  const r = typeof sp.r === "string" ? Number(sp.r) : NaN;
+  if (s && Number.isInteger(r) && r >= 1) {
+    // Read request headers now (in render) — they can't be used inside after().
+    // Origin must equal the site origin or the CSRF Origin-check 403s this POST
+    // for any visitor carrying a sid cookie (api/app.py OriginCheckMiddleware).
+    const h = await headers();
+    const cookie = h.get("cookie") ?? "";
+    const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
+    const origin = host
+      ? `${h.get("x-forwarded-proto") ?? "http"}://${host}`
+      : "";
+    after(() => recordSearchClick(s, docId, r, cookie, origin));
+  }
   // Pending invitee on a doc they cannot read: minimal disclosure only — no
   // metadata, abstract, archivo, adjuntos, related rail, or versions panel
   // (ADR-0010 §6).

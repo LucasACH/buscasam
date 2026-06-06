@@ -9,6 +9,8 @@ Future authenticated routes call the same `execute`.
 from __future__ import annotations
 
 import logging
+import time
+import uuid
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
@@ -17,7 +19,7 @@ import numpy as np
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from buscasam.core import search_query
+from buscasam.core import search_log, search_query
 from buscasam.core.document_access import invitado_where
 from buscasam.core.embed import EmbedUnavailable, embed
 from buscasam.core.search_query import Filters, ResultRow
@@ -36,6 +38,7 @@ class ExecuteResult:
     unfiltered_total: int | None
     lexical_fallback: bool
     fuzzy_fallback: bool
+    search_id: str | None
 
 
 def _has_filter(filters: Filters) -> bool:
@@ -72,10 +75,12 @@ async def execute(
     *,
     filters: Filters,
     user_ctx: UserCtx,
+    reader_key: str,
     min_semantic_similarity: float,
     fuzzy_word_similarity_threshold: float,
     semantic_only_trgm_threshold: float,
 ) -> ExecuteResult:
+    started = time.perf_counter()
     if filters.orden == "recientes" or not filters.q:
         embedding: np.ndarray | None = None
         lexical_fallback = False
@@ -144,6 +149,26 @@ async def execute(
                 semantic_only_trgm_threshold=semantic_only_trgm_threshold,
             )
 
+    # Log an impression only for relevance queries (q non-empty) — recientes
+    # browsing and filter-only listings aren't relevance signal. search_id is
+    # the join key the result link carries back on click (core/search_log).
+    search_id: str | None = None
+    if filters.q:
+        search_id = uuid.uuid4().hex
+        await search_log.record_search_event(
+            session,
+            search_id=search_id,
+            reader_key=reader_key,
+            filters=filters,
+            rows=result.rows,
+            total=result.total,
+            saturated=result.saturated,
+            lexical_fallback=lexical_fallback,
+            fuzzy_fallback=fuzzy_fallback,
+            semantic_used=embedding is not None,
+            latency_ms=round((time.perf_counter() - started) * 1000),
+        )
+
     return ExecuteResult(
         rows=result.rows,
         total=result.total,
@@ -151,4 +176,5 @@ async def execute(
         unfiltered_total=unfiltered_total,
         lexical_fallback=lexical_fallback,
         fuzzy_fallback=fuzzy_fallback,
+        search_id=search_id,
     )

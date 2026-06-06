@@ -215,8 +215,13 @@ function BuscarPageInner() {
           />
         ) : (
           <section className="flex flex-col gap-3">
-            {data?.results.map((r) => (
-              <ResultCard key={r.doc_id} result={r} />
+            {data?.results.map((r, i) => (
+              <ResultCard
+                key={r.doc_id}
+                result={r}
+                searchId={data.search_id}
+                rank={(pagina - 1) * PAGE_SIZE + i + 1}
+              />
             ))}
           </section>
         )}
