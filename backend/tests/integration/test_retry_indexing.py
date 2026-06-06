@@ -139,6 +139,19 @@ async def test_retry_without_failed_version_raises(session):
         await documents.retry_indexing(session, _ctx(owner), doc_id)
 
 
+async def test_retry_twice_no_ops_the_second_call(session):
+    # The FOR UPDATE + index_status='failed' predicate makes a double-click /
+    # concurrent retry safe: once the first call resets the row to 'pending' it
+    # no longer matches, so the second sees no retriable failure.
+    owner = await make_user(session)
+    doc_id, _ = await _seed_failed_draft(session, owner_user_id=owner)
+
+    await documents.retry_indexing(session, _ctx(owner), doc_id)
+
+    with pytest.raises(NoRetriableFailure):
+        await documents.retry_indexing(session, _ctx(owner), doc_id)
+
+
 async def test_retry_cross_user_raises_not_found(session):
     owner = await make_user(session)
     stranger = await make_user(session)
