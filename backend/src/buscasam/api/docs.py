@@ -340,7 +340,8 @@ async def download_attachment(
     )
 
 
-@router.api_route("/{doc_id}/versions/{n}/download", methods=["GET", "HEAD"])
+@router.get("/{doc_id}/versions/{n}/download")
+@router.head("/{doc_id}/versions/{n}/download", include_in_schema=False)
 async def download_version(
     doc_id: int,
     n: str,
