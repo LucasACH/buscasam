@@ -30,7 +30,12 @@ async def record_search_event(
     latency_ms: int,
 ) -> None:
     """Persist one impression. Shares the request transaction; doc_ids is the
-    ordered page shown so the harness can score rank-by-rank."""
+    ordered page shown so the harness can score rank-by-rank.
+
+    Note for the eval harness: doc_ids is *page-local* (this page's slice), while
+    a search_clicks.rank is the *global* rank across pagination the user saw. Map
+    between them with the stored `pagina`: global_rank = (pagina-1)*PAGE_SIZE +
+    (position in doc_ids). Joining by (search_id, doc_id) sidesteps this entirely."""
     await session.execute(
         text(
             "INSERT INTO search_events ("
