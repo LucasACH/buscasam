@@ -69,7 +69,12 @@ const server = createServer(async (req, res) => {
   // (e.g. the relevance search/click POST) and the headers they carry.
   const reqBody =
     req.method === "GET" || req.method === "HEAD" ? "" : await readBody(req);
-  recorded.push({ method: req.method, path, headers: req.headers, body: reqBody });
+  recorded.push({
+    method: req.method,
+    path,
+    headers: req.headers,
+    body: reqBody,
+  });
 
   const entry = registry.get(path);
   if (entry) {
