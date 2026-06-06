@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { after } from "next/server";
 import { FileText, Mail } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -91,11 +92,13 @@ export default async function DocDetailPage({
   ]);
   if (!detail) notFound();
   // Arrived from a search result (?s=search_id&r=rank): attribute the click.
+  // Runs post-response via after() so this non-critical write never delays the
+  // page render (recordSearchClick is already best-effort/idempotent).
   const sp = await searchParams;
   const s = typeof sp.s === "string" ? sp.s : null;
   const r = typeof sp.r === "string" ? Number(sp.r) : NaN;
   if (s && Number.isInteger(r) && r >= 1) {
-    await recordSearchClick(s, docId, r);
+    after(() => recordSearchClick(s, docId, r));
   }
   // Pending invitee on a doc they cannot read: minimal disclosure only — no
   // metadata, abstract, archivo, adjuntos, related rail, or versions panel
