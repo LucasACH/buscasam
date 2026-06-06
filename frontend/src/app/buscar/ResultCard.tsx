@@ -45,7 +45,22 @@ function renderHighlightedSnippet(snippet: string) {
   });
 }
 
-export function ResultCard({ result }: { result: ResultCardData }) {
+export function ResultCard({
+  result,
+  searchId,
+  rank,
+}: {
+  result: ResultCardData;
+  searchId?: string | null;
+  rank?: number;
+}) {
+  // Carry the originating search + rank so the doc page can attribute the click
+  // server-side (no-JS robust). Plain query params on the navigation, not an
+  // onClick beacon.
+  const href =
+    searchId && rank !== undefined
+      ? `/docs/${result.doc_id}?s=${searchId}&r=${rank}`
+      : `/docs/${result.doc_id}`;
   const year = result.fecha ? result.fecha.slice(0, 4) : null;
   const tipo = TIPO_LABEL[result.tipo] ?? result.tipo;
   const visibilityBadge =
@@ -61,7 +76,7 @@ export function ResultCard({ result }: { result: ResultCardData }) {
     <article className="group border-border hover:border-border-strong bg-card relative rounded-lg border px-5 py-[18px] transition-all hover:shadow-[0_2px_8px_-2px_rgba(23,23,23,0.08)]">
       <h2 className="text-[17px] leading-[1.3] font-semibold tracking-tight">
         <Link
-          href={`/docs/${result.doc_id}`}
+          href={href}
           onClick={() =>
             posthog.capture("search_result_clicked", {
               doc_id: result.doc_id,

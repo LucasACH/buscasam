@@ -28,6 +28,30 @@ async function fetchDocDetailUncached(
 
 export const fetchDocDetail = cache(fetchDocDetailUncached);
 
+export async function recordSearchClick(
+  searchId: string,
+  docId: number,
+  rank: number,
+): Promise<void> {
+  // Best-effort relevance instrumentation: attribute this doc view to the
+  // search that produced it. Never throws — a logging failure must not break
+  // the page render. Idempotent server-side per (search_id, doc_id).
+  const cookie = (await headers()).get("cookie") ?? "";
+  try {
+    await fetch(`${internalApiBase()}/search/click`, {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        "content-type": "application/json",
+        ...(cookie ? { cookie } : {}),
+      },
+      body: JSON.stringify({ search_id: searchId, doc_id: docId, rank }),
+    });
+  } catch {
+    // swallow — instrumentation is non-critical
+  }
+}
+
 export type Area = { area_path: string; display_name: string };
 
 async function fetchAreasUncached(): Promise<Area[]> {
