@@ -79,6 +79,7 @@ async def notify_indexing_failed(
     *,
     user_id: int,
     doc_id: int,
+    doc_title: str,
     version_id: int,
     error: str,
 ) -> None:
@@ -87,7 +88,12 @@ async def notify_indexing_failed(
         user_id=user_id,
         event_key=f"processing_failed:{version_id}",
         kind=PROCESSING_FAILED,
-        payload={"doc_id": doc_id, "version_id": version_id, "error": error},
+        payload={
+            "doc_id": doc_id,
+            "doc_title": doc_title,
+            "version_id": version_id,
+            "error": error,
+        },
     )
 
 
@@ -96,6 +102,7 @@ async def notify_headline_refresh_failed(
     *,
     user_id: int,
     doc_id: int,
+    doc_title: str,
     version_id: int,
     error: str,
 ) -> None:
@@ -107,7 +114,12 @@ async def notify_headline_refresh_failed(
         user_id=user_id,
         event_key=f"headline_refresh_failed:{version_id}",
         kind=PROCESSING_FAILED,
-        payload={"doc_id": doc_id, "version_id": version_id, "error": error},
+        payload={
+            "doc_id": doc_id,
+            "doc_title": doc_title,
+            "version_id": version_id,
+            "error": error,
+        },
     )
 
 

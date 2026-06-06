@@ -280,6 +280,7 @@ async def mark_failed(session: AsyncSession, version_id: int, error: str) -> Non
         session,
         user_id=cv.owner_user_id,
         doc_id=cv.doc_id,
+        doc_title=cv.title,
         version_id=version_id,
         error=error,
     )
@@ -302,6 +303,7 @@ async def mark_headline_refresh_failed(
         session,
         user_id=cv.owner_user_id,
         doc_id=cv.doc_id,
+        doc_title=cv.title,
         version_id=version_id,
         error=reason,
     )
