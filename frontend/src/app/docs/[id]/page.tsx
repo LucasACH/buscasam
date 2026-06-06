@@ -99,9 +99,16 @@ export default async function DocDetailPage({
   const s = typeof sp.s === "string" ? sp.s : null;
   const r = typeof sp.r === "string" ? Number(sp.r) : NaN;
   if (s && Number.isInteger(r) && r >= 1) {
-    // Read the cookie now (in render); request APIs can't be used inside after().
-    const cookie = (await headers()).get("cookie") ?? "";
-    after(() => recordSearchClick(s, docId, r, cookie));
+    // Read request headers now (in render) — they can't be used inside after().
+    // Origin must equal the site origin or the CSRF Origin-check 403s this POST
+    // for any visitor carrying a sid cookie (api/app.py OriginCheckMiddleware).
+    const h = await headers();
+    const cookie = h.get("cookie") ?? "";
+    const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
+    const origin = host
+      ? `${h.get("x-forwarded-proto") ?? "http"}://${host}`
+      : "";
+    after(() => recordSearchClick(s, docId, r, cookie, origin));
   }
   // Pending invitee on a doc they cannot read: minimal disclosure only — no
   // metadata, abstract, archivo, adjuntos, related rail, or versions panel

@@ -33,12 +33,15 @@ export async function recordSearchClick(
   docId: number,
   rank: number,
   cookie: string,
+  origin: string,
 ): Promise<void> {
   // Best-effort relevance instrumentation: attribute this doc view to the
   // search that produced it. Never throws — a logging failure must not break
   // the page render. Idempotent server-side per (search_id, doc_id). `cookie`
-  // is passed in (read during render): request APIs like headers() can't be
-  // called from the after() callback this runs inside.
+  // and `origin` are passed in (read during render): request APIs like headers()
+  // can't be called from the after() callback this runs inside. `origin` must
+  // match the site origin or the backend CSRF Origin-check rejects this POST
+  // whenever the forwarded cookie carries a sid (OriginCheckMiddleware).
   try {
     await fetch(`${internalApiBase()}/search/click`, {
       method: "POST",
@@ -46,6 +49,7 @@ export async function recordSearchClick(
       headers: {
         "content-type": "application/json",
         ...(cookie ? { cookie } : {}),
+        ...(origin ? { origin } : {}),
       },
       body: JSON.stringify({ search_id: searchId, doc_id: docId, rank }),
     });
