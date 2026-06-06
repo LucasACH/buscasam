@@ -16,12 +16,16 @@ import numpy as np
 from buscasam.core.tokenizer import vendored_revision
 from buscasam.settings import settings
 
-INDEX_TIMEOUT_S = 30.0
+# CPU-only TEI shares a 2-vCPU box; a passage batch can take ~30s under
+# contention. Generous ceiling so a slow batch completes rather than raising
+# EmbedUnavailable and failing the whole index job (which retries from scratch).
+INDEX_TIMEOUT_S = 90.0
 
-# TEI's max_client_batch_size (router startup arg). Posting more inputs than this
-# in one /embed call is rejected, so passage indexing slices into batches of this
-# size to collapse N serial round-trips into ceil(N/32) and let TEI batch on-CPU.
-_MAX_CLIENT_BATCH_SIZE = 32
+# Passage indexing slices into batches of this size. Kept well below TEI's
+# max_client_batch_size (router default 32) so each /embed call stays short on
+# CPU-only TEI: a smaller payload finishes far under INDEX_TIMEOUT_S, so one slow
+# chunk can't push a wide batch over the deadline and fail the whole job.
+_MAX_CLIENT_BATCH_SIZE = 8
 
 # Query-embedding cache: assumes a pinned model revision for the process
 # lifetime (assert_model_revision_pinned), so identical query text always maps
