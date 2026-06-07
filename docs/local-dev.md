@@ -140,12 +140,29 @@ Open http://localhost:3000.
 ## Git hooks (recommended)
 
 Auto-format and lint staged files before each commit (ruff on `backend/`,
-prettier on `frontend/`). Needs `pre-commit` and a one-time install:
+prettier on `frontend/`). The hook lives in `.githooks/` (committed). Point git
+at it once per clone:
 
 ```bash
-pip install pre-commit   # or: brew install pre-commit
-pre-commit install
+git config core.hooksPath .githooks
 ```
+
+Two hooks ship in `.githooks/`:
+
+- **pre-commit** — `ruff` (via `uv`) on staged `backend/` files, `prettier` (via
+  `frontend/`'s pnpm) on staged `frontend/` files. Auto-formats and re-stages.
+  Only staged content is formatted: unstaged changes are stashed first, so
+  formatting a partially staged file never sweeps its unstaged hunks into the
+  commit. (If staged and unstaged edits touch the same lines, the hook restores
+  your tree untouched and asks you to split them.)
+- **pre-push** — typecheck before the commits leave your machine: `mypy` if the
+  push touches `backend/`, `tsc` if it touches `frontend/`. Catches the most
+  common CI red that pre-commit can't, skipping the slower test suite. Tracked
+  uncommitted changes are auto-stashed first (like `git rebase --autostash`, so
+  untracked files are left alone) — the check sees the committed state you're
+  actually pushing, then your changes are restored.
+
+No extra tooling install is needed beyond the per-package setup above.
 
 The hooks are convenience only — the authoritative gate is CI
 (`.github/workflows/ci.yml`), which runs lint, type-check, and the full test

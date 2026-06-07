@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Pre-push: typecheck before a push leaves the machine, to catch the most common
+# CI red (type errors) that the pre-commit hook can't. Convenience only — CI
+# (.github/workflows/ci.yml) is the authoritative gate and re-runs everything;
+# `git push --no-verify` skips this. Enabled via core.hooksPath (see pre-commit).
+#
+# Scoped per package: mypy runs only if backend/ changed, tsc only if frontend/
+# changed, measured across the commits being pushed. Uncommitted work is stashed
+# first so the checks see the committed state being pushed, not a dirty tree.
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+zero="0000000000000000000000000000000000000000"
+
+# git feeds one line per ref on stdin: <local ref> <local sha> <remote ref> <remote sha>
+changed=""
+while read -r _ local_sha _ remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue          # branch deletion — nothing to check
+  if [ "$remote_sha" != "$zero" ]; then
+    range="$remote_sha..$local_sha"               # existing branch: only the new commits
+  else
+    base="$(git merge-base origin/main "$local_sha" 2>/dev/null || true)"
+    if [ -n "$base" ]; then
+      range="$base..$local_sha"                    # new branch: diff vs main
+    else
+      changed=$'\nbackend/\nfrontend/'             # no base to compare — check everything
+      continue
+    fi
+  fi
+  changed+=$'\n'$(git diff --name-only "$range")
+done
+
+[ -z "${changed//[[:space:]]/}" ] && exit 0
+
+# Autostash: typecheck the committed state being pushed, not whatever happens to
+# be dirty in the working tree. Tracked changes only — like `git rebase
+# --autostash`, this never touches untracked files. The checks are read-only, so
+# the pop on exit never conflicts. Restore the real exit code so a type error
+# still blocks the push.
+stashed=0
+cleanup() {
+  local rc=$?
+  if [ "$stashed" = 1 ]; then
+    git stash pop --quiet \
+      || echo "pre-push: 'git stash pop' failed — restore manually with 'git stash pop'" >&2
+  fi
+  exit "$rc"
+}
+trap cleanup EXIT
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  git stash push --quiet --message "pre-push autostash"
+  stashed=1
+fi
+
+if echo "$changed" | grep -qE '^backend/'; then
+  echo "pre-push: mypy (backend)"
+  (cd backend && uv run mypy .)
+fi
+
+if echo "$changed" | grep -qE '^frontend/'; then
+  echo "pre-push: typecheck (frontend)"
+  (cd frontend && pnpm typecheck)
+fi
