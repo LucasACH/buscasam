@@ -9,3 +9,12 @@
 *.tfplan
 terraform.tfvars
 secrets.auto.tfvars
+
+# LaTeX build artifacts (docs/whitepaper) — keep .tex source and .pdf output
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.toc
+*.xdv
