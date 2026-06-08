@@ -215,13 +215,13 @@ mediante búsqueda híbrida semántica}\\[1.2cm]
 %====================================================================
 \section{Resumen ejecutivo}
 
-La producción intelectual de la UNSAM (tesis, papers, trabajos prácticos, apuntes) hoy queda dispersa en repositorios aislados por unidad académica, carpetas compartidas y archivos personales. El conocimiento existe, pero no circula. Los estudiantes no pueden construir sobre lo ya investigado, los docentes no encuentran antecedentes, y el sector productivo no tiene cómo identificar talento o proyectos con potencial de transferencia.
+La producción intelectual de la UNSAM (tesis, papers, trabajos prácticos, apuntes) hoy queda dispersa en repositorios aislados por unidad académica, carpetas compartidas y archivos personales. El conocimiento existe, pero no circula. Los estudiantes no pueden construir sobre lo ya investigado, los docentes no encuentran trabajos previos, y el sector productivo no tiene cómo identificar talento o proyectos con potencial de transferencia.
 
 BUSCASAM es una plataforma web donde la comunidad UNSAM publica y encuentra trabajos académicos. Su diferencial es la experiencia completa, con una publicación sin fricción y una búsqueda que combina significado (semántica) con coincidencia léxica tradicional. En lugar de exigir palabras clave exactas, una consulta en lenguaje natural como \emph{«identificar tipos de flores a partir de sus medidas»} encuentra el trabajo \emph{«Estadística Bayesiana Aplicada — Penguins y Iris»}, que ninguna búsqueda por palabras clave habría conectado con esa consulta.
 
 La primera versión del producto está construida, probada y publicada en \href{https://buscasam.org}{buscasam.org}. Cubre el ciclo completo: autenticación institucional con cuentas Google de la UNSAM, publicación de documentos con extracción automática de texto (incluido OCR para escaneos), sugerencia opcional de resumen y palabras clave con IA, búsqueda híbrida con filtros, coautoría, versionado y moderación.
 
-Los beneficios esperados son una reducción drástica del tiempo de búsqueda de antecedentes académicos, mayor visibilidad y motivación para los autores, y, en fases posteriores, una vía concreta de vinculación entre la universidad y el sector productivo a través de un \emph{radar de talento} basado en la producción real de la comunidad.
+Los beneficios esperados son una reducción drástica del tiempo de búsqueda de trabajos previos, mayor visibilidad y motivación para los autores, y, en fases posteriores, una vía concreta de vinculación entre la universidad y el sector productivo a través de un \emph{radar de talento} basado en la producción real de la comunidad.
 
 %====================================================================
 % 2. CONTEXTO
@@ -240,7 +240,7 @@ Los beneficios esperados son una reducción drástica del tiempo de búsqueda de
 \end{enumerate}
 
 \medskip
-\noindent\textbf{Impacto de no resolverlo.}\enspace Se repiten temas de investigación por desconocimiento de antecedentes, el conocimiento no se acumula de una generación de estudiantes a la siguiente, y la universidad desaprovecha oportunidades de convenios, pasantías y financiamiento que dependen de que su producción sea visible.
+\noindent\textbf{Impacto de no resolverlo.}\enspace Se repiten temas de investigación por desconocimiento de trabajos previos, el conocimiento no se acumula de una generación de estudiantes a la siguiente, y la universidad desaprovecha oportunidades de convenios, pasantías y financiamiento que dependen de que su producción sea visible.
 
 \medskip
 \noindent\textbf{Cómo el proyecto mejora la situación.}\enspace BUSCASAM centraliza la publicación con una fricción mínima (el autor sube un archivo y el sistema hace el resto, extrayendo el texto, derivando el año y sugiriendo resumen y palabras clave) y resuelve el problema de descubrimiento con búsqueda por significado. Al bajar el costo de publicar y de encontrar, convierte producción dormida en una red de conocimiento viva.
@@ -256,12 +256,12 @@ Los beneficios esperados son una reducción drástica del tiempo de búsqueda de
 \noindent\textbf{Funcionalidades principales} (todas operativas en producción):
 
 \begin{itemize}
-  \item \textbf{Búsqueda híbrida:} una única caja de texto libre, con filtros opcionales por área de estudio, tipo de documento y fecha. El ranking fusiona similitud semántica y coincidencia léxica. Si el servicio semántico no responde, la búsqueda léxica sigue funcionando sola. La disponibilidad de la búsqueda no depende de ningún componente de IA.
+  \item \textbf{Búsqueda híbrida:} una única caja de texto libre, con filtros opcionales por área de estudio, tipo de documento y fecha. El ranking fusiona similitud semántica y coincidencia léxica. Si el componente semántico no responde, la búsqueda léxica sigue funcionando sola y el buscador permanece disponible.
   \item \textbf{Publicación asistida:} el autor crea un borrador, sube un archivo, y el sistema procesa el documento en segundo plano, con extracción de texto, OCR si es un escaneo, derivación del año y, solo si el autor lo activa, sugerencia de resumen y palabras clave con IA. El autor siempre revisa y edita antes de publicar; nada aparece en la búsqueda sin su confirmación.
   \item \textbf{Control de acceso por niveles:} cada documento es público (cualquier visitante), interno (comunidad UNSAM autenticada) o privado (solo autores). Ninguna respuesta del sistema (búsqueda, conteos, relacionados, sitemap) revela documentos que el visitante no está autorizado a ver.
   \item \textbf{Coautoría y versiones:} invitación de coautores con aceptación explícita, y reemplazo versionado de archivos donde la versión publicada anterior sigue disponible hasta que la nueva esté procesada y confirmada.
   \item \textbf{Moderación:} cualquier usuario autenticado puede reportar un documento; los docentes pueden ocultarlo o restituirlo, con registro de quién, por qué y cuándo.
-  \item \textbf{Descubrimiento:} portada con los trabajos más leídos de la semana y «trabajos relacionados» en cada detalle.
+  \item \textbf{Descubrimiento:} portada con los trabajos más leídos de la semana y “trabajos relacionados” en cada detalle.
 \end{itemize}
 
 \medskip
@@ -284,13 +284,13 @@ Los beneficios esperados son una reducción drástica del tiempo de búsqueda de
 \medskip
 \noindent\textbf{Beneficios esperados:}
 \begin{itemize}
-  \item \textbf{Reducción sustancial del tiempo de búsqueda de antecedentes} (a medir en el piloto), al reemplazar el rastreo manual de catálogos y carpetas por una consulta en lenguaje natural con filtros.
+  \item \textbf{Reducción sustancial del tiempo de búsqueda de trabajos previos} (a medir en el piloto), al reemplazar la búsqueda fragmentada por palabras clave en catálogos y carpetas dispersas por una única consulta en lenguaje natural con filtros.
   \item \textbf{Aumento de convenios de pasantías y vinculación}, una vez habilitada la fase de vinculación con el sector productivo.
   \item \textbf{Eficiencia administrativa:} menos horas de personal bibliotecario y docente dedicadas a localizar y verificar antecedentes.
 \end{itemize}
 
 \medskip
-\noindent\textbf{Beneficios cualitativos:} reputación institucional (la universidad como referente en democratización del conocimiento con IA), sentido de pertenencia y motivación de los estudiantes al ver su trabajo publicado y leído, y mejora de la calidad académica al reducir la redundancia de temas.
+\noindent\textbf{Beneficios cualitativos:} reputación institucional (una universidad que hace circular y accesible su propia producción), sentido de pertenencia y motivación de los estudiantes al ver su trabajo publicado y leído, y mejora de la calidad académica al reducir la redundancia de temas.
 
 \medskip
 \noindent\textbf{Indicadores de éxito.}\enspace El Anexo~D define cinco indicadores con su forma de cálculo: trabajos publicados por unidad académica (crecimiento sostenido, mensual), tasa de éxito de búsqueda o proporción de búsquedas con clic en un resultado ($>$60\%, mensual), latencia de búsqueda en el percentil 95 ($<$2 segundos, continua), lecturas semanales de documentos (crecimiento sostenido) y satisfacción de usuarios (encuesta semestral, $\geq$70\% positiva).
@@ -316,10 +316,10 @@ Todo corre en una única máquina virtual en Google Cloud, detrás de un balance
 
 \begin{itemize}
   \item \textbf{PostgreSQL para todo (datos, búsqueda, vectores, colas)} en lugar de sumar un motor de búsqueda, una base vectorial y un broker dedicados. Cada sistema extra es algo más que instalar, monitorear, respaldar y que puede fallar. A la escala actual y proyectada, PostgreSQL resuelve los cuatro problemas con margen, y consolidarlo vuelve el respaldo diario y la restauración una sola operación verificada.
-  \item \textbf{Búsqueda híbrida con anclaje léxico.} La búsqueda puramente semántica le asigna similitud a casi cualquier cosa, y una consulta fuera de tema devuelve resultados que «suenan parecido» pero no sirven. Por eso un resultado solo aparece si hay coincidencia léxica, o si supera un piso semántico calibrado \emph{y además} comparte señal textual con la consulta. Preferimos no mostrar nada, y decirlo con claridad, antes que resultados irrelevantes; la confianza en el buscador es el activo central del producto.
+  \item \textbf{Búsqueda híbrida con anclaje léxico.} La búsqueda puramente semántica le asigna similitud a casi cualquier cosa, y una consulta fuera de tema devuelve resultados que “suenan parecido” pero no sirven. Por eso un resultado solo aparece si hay coincidencia léxica, o si supera un piso semántico calibrado \emph{y además} comparte señal textual con la consulta. Preferimos no mostrar nada, y decirlo con claridad, antes que resultados irrelevantes; la confianza en el buscador es el activo central del producto.
   \item \textbf{Procesamiento en segundo plano.} La extracción de texto y el OCR pueden tardar minutos en un PDF escaneado. La API responde de inmediato y procesa después, con el estado visible en el tablero del autor, para que nadie quede mirando una pantalla colgada.
   \item \textbf{IA opcional y por documento.} La sugerencia de resumen y palabras clave es una decisión del autor en cada borrador. Si no la activa, el texto de su documento no sale del sistema. Hay trabajos con datos sensibles, y la confianza de los autores vale más que la comodidad por defecto.
-  \item \textbf{Publicar primero, moderar después.} Exigir aprobación previa habría frenado la adopción inicial. El riesgo de contenido inadecuado se mitiga con reporte de usuarios, ocultamiento inmediato por docentes y registro auditable de cada acción; como salvaguarda, la salida a producción se condicionó a que moderación y borrado estuvieran operativos.
+  \item \textbf{Publicar primero, moderar después.} Exigir aprobación previa habría frenado la adopción inicial. El riesgo de contenido inadecuado se mitiga con reporte de usuarios, ocultamiento inmediato por docentes y registro auditable de cada acción; como recaudo, la salida a producción se condicionó a que moderación y borrado estuvieran operativos.
   \item \textbf{Una sola VM en lugar de servicios distribuidos.} A este volumen, distribuir es pagar complejidad sin recibir nada a cambio. La arquitectura interna ya está separada por módulos (búsqueda, publicación, acceso, moderación), así que escalar a más máquinas, si el crecimiento lo exige, es un cambio de infraestructura y no una reescritura.
 \end{itemize}
 
@@ -358,7 +358,7 @@ Máquina virtual (2 vCPU, 8 GB) & $\sim$50 \\
 Disco persistente (50 GB) & $\sim$5 \\
 Balanceador HTTPS & $\sim$20 \\
 \rowcolor{rowtint}
-Red, registro de imágenes, secretos, backups & $\sim$8 \\
+Red, registro de imágenes, secrets, backups & $\sim$8 \\
 IA para resúmenes (opcional, por documento) & $<$\,5 \\
 \rowcolor{rowtint}
 Dominio (prorrateado) & $\sim$1 \\
@@ -375,14 +375,14 @@ El servicio de embeddings corre en la propia VM con un modelo abierto, sin costo
 \noindent\textbf{Recursos necesarios.}\enspace \emph{Humanos:} el equipo de cuatro para la evolución del producto, más $\sim$8 horas mensuales de un responsable técnico para respaldos, actualizaciones de seguridad y soporte básico; al ser de código abierto, podrían sumarse contribuciones de la comunidad, no garantizadas. \emph{Tecnológicos:} la infraestructura cloud descripta y herramientas de desarrollo asistido por IA.
 
 \medskip
-\noindent\textbf{Riesgos principales y respuesta} (registro completo en el Anexo~C). El riesgo dominante es un catálogo inicial pobre que derive en búsquedas decepcionantes y baja adopción; se mitiga con contenido semilla antes de difundir, campaña con cátedras en el lanzamiento y «relacionados» cuando hay pocos resultados. La relevancia del ranking se sostiene con juegos de consultas de prueba, calibración del piso semántico y la búsqueda léxica siempre disponible como respaldo. La inexperiencia en búsqueda semántica se atacó con una prueba de concepto temprana de embeddings e indexado y margen en las estimaciones. Los PDFs escaneados o malformados se cubren con OCR y procesamiento reintentable, con revisión del autor antes de publicar. Por último, el contenido inadecuado por la publicación inmediata se contiene con reporte de usuarios, ocultamiento docente y moderación operativa como condición de lanzamiento.
+\noindent\textbf{Riesgos principales y respuesta} (registro completo en el Anexo~C). El riesgo dominante es un catálogo inicial pobre que derive en búsquedas decepcionantes y baja adopción; se mitiga con contenido semilla antes de difundir, campaña con cátedras en el lanzamiento y “relacionados” cuando hay pocos resultados. La relevancia del ranking se sostiene con juegos de consultas de prueba, calibración del piso semántico y la búsqueda léxica siempre disponible como respaldo. La inexperiencia en búsqueda semántica se atacó con una prueba de concepto temprana de embeddings e indexado y margen en las estimaciones. Los PDFs escaneados o malformados se cubren con OCR y procesamiento reintentable, con revisión del autor antes de publicar. Por último, el contenido inadecuado por la publicación inmediata se contiene con reporte de usuarios, ocultamiento docente y moderación operativa como condición de lanzamiento.
 
 %====================================================================
 % 7. CONCLUSIONES
 %====================================================================
 \section{Conclusiones y recomendaciones}
 
-La UNSAM produce conocimiento que hoy no circula, y el costo de esa invisibilidad se paga en investigación redundante, oportunidades de vinculación perdidas y trabajo estudiantil que muere en una carpeta. BUSCASAM ataca el problema en su raíz (el costo de publicar y el costo de encontrar) y lo hace con una primera versión funcional, probada y operativa en \href{https://buscasam.org}{buscasam.org}, construida por un equipo de cuatro personas (con la implementación en código concentrada en unas dos semanas de trabajo intensivo asistido por IA) y con un costo de operación del orden de USD 90 mensuales.
+La UNSAM produce conocimiento que hoy no circula, y el costo de esa invisibilidad se paga en investigación redundante, oportunidades de vinculación perdidas y trabajo estudiantil que muere en una carpeta. BUSCASAM ataca el problema en su raíz (el costo de publicar y el costo de encontrar) y lo hace con una primera versión funcional, probada y operativa en \href{https://buscasam.org}{buscasam.org}, construida por un equipo de cuatro personas y con un costo de operación del orden de USD 90 mensuales.
 
 \medskip
 \noindent\textbf{Próximos pasos sugeridos:}
@@ -415,7 +415,7 @@ La UNSAM produce conocimiento que hoy no circula, y el costo de esa invisibilida
   \node[box, below left=9mm and 3mm of nginx] (fe) {Web\\Next.js};
   \node[box, below right=9mm and 3mm of nginx] (api) {API\\FastAPI};
   \node[store, below=9mm of fe] (blob) {Almacenamiento};
-  \node[store, below=9mm of api] (pg) {PostgreSQL 16};
+  \node[store, below=9mm of api] (pg) {PostgreSQL};
   \coordinate (mid) at ($(blob)!0.5!(pg)$);
   \node[box, below=10mm of mid] (workers) {Workers de procesamiento};
   \node[store, below=8mm of workers] (tei) {Servicio de embeddings};
@@ -466,7 +466,7 @@ La UNSAM produce conocimiento que hoy no circula, y el costo de esa invisibilida
 \begin{itemize}
   \item \textbf{Niveles:} pruebas unitarias (lógica de ranking, validaciones, etapas de indexado), de integración (endpoints contra base de datos real, trabajos en segundo plano, migraciones en ambos sentidos) y de punta a punta en navegador (flujos completos de búsqueda, publicación, coautoría y moderación, incluyendo móvil).
   \item \textbf{No funcionales:} carga concurrente sobre la búsqueda, control de visibilidad por rol en todas las superficies, recuperación ante falla de una etapa de procesamiento, compatibilidad de formatos de archivo.
-  \item \textbf{Puertas de calidad:} ningún cambio se integra sin revisión de pares y suite completa en verde; ninguna versión sale a producción sin la batería completa, auditoría de dependencias y validación de migraciones.
+  \item \textbf{Puertas de calidad:} ningún cambio se integra sin revisión de pares y suite completa en verde; ninguna versión sale a producción sin el conjunto completo de pruebas, auditoría de dependencias y validación de migraciones.
   \item \textbf{Criterios de aceptación clave:} un visitante nunca observa documentos que no le corresponden por ninguna vía; una versión candidata fallida nunca oculta la versión publicada; sin servicio semántico, la búsqueda léxica sigue disponible.
 \end{itemize}
 
@@ -533,7 +533,7 @@ F4 — Detalle & \bodystrut Página de lectura, descargas, relacionados & H4: de
 F5 — Colaboración & \bodystrut Coautores, versiones de archivos & H5: colaboración + versiones & 7 \\
 F6 — Ciclo de vida & \bodystrut Borrado/papelera/purga, reporte y moderación & H6: ciclo de vida completo & 8 \\
 \rowcolor{rowtint}
-F7 — Descubrimiento & \bodystrut Lecturas, «más leídos», portada & H7: portada + descubrimiento & 8 \\
+F7 — Descubrimiento & \bodystrut Lecturas, “más leídos”, portada & H7: portada + descubrimiento & 8 \\
 F8 — Despliegue & \bodystrut Nube, servicios de IA, salida a producción & H8: producción & 9 \\
 \bottomrule[\heavyrulewidth]
 \end{tabularx}
