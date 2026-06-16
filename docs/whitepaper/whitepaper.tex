@@ -327,9 +327,10 @@ Todo corre en una única máquina virtual en Google Cloud, detrás de un balance
 \noindent\textbf{Atributos de calidad, en orden de prioridad:}
 \begin{enumerate}
   \item \textbf{Seguridad y control de acceso.} Es el atributo no negociable, porque un solo documento privado expuesto destruye la confianza de todos los autores. Cada vía de acceso (búsqueda, detalle, relacionados, descarga, conteos, sitemap) aplica la misma política de visibilidad, y los criterios de aceptación se escribieron en esos términos.
-  \item \textbf{Confiabilidad de la búsqueda.} El producto es el buscador; si los resultados decepcionan, no hay segunda visita. Priorizamos relevancia verificable (juegos de consultas de prueba con resultados esperados) y degradación controlada (sin servicio semántico, la búsqueda léxica sigue de pie).
+  \item \textbf{Idoneidad funcional de la búsqueda.} El producto es el buscador; si los resultados decepcionan, no hay segunda visita. La función central, devolver lo relevante para cada consulta, se valida con juegos de consultas de prueba con resultados esperados: la relevancia es medible y reproducible, no una impresión.
+  \item \textbf{Confiabilidad y tolerancia a fallos.} La búsqueda degrada de forma controlada. Si el componente semántico no responde, la búsqueda léxica sigue operativa. Además, publicar o reemplazar nunca expone una versión sin indexar y una versión candidata fallida no oculta la publicada, de modo que el catálogo permanece consistente ante fallas parciales.
   \item \textbf{Rendimiento.} Respuesta de búsqueda bajo 2 segundos en el percentil 95, a la escala actual y proyectada del catálogo. Un buscador lento no se usa, mientras que una funcionalidad faltante se agrega después.
-  \item \textbf{Usabilidad.} Una sola caja de búsqueda, mensajes claros cuando no hay resultados y publicación guiada paso a paso. Las tres anteriores son condiciones de existencia del producto; esta es condición de crecimiento.
+  \item \textbf{Usabilidad.} Una sola caja de búsqueda, mensajes claros cuando no hay resultados y publicación guiada paso a paso. Las anteriores son condiciones de existencia del producto; esta es condición de crecimiento.
   \item \textbf{Mantenibilidad.} Módulos con límites claros, decisiones de arquitectura registradas por escrito y una suite de pruebas automatizadas (unitarias, de integración y de punta a punta en navegador) que corre en cada cambio.
 \end{enumerate}
 
@@ -396,6 +397,7 @@ La UNSAM produce conocimiento que hoy no circula, y el costo de esa invisibilida
 %====================================================================
 % 8. ANEXOS
 %====================================================================
+\clearpage
 \section{Anexos}
 
 \subsection*{Anexo A — Arquitectura del sistema}
