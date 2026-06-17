@@ -8,7 +8,11 @@
   },
   "pnpm": {
     "overrides": {
-      "next>postcss": "8.5.15"
+      "next>postcss": "8.5.15",
+      "hono": ">=4.12.25",
+      "protobufjs": ">=7.6.3",
+      "js-yaml": ">=4.2.0",
+      "@opentelemetry/core": ">=2.8.0"
     }
   },
   "scripts": {
