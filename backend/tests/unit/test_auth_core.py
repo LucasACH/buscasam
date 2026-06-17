@@ -123,6 +123,52 @@ def test_claim_acceptance_matrix_accepts_docente():
     assert role == "docente"
 
 
+def test_allowlist_grants_docente_to_non_unsam_email_in_prod(monkeypatch):
+    monkeypatch.setattr(auth.settings, "env", "prod")
+    monkeypatch.setattr(
+        auth.settings, "docente_email_allowlist", "achaval.lucas@gmail.com"
+    )
+    role = auth.role_from_claims(
+        {
+            "email_verified": True,
+            "sub": "google-sub-3",
+            "email": "Achaval.Lucas@gmail.com",  # case-insensitive match
+        }
+    )
+    assert role == "docente"
+
+
+def test_allowlist_does_not_bypass_email_verification(monkeypatch):
+    monkeypatch.setattr(auth.settings, "env", "prod")
+    monkeypatch.setattr(
+        auth.settings, "docente_email_allowlist", "achaval.lucas@gmail.com"
+    )
+    role = auth.role_from_claims(
+        {
+            "email_verified": False,
+            "sub": "google-sub-3",
+            "email": "achaval.lucas@gmail.com",
+        }
+    )
+    assert role is None
+
+
+def test_non_allowlisted_non_unsam_email_still_rejected_in_prod(monkeypatch):
+    monkeypatch.setattr(auth.settings, "env", "prod")
+    monkeypatch.setattr(
+        auth.settings, "docente_email_allowlist", "achaval.lucas@gmail.com"
+    )
+    role = auth.role_from_claims(
+        {
+            "email_verified": True,
+            "sub": "google-sub-4",
+            "email": "someone.else@gmail.com",
+            "hd": "gmail.com",
+        }
+    )
+    assert role is None
+
+
 async def test_jit_user_upsert(session):
     uid1 = await auth.upsert_user(
         session,

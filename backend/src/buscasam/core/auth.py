@@ -190,9 +190,16 @@ def role_from_claims(claims: Mapping[str, object]) -> Role | None:
     stays `estudiante` and every other verified account logs in as `docente`
     so any test account can moderate. The cookie / DB / redirect machinery is
     the caller's job; this is the pure decision.
+
+    `BUSCASAM_DOCENTE_EMAIL_ALLOWLIST` overrides the domain map: a verified
+    email listed there is `docente` regardless of `hd`. `email_verified` is
+    still required above, so this never bypasses the verification gate.
     """
     if claims.get("email_verified") is not True:
         return None
+    email = claims.get("email")
+    if isinstance(email, str) and email.lower() in settings.docente_emails:
+        return "docente"
     hd = claims.get("hd")
     if settings.env != "prod":
         return "estudiante" if hd == "estudiantes.unsam.edu.ar" else "docente"
