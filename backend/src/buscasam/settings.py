@@ -79,6 +79,21 @@ class Settings(BaseSettings):
     oidc_discovery_url: str = (
         "https://accounts.google.com/.well-known/openid-configuration"
     )
+    # Comma-separated exact emails granted the `docente` role even though their
+    # `hd` is not an UNSAM domain (ADR-0005 §3 override). Intended for demo /
+    # non-UNSAM accounts that must moderate; `email_verified` is still required,
+    # so this only loosens the domain map, not the verification gate. Set via
+    # BUSCASAM_DOCENTE_EMAIL_ALLOWLIST; empty (the default) is a no-op.
+    docente_email_allowlist: str = ""
+
+    @property
+    def docente_emails(self) -> frozenset[str]:
+        """Normalized (lowercased, stripped) set parsed from the allowlist."""
+        return frozenset(
+            e.strip().lower()
+            for e in self.docente_email_allowlist.split(",")
+            if e.strip()
+        )
 
     @field_validator("base_url", mode="after")
     @classmethod
