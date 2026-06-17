@@ -74,3 +74,9 @@ variable "vertex_location" {
   type    = string
   default = "us-central1"
 }
+
+variable "docente_email_allowlist" {
+  type        = string
+  default     = ""
+  description = "Comma-separated emails granted the docente role regardless of hd (ADR-0005 item 17). Empty disables the override."
+}

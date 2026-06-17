@@ -55,6 +55,7 @@ module "app_vm" {
   metadata_llm_model       = var.metadata_llm_model
   vertex_project           = var.vertex_project
   vertex_location          = var.vertex_location
+  docente_email_allowlist  = var.docente_email_allowlist
   secret_ids               = module.secrets.secret_ids
   deploy_sa_member         = module.cicd.deploy_service_account_member
 }
