@@ -1,0 +1,524 @@
+% !TEX program = xelatex
+% BUSCASAM — Presentación
+% Compile con: xelatex presentation.tex
+\documentclass[11pt,aspectratio=169]{beamer}
+
+%--------------------------------------------------------------------
+% Tipografía y Lenguaje (XeLaTeX)
+%--------------------------------------------------------------------
+\usepackage{fontspec}
+\IfFontExistsTF{Helvetica Neue}{
+  \setmainfont{Helvetica Neue}
+  \setsansfont{Helvetica Neue}
+  \newfontfamily\headingfont{Helvetica Neue}
+}{
+  \setmainfont{Arial}
+  \setsansfont{Arial}
+  \newfontfamily\headingfont{Arial}
+}
+
+\usepackage{polyglossia}
+\setdefaultlanguage{spanish}
+\setotherlanguage{english}
+
+%--------------------------------------------------------------------
+% Paleta de Colores (Mismo estilo que whitepaper.tex)
+%--------------------------------------------------------------------
+\usepackage{xcolor}
+\definecolor{brand}{HTML}{1D4ED8}      % primary blue — UI --primary
+\definecolor{brandlt}{HTML}{1E40AF}    % darker blue — UI --primary-hover
+\definecolor{accent}{HTML}{1D4ED8}     % accent
+\definecolor{accentlt}{HTML}{DBE6FE}   % pale blue fill — UI --primary-tint-2
+\definecolor{tint}{HTML}{EFF4FF}       % faint blue wash — UI --primary-tint
+\definecolor{rulec}{HTML}{E5E7EB}      % border — UI --border
+\definecolor{rowtint}{HTML}{FAFAFA}    % zebra — UI neutral-50
+\definecolor{ink}{HTML}{171717}        % body text — UI --foreground
+\definecolor{soft}{HTML}{6B7280}       % muted — UI --muted-foreground
+
+\setbeamercolor{normal text}{fg=ink,bg=white}
+\setbeamercolor{structure}{fg=brand}
+\setbeamercolor{title}{fg=ink}
+\setbeamercolor{subtitle}{fg=brandlt}
+\setbeamercolor{frametitle}{fg=ink}
+\setbeamercolor{item}{fg=brand}
+\setbeamercolor{subitem}{fg=brandlt}
+
+%--------------------------------------------------------------------
+% Tablas
+%--------------------------------------------------------------------
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{ragged2e}
+\usepackage{colortbl}
+\renewcommand{\arraystretch}{1.1}
+\newcolumntype{L}{>{\RaggedRight\arraybackslash}X}
+\newcolumntype{C}{>{\Centering\arraybackslash}X}
+\newcolumntype{R}{>{\RaggedLeft\arraybackslash}X}
+\newcommand{\thead}[1]{{\color{white}\bfseries #1}}
+\arrayrulecolor{rulec}
+
+%--------------------------------------------------------------------
+% TikZ (Para diagrama de arquitectura de referencia y Logo)
+%--------------------------------------------------------------------
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,backgrounds,fit,calc,shapes.geometric}
+
+\tikzset{
+  box/.style={
+    rectangle, rounded corners=3pt, draw=brandlt, line width=0.7pt,
+    fill=white, text=ink, align=center, font=\footnotesize,
+    inner sep=5pt, minimum height=8mm, text width=24mm},
+  store/.style={
+    box, fill=accentlt, draw=accent, text width=26mm},
+  ext/.style={
+    box, draw=soft, dashed, fill=rowtint, text=soft, text width=24mm},
+  entry/.style={
+    box, fill=brand, text=white, draw=brand, text width=22mm},
+  flow/.style={-{Stealth[length=2mm]}, line width=0.6pt, draw=brandlt},
+  flowa/.style={-{Stealth[length=2mm]}, line width=0.6pt, draw=accent},
+  biflow/.style={{Stealth[length=2mm]}-{Stealth[length=2mm]}, line width=0.6pt, draw=brandlt},
+  opt/.style={-{Stealth[length=2mm]}, line width=0.6pt, draw=soft, dashed},
+  lbl/.style={font=\tiny\itshape, fill=white, inner sep=1pt, text=soft}
+}
+
+% Logo TikZ redibujado de la app
+\newcommand{\busmark}[1]{%
+  \begin{tikzpicture}[x=#1,y=#1,baseline={13*#1-0.34em}]
+    \fill[brand,rounded corners={7.5*#1}] (0,0) rectangle (26,26);
+    \draw[white,line width={2.1*#1}] (11,15) circle (4.4);
+    \draw[white,line width={2.1*#1},line cap=round] (14.4,11.6) -- (18.5,7.5);
+  \end{tikzpicture}%
+}
+\newcommand{\wordmark}{\textbf{\color{ink}BUSCA\color{brand}SAM}}
+
+%--------------------------------------------------------------------
+% Personalización del Estilo de Beamer (Sin sobrecarga visual)
+%--------------------------------------------------------------------
+\setbeamertemplate{navigation symbols}{}
+
+% Títulos de filminas limpios con la misma regla inferior del whitepaper
+\setbeamertemplate{frametitle}{
+  \vspace{0.15cm}
+  {\headingfont\large\bfseries\color{ink}\insertframetitle}
+  \ifx\insertframesubtitle\@empty\else
+    \\[0.02cm]{\headingfont\tiny\color{soft}\insertframesubtitle}
+  \fi
+  \vspace{0.08cm}
+  {\color{rulec}\hrule height 0.6pt}
+  \vspace{0.08cm}
+}
+
+% Footer minimalista con número de página y logo
+\setbeamertemplate{footline}{
+  \ifnum\insertframenumber>1
+    \begin{beamercolorbox}[wd=\paperwidth,ht=2.2ex,dp=2.5ex,leftskip=1cm,rightskip=1cm]{footline}
+      {\scriptsize\headingfont\raisebox{1.6ex}{\busmark{0.26pt}\hspace{3pt}\wordmark}\hfill\raisebox{1.6ex}{\color{soft}\insertframenumber\ / \inserttotalframenumber}}
+    \end{beamercolorbox}
+  \fi
+}
+
+\setbeamertemplate{itemize item}{\color{brand}\scriptsize$\blacksquare$}
+\setbeamertemplate{itemize subitem}{\color{brandlt}\scriptsize$\bullet$}
+
+%====================================================================
+% CONTENIDO DE LA PRESENTACIÓN
+%====================================================================
+\begin{document}
+
+%====================================================================
+% BLOQUE 1: PRESENTACIÓN POR NICO
+%====================================================================
+
+%--- FILMINA 1: Portada ---
+\begin{frame}[plain]
+  \begin{center}
+    \vspace*{0.1cm}
+    {\busmark{1.5pt}}\\[0.2cm]
+    {\headingfont\fontsize{26}{30}\selectfont\bfseries\color{ink}BUSCA\color{brand}SAM}\\[0.1cm]
+    {\normalsize\color{brandlt}\bfseries Descubrimiento de la producción académica de la UNSAM\\[2pt]
+    mediante búsqueda híbrida semántica}\\[0.2cm]
+    {\color{rulec}\rule{0.5\linewidth}{0.5pt}}\\[0.2cm]
+    {\scriptsize\bfseries Trabajo Práctico Final Integrador — Ingeniería de Software}\\[1pt]
+    {\scriptsize Licenciatura en Ciencia de Datos, UNSAM — Grupo 11}\\[0.3cm]
+    {\tiny
+      \begin{tabular}{c c}
+        \textbf{Lucas Achaval} & \textbf{Marcos Achaval} \\
+        \textcolor{soft}{lachavalrodriguez@estudiantes.unsam.edu.ar} & \textcolor{soft}{machavalrodriguez@unsam-bue.edu.ar} \\[3pt]
+        \textbf{Nicolás Cirulli} & \textbf{Matías Raina} \\
+        \textcolor{soft}{nlcirulli@unsam-bue.edu.ar} & \textcolor{soft}{meraina@estudiantes.unsam.edu.ar}
+      \end{tabular}
+    }
+  \end{center}
+\end{frame}
+
+%--- FILMINA 2: Resumen Ejecutivo ---
+\begin{frame}{Resumen Ejecutivo}
+  \small
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      {\headingfont\bfseries\color{brandlt}El Diagnóstico}\\[0.1cm]
+      Producción académica valiosa de la UNSAM dispersa e inaccesible. El conocimiento no circula.
+
+      \vspace{0.25cm}
+      {\headingfont\bfseries\color{brandlt}La Solución}\\[0.1cm]
+      \wordmark{} es una plataforma web para publicar y encontrar trabajos de forma ágil y centralizada.
+    \end{column}
+
+    \begin{column}{0.48\textwidth}
+      {\headingfont\bfseries\color{brandlt}El Diferencial: Búsqueda Híbrida}\\[0.1cm]
+      Combina similitud semántica con coincidencia léxica tradicional.
+
+      \vspace{0.15cm}
+      Entiende la \textbf{intención} de la consulta en lenguaje natural, sin limitarse a palabras clave exactas.
+    \end{column}
+  \end{columns}
+\end{frame}
+
+%--- FILMINA 3: Contexto y Diagnóstico ---
+\begin{frame}{Contexto y Diagnóstico}
+  \small
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      {\headingfont\bfseries\color{brandlt}La Situación Actual}\\[0.05cm]
+      Producción académica fragmentada e inaccesible entre unidades académicas.
+
+      \vspace{0.12cm}
+      {\headingfont\bfseries\color{brandlt}Impacto del Status Quo}\\[0.05cm]
+      \begin{itemize}
+        \item \textbf{Redundancia:} Temas duplicados por desconocimiento.
+        \item \textbf{Pérdida de valor:} El conocimiento de grado no se acumula.
+        \item \textbf{Desconexión:} Sector productivo sin canal de transferencia.
+      \end{itemize}
+    \end{column}
+
+    \begin{column}{0.48\textwidth}
+      {\headingfont\bfseries\color{brandlt}Tres Síntomas Clave}\\[0.05cm]
+      \begin{itemize}
+        \item \textbf{Invisibilidad:} RI-UNSAM aloja tesis formales, pero excluye trabajos de grado.
+        \item \textbf{Fricción:} Búsquedas tradicionales exigen términos exactos.\\
+        {\scriptsize\textcolor{soft}{Ej: «identificar flores por medidas»}}
+        \item \textbf{Desconexión externa:} Falta de un portal unificado de capacidades.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+%====================================================================
+% BLOQUE 2: PRESENTACIÓN POR MARCOS
+%====================================================================
+
+%--- FILMINA 4: Propuesta de Solución ---
+\begin{frame}{Propuesta de Solución: \wordmark}
+  \small
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      {\headingfont\bfseries\color{brandlt}Propósito de la Plataforma}\\[0.05cm]
+      Publicación ágil y búsqueda semántica en un único portal integrado.
+
+      \vspace{0.12cm}
+      {\headingfont\bfseries\color{brandlt}Público Objetivo}\\[0.05cm]
+      \begin{itemize}
+        \item \textbf{Estudiantes:} Carga guiada y consulta de trabajos previos.
+        \item \textbf{Docentes e Investigadores:} Búsqueda, coautoría y moderación.
+        \item \textbf{Empresas / Externos:} Acceso y descubrimiento de talento.
+      \end{itemize}
+    \end{column}
+
+    \begin{column}{0.48\textwidth}
+      {\headingfont\bfseries\color{brandlt}Capacidades Clave}\\[0.05cm]
+      \begin{itemize}
+        \item \textbf{Búsqueda Híbrida:} Fusión semántica y léxica.
+        \item \textbf{Ingesta Asistida:} OCR para escaneos, extracción automática y sugerencias por IA.
+        \item \textbf{Visibilidad Granular:} Accesos público, institucional o privado.
+        \item \textbf{Moderación Activa:} Panel para gestión de reportes y contenidos.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+%--- FILMINA 5: Impacto Esperado y Beneficios ---
+\begin{frame}{Impacto Esperado y Beneficios}
+  \small
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      {\headingfont\bfseries\color{brandlt}Beneficios Clave}\\[0.1cm]
+      \begin{itemize}
+        \item \textbf{Ahorro de Tiempo:} Buscador único que reemplaza repositorios fragmentados.
+        \item \textbf{Visibilidad:} Los trabajos de grado circulan en la comunidad universitaria.
+        \item \textbf{Vinculación:} Vitrina de perfiles para conectar talento con empresas.
+      \end{itemize}
+    \end{column}
+
+    \begin{column}{0.48\textwidth}
+      {\headingfont\bfseries\color{brandlt}Diferencial Competitivo}\\[0.1cm]
+      \begin{itemize}
+        \item \textbf{Alcance Completo:} Desde apuntes y monografías hasta tesis.
+        \item \textbf{Búsqueda Semántica:} Entiende la intención detrás del texto.
+        \item \textbf{Autogestión:} Carga directa por el autor en minutos.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+%--- FILMINA 6: Plan de Pruebas ---
+\begin{frame}{Plan de Pruebas}
+  \small
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      {\headingfont\bfseries\color{brandlt}Estrategia de Verificación}\\[0.15cm]
+      \begin{itemize}
+        \item \textbf{Pruebas Unitarias:} Lógica de ranking híbrido y pipeline de datos.
+        \item \textbf{Pruebas de Integración:} Cobertura de endpoints API y persistencia en base de datos.
+        \item \textbf{Pruebas E2E:} Flujos de usuario automatizados en navegador (login, búsqueda, reporte).
+      \end{itemize}
+    \end{column}
+
+    \begin{column}{0.48\textwidth}
+      {\headingfont\bfseries\color{brandlt}Pruebas No Funcionales y CI/CD}\\[0.15cm]
+      \begin{itemize}
+        \item \textbf{Seguridad:} Control automatizado de filtrado de roles y visibilidad.
+        \item \textbf{Resiliencia:} Caída del motor semántico y degradación elegante a búsqueda léxica.
+        \item \textbf{Integración Continua:} Bloqueo de ramas si fallan pruebas o auditorías de dependencias.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+
+%--- FILMINA 7: Registro de Riesgos ---
+\begin{frame}{Registro de Riesgos Clave}
+  \centering
+  \renewcommand{\arraystretch}{1.2}
+  \setlength{\tabcolsep}{3pt}
+  \scriptsize
+  \hyphenpenalty=10000\exhyphenpenalty=10000
+  \begin{tabularx}{\textwidth}{c p{1.6cm} L c c L}
+    \rowcolor{brand}
+    \thead{\#} & \thead{Tipo} & \thead{Riesgo} & \thead{Prob.} & \thead{Imp.} & \thead{Mitigación Principal} \\
+    R1 & Negocio & Contenido semilla insuficiente & Alta & Alto & Carga inicial y campaña activa con cátedras. \\
+    \rowcolor{rowtint}
+    R2 & Negocio & Contenido inadecuado / ofensivo & Media & Medio & Reportes y moderación por panel docente. \\
+    \bottomrule
+  \end{tabularx}
+\end{frame}
+
+%--- FILMINA 8: Indicadores de Éxito ---
+\begin{frame}{Indicadores de Éxito y Metas}
+  \centering
+  \renewcommand{\arraystretch}{1.25}
+  \setlength{\tabcolsep}{6pt}
+  \small
+  \hyphenpenalty=10000\exhyphenpenalty=10000
+  \begin{tabularx}{\textwidth}{>{\bfseries}p{4.8cm} L}
+    \rowcolor{brand}
+    \thead{Indicador} & \thead{Forma de Cálculo y Meta} \\
+    Trabajos publicados por unidad & Conteo mensual de documentos por escuela/área. \\
+    \rowcolor{rowtint}
+    Tasa de éxito de búsqueda & Sesiones con clic $\div$ total de búsquedas (Meta: $>60\%$). \\
+    Latencia p95 de búsqueda & Percentil 95 del tiempo de respuesta (Meta: $<2$ s). \\
+    \bottomrule
+  \end{tabularx}
+\end{frame}
+
+%====================================================================
+% BLOQUE 3: PRESENTACIÓN POR LUCAS
+%====================================================================
+
+%--- FILMINA 9: Arquitectura y Diseño ---
+\begin{frame}{Arquitectura y Diseño}
+  \small
+  {\headingfont\bfseries\color{brandlt}Los Cuatro Componentes}\\[0.1cm]
+  \begin{enumerate}
+    \item \textbf{Frontend (Next.js):} Interfaz responsiva.
+    \item \textbf{API REST (FastAPI):} Negocio, autenticación y accesos.
+    \item \textbf{Persistencia (PostgreSQL):} Almacén de datos.
+    \item \textbf{Embeddings:} Generación local en CPU.
+  \end{enumerate}
+\end{frame}
+
+%--- FILMINA 10: Arquitectura de Referencia ---
+\begin{frame}{Arquitectura de Referencia}
+  \begin{columns}[T]
+    \begin{column}{0.31\textwidth}
+      \footnotesize
+      {\headingfont\bfseries\color{brandlt}Flujo de Peticiones}\\[0.05cm]
+      \begin{itemize}
+        \item \textbf{Acceso HTTPS:} Balanceador de carga GCP redirige a Nginx.
+        \item \textbf{Proxy Inverso:} Nginx deriva tráfico a Next.js (Web) o FastAPI (API).
+        \item \textbf{Workers:} Cola asíncrona para OCR y embeddings.
+      \end{itemize}
+
+      \vspace{0.25cm}
+      {\headingfont\bfseries\color{brandlt}Servicios Externos}\\[0.05cm]
+      Google OAuth y Vertex AI integrados de forma desacoplada.
+    \end{column}
+
+    \begin{column}{0.62\textwidth}
+      \begin{center}
+        \resizebox{!}{0.75\textheight}{%
+          \begin{tikzpicture}[node distance=5.5mm and 8mm]
+            % --- Edge / entry (outside the VM) ---
+            \node[entry] (user) {Usuario};
+            \node[box, below=5mm of user] (lb) {Balanceador GCP};
+
+            % --- Inside the VM ---
+            \node[box, below=8mm of lb] (nginx) {nginx};
+            \node[box, below left=7mm and 1mm of nginx] (fe) {Web\\Next.js};
+            \node[box, below right=7mm and 1mm of nginx] (api) {API\\FastAPI};
+            \node[store, below=7mm of fe] (blob) {Almacenamiento};
+            \node[store, below=7mm of api] (pg) {PostgreSQL};
+            \coordinate (mid) at ($(blob)!0.5!(pg)$);
+            \node[box, below=8mm of mid] (workers) {Workers de procesamiento};
+            \node[store, below=6mm of workers] (tei) {Servicio de embeddings};
+
+            % --- External services ---
+            \node[ext, left=10mm of fe] (ga) {Google OAuth};
+            \node[ext] (vrt) at (ga |- tei) {Vertex AI};
+
+            % --- VM container box ---
+            \begin{scope}[on background layer]
+              \node[draw=brand, line width=0.8pt, rounded corners=4pt, dashed,
+                    fill=brand!4, inner xsep=4mm, inner ysep=4mm,
+                    fit=(nginx)(fe)(api)(blob)(pg)(workers)(tei)] (vm) {};
+              \node[font=\tiny\bfseries\itshape, text=brand, anchor=north west]
+                    at ([xshift=2mm,yshift=-2pt]vm.north west) {Máquina virtual GCP};
+            \end{scope}
+
+            % --- Edges ---
+            \draw[flow] (user) -- node[lbl]{HTTPS} (lb);
+            \draw[flow] (lb) -- (nginx);
+            \draw[flow] (nginx.south) -- (fe.north);
+            \draw[flow] (nginx.south) -- (api.north);
+            \draw[flow] (fe) -- node[lbl]{SSR} (api);
+
+            \draw[flow] (api) -- (pg);
+            \draw[flow] (api) -- (blob);
+            \draw[flow] (workers) -- (blob);
+            \draw[flow] (workers) -- (pg);
+            \draw[flowa] (workers) -- (tei);
+            \draw[flowa] (api.east) to[bend left=55] (tei.east);
+
+            \draw[opt] (workers.west) to[bend right=10] (vrt.east);
+            \draw[biflow] (ga.south) to[bend right=15] (api.west);
+
+            \node[inner sep=0pt, minimum size=0pt] at ($(ga.west)!2!(ga.west -| nginx)$) {};
+          \end{tikzpicture}%
+        }
+      \end{center}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+%--- FILMINA 11: Decisiones de Diseño y Calidad ---
+\begin{frame}{Decisiones de Diseño y Calidad}
+  \small
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      {\headingfont\bfseries\color{brandlt}PostgreSQL Multi-rol}\\[0.15cm]
+      Unificación de transacciones, búsqueda full-text, pgvector y colas de tareas.
+
+      \vspace{0.2cm}
+      Mínima superficie operativa $\rightarrow$ alta mantenibilidad y respaldos simplificados.
+    \end{column}
+
+    \begin{column}{0.48\textwidth}
+      {\headingfont\bfseries\color{brandlt}Atributos de Calidad Clave}\\[0.15cm]
+      \begin{itemize}
+        \item \textbf{Seguridad:} Filtrado estricto de visibilidad por rol en todas las capas.
+        \item \textbf{Confiabilidad:} Degradación controlada a búsqueda léxica ante fallas del servicio vectorial.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+%====================================================================
+% BLOQUE 4: PRESENTACIÓN POR MATI
+%====================================================================
+
+%--- FILMINA 12: Plan de Trabajo y Costos Mensuales ---
+\begin{frame}{Plan de Trabajo y Costos Mensuales}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      {\headingfont\small\bfseries\color{brandlt}Cronograma de Fases}\\[0.1cm]
+      {\scriptsize
+      \begin{tabularx}{\textwidth}{l L c}
+        \rowcolor{brand}
+        \thead{Fase} & \thead{Alcance} & \thead{Sem.} \\
+        F0--F1 & Arquitectura y Acceso & 1--2 \\
+        \rowcolor{rowtint}
+        F2 & Búsqueda Híbrida Semántica & 3--4 \\
+        F3--F4 & Publicación y Detalle & 5--6 \\
+        \rowcolor{rowtint}
+        F5--F6 & Colaboración y Moderación & 7--8 \\
+        F7--F8 & Descubrimiento y Producción & 8--9 \\
+        \bottomrule
+      \end{tabularx}
+      }
+      \vspace{0.1cm}
+      \begin{itemize}
+        \item \scriptsize \textbf{Ciclo Rápido:} Construcción en 2 semanas usando asistencia de IA agéntica.
+      \end{itemize}
+    \end{column}
+
+    \begin{column}{0.48\textwidth}
+      {\headingfont\small\bfseries\color{brandlt}Costos Mensuales de Operación}\\[0.1cm]
+      {\scriptsize
+      \begin{tabularx}{\textwidth}{L r}
+        \rowcolor{brand}
+        \thead{Concepto} & \thead{USD/mes} \\
+        Máquina virtual (2 vCPU, 8 GB) & $\sim$50 \\
+        \rowcolor{rowtint}
+        Disco persistente (50 GB) & $\sim$5 \\
+        Balanceador HTTPS & $\sim$20 \\
+        \rowcolor{rowtint}
+        Red, registros, backups diarios & $\sim$8 \\
+        IA para resúmenes (Gemini API / Vertex) & $<5$ \\
+        \rowcolor{rowtint}
+        Dominio (prorrateado) & $\sim$1 \\
+        \midrule
+        \rowcolor{accentlt}
+        \textbf{Total Estimado} & \textbf{$\sim$90} \\
+        \bottomrule
+      \end{tabularx}
+      }
+    \end{column}
+  \end{columns}
+\end{frame}
+
+%--- FILMINA 13: Conclusiones y Recomendaciones ---
+\begin{frame}{Conclusiones y Recomendaciones}
+  \small
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      {\headingfont\bfseries\color{brandlt}Síntesis}\\[0.1cm]
+      Resuelve la fragmentación académica de la UNSAM. Plataforma viable y escalable por un costo base de \textbf{USD 90/mes}.
+    \end{column}
+
+    \begin{column}{0.48\textwidth}
+      {\headingfont\bfseries\color{brandlt}Próximos Pasos Recomendados}\\[0.1cm]
+      \begin{enumerate}
+        \item \textbf{Piloto:} Implementación en una unidad académica para medir la adopción.
+        \item \textbf{Fase 2:} Favoritos y recomendaciones basados en el piloto.
+        \item \textbf{Vinculación:} Radar de talento para el sector productivo.
+        \item \textbf{Institucionalización:} Integración formal con la biblioteca.
+      \end{enumerate}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+%--- FILMINA 14: Cierre ---
+\begin{frame}[plain]
+  \begin{center}
+    \vspace*{0.2cm}
+    {\busmark{2.0pt}}\\[0.3cm]
+    {\headingfont\fontsize{32}{36}\selectfont\bfseries\color{ink}BUSCA\color{brand}SAM}\\[0.1cm]
+    {\large\color{brandlt}\bfseries Descubrimiento de la producción académica de la UNSAM}\\[0.2cm]
+    {\color{rulec}\rule{0.4\linewidth}{0.5pt}}\\[0.3cm]
+    {\large\bfseries ¡Muchas gracias!}\\[0.2cm]
+    {\large\color{brand}\href{https://buscasam.org}{buscasam.org}}\\[0.1cm]
+    {\small\color{soft} Grupo 11 — Ingeniería de Software}
+  \end{center}
+\end{frame}
+
+\end{document}
