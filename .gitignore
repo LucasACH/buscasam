@@ -10,7 +10,7 @@
 terraform.tfvars
 secrets.auto.tfvars
 
-# LaTeX build artifacts (docs/whitepaper) — keep .tex source and .pdf output
+# LaTeX build artifacts (docs/whitepaper, docs/presentation) — keep .tex source and .pdf output
 *.aux
 *.fdb_latexmk
 *.fls
@@ -18,3 +18,6 @@ secrets.auto.tfvars
 *.out
 *.toc
 *.xdv
+*.nav
+*.snm
+*.vrb
