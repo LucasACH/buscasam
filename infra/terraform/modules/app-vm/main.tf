@@ -103,6 +103,7 @@ resource "google_compute_instance" "app" {
       metadata_llm_model       = var.metadata_llm_model
       vertex_project           = coalesce(var.vertex_project, var.project_id)
       vertex_location          = var.vertex_location
+      docente_email_allowlist  = var.docente_email_allowlist
       secret_ids               = join(" ", var.secret_ids)
     })
   }
