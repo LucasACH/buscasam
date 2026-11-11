@@ -790,7 +790,9 @@
                 "Bases de Datos",
                 "Ingeniería de Software",
                 "Aprendizaje Automático",
-                "Aprendizaje Profundo"
+                "Aprendizaje Profundo",
+                "Series Temporales",
+                "Visualización de Datos"
               ],
               "materias_source": "Estructura del plan de estudios",
               "nota": "Electivas/Optativas omitidas (no nombradas)"
