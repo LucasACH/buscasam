@@ -2292,6 +2292,10 @@
     "display_name": "Series Temporales"
   },
   {
+    "area_path": "escuela_ecyt.area_ciencia_y_tecnologia.carrera_ciencia_de_datos.materia_visualizacion_de_datos",
+    "display_name": "Visualización de Datos"
+  },
+  {
     "area_path": "escuela_ecyt.area_ciencia_y_tecnologia.carrera_ciencias_aplicadas",
     "display_name": "Ciencias Aplicadas y de la Ingeniería"
   },
